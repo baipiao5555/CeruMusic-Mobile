@@ -360,7 +360,7 @@ export class PluginHost {
     if (method === 'services.app.getInfo') {
       return {
         name: '澜音',
-        version: '2.3.1-mobile.2',
+        version: '2.3.1-mobile.3',
         platform: 'android',
         locale: navigator.language || 'zh-CN',
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',

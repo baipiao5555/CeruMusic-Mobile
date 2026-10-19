@@ -41,6 +41,19 @@ await page.locator('.mini-player').click()
 await page.waitForTimeout(1200)
 await page.screenshot({ path: outDir + '/04-player.png' })
 
+await page.goto('http://127.0.0.1:5181/#/playlists', { waitUntil: 'networkidle' })
+await page.waitForTimeout(500)
+for (const name of ['夜晚循环', '通勤歌单']) {
+  await page.locator('.summary .round-action.primary').click()
+  await page.waitForSelector('.sheet input')
+  await page.fill('.sheet input', name)
+  await page.locator('.sheet .btn', { hasText: '创建' }).click()
+  await page.waitForURL(/#\/playlist\//)
+  await page.goto('http://127.0.0.1:5181/#/playlists', { waitUntil: 'networkidle' })
+  await page.waitForTimeout(300)
+}
+await page.screenshot({ path: outDir + '/06-playlists.png' })
+
 await page.goto('http://127.0.0.1:5181/#/plugins', { waitUntil: 'networkidle' })
 await page.waitForTimeout(800)
 await page.screenshot({ path: outDir + '/05-plugins.png' })

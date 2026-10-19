@@ -108,6 +108,16 @@ await page.waitForTimeout(500)
 const settingsQuality = await page.locator('.panel', { hasText: '默认音质' }).locator('.chips').innerText()
 console.log('settings quality chips:', settingsQuality.replace(/\n+/g, ' | '))
 
+// Dedicated playlists tab.
+await page.goto('http://127.0.0.1:5180/#/', { waitUntil: 'networkidle' })
+await page.waitForTimeout(500)
+const navCount = await page.locator('.nav-item').count()
+await page.locator('.nav-item', { hasText: '歌单' }).click()
+await page.waitForURL(/#\/playlists/)
+await page.waitForTimeout(500)
+const playlistsTitle = await page.locator('.summary-info h2').innerText()
+console.log('bottom tabs:', navCount, 'playlists page:', playlistsTitle)
+
 // Playlist import flow.
 await page.goto('http://127.0.0.1:5180/#/library', { waitUntil: 'networkidle' })
 await page.waitForTimeout(500)

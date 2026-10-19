@@ -13,9 +13,9 @@
 | --- | --- | --- |
 | ![发现](docs/screenshots/01-discover.png) | ![搜索](docs/screenshots/02-search.png) | ![我的](docs/screenshots/03-library.png) |
 
-| 播放页 | 插件管理 |
-| --- | --- |
-| ![播放](docs/screenshots/04-player.png) | ![插件](docs/screenshots/05-plugins.png) |
+| 歌单 | 播放页 | 插件管理 |
+| --- | --- | --- |
+| ![歌单](docs/screenshots/06-playlists.png) | ![播放](docs/screenshots/04-player.png) | ![插件](docs/screenshots/05-plugins.png) |
 
 ## 功能
 

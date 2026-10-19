@@ -5,6 +5,7 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'discover', component: () => import('@/views/Discover.vue') },
     { path: '/search', name: 'search', component: () => import('@/views/Search.vue') },
+    { path: '/playlists', name: 'playlists', component: () => import('@/views/Playlists.vue') },
     { path: '/library', name: 'library', component: () => import('@/views/Library.vue') },
     { path: '/player', name: 'player', component: () => import('@/views/Player.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/views/Settings.vue') },

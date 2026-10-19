@@ -9,13 +9,21 @@ const router = useRouter()
 const items = [
   { path: '/', label: '发现', icon: 'discover' },
   { path: '/search', label: '搜索', icon: 'search' },
-  { path: '/library', label: '我的', icon: 'library' }
+  { path: '/playlists', label: '歌单', icon: 'library' },
+  { path: '/library', label: '我的', icon: 'user' }
 ]
 
 const activeIndex = computed(() => {
   const path = route.path
   if (path.startsWith('/search')) return 1
-  if (path.startsWith('/library') || path.startsWith('/settings') || path.startsWith('/plugins') || path.startsWith('/playlist')) return 2
+  if (path === '/playlists' || path.startsWith('/playlist/')) return 2
+  if (
+    path.startsWith('/library') ||
+    path.startsWith('/settings') ||
+    path.startsWith('/plugins')
+  ) {
+    return 3
+  }
   return 0
 })
 

@@ -160,7 +160,7 @@ function resetSettings(): void {
       <img src="/logo.png" alt="" />
       <div>
         <h3>澜音 · CeruMusic 手机版</h3>
-        <p>版本 2.3.1-mobile.2</p>
+        <p>版本 2.3.1-mobile.3</p>
         <p>插件协议 v2.0 · Android</p>
       </div>
     </div>

@@ -1,34 +1,23 @@
 import { reactive } from 'vue'
-import type { ResourceRef } from '@shiqianjiang/ceru-plugin-sdk'
 import {
   allProviders,
   invokeProvider,
   registerHostHooks,
   type ProviderHandle
 } from '../plugin/manager'
-import { settingsState } from '../settings'
+import { settingsState, updateSettings } from '../settings'
 import {
   startBackgroundAudio,
   stopBackgroundAudio,
   syncBackgroundAudio
 } from '../native/backgroundAudio'
+import { toTrack, type Track } from '../track'
+import { selectPlaybackQuality } from '../quality'
+
+export type { Track } from '../track'
+export { toTrack }
 
 export type PlayMode = 'order' | 'repeat-all' | 'repeat-one' | 'shuffle'
-
-export interface Track {
-  id: string
-  providerId: string
-  providerName: string
-  pluginId: string
-  ref: ResourceRef
-  title: string
-  artist: string
-  album: string
-  durationMs: number
-  artwork: string
-  qualities: string[]
-  color?: string
-}
 
 export interface LyricLine {
   startTimeMs: number
@@ -47,7 +36,8 @@ export const playerState = reactive({
   duration: 0,
   volume: 1,
   mode: 'repeat-all' as PlayMode,
-  quality: '128k',
+  quality: '',
+  resolvedQuality: '',
   lyrics: [] as LyricLine[],
   lyricsLoading: false,
   activeLyric: -1,
@@ -113,7 +103,7 @@ export function restorePlayer(): void {
     if (Number.isInteger(saved.index)) playerState.index = saved.index
     if (Number.isFinite(saved.volume)) playerState.volume = saved.volume
     if (saved.mode) playerState.mode = saved.mode
-    if (saved.quality) playerState.quality = saved.quality
+    playerState.quality = settingsState.quality
     if (Number.isFinite(saved.currentTime)) playerState.currentTime = saved.currentTime
     audio!.volume = playerState.volume
     if (currentTrack()) {
@@ -246,9 +236,10 @@ function providerFor(track: Track): ProviderHandle | undefined {
 async function resolvePlaybackUrl(track: Track): Promise<string> {
   const provider = providerFor(track)
   if (!provider) throw new Error('音源插件未启用')
-  const quality = track.qualities.includes(playerState.quality)
-    ? playerState.quality
-    : track.qualities[0] ?? undefined
+  const order = provider.qualities.length ? provider.qualities : track.qualities
+  const available = track.qualities.length ? track.qualities : provider.qualities
+  const quality = selectPlaybackQuality(order, available, playerState.quality)
+  playerState.resolvedQuality = quality ?? ''
   const result = await invokeProvider(provider, 'tracks.resolve', [track.ref, quality])
   if (!result?.ok) throw new Error(result?.error?.message || '无法获取播放地址')
   if (result.requestHeaders && Object.keys(result.requestHeaders).length) {
@@ -427,6 +418,7 @@ export function cycleMode(): void {
 
 export function setQuality(quality: string): void {
   playerState.quality = quality
+  updateSettings({ quality })
   persist()
   const track = currentTrack()
   if (track && playerState.playing) void startPlayback(track, playerState.currentTime)
@@ -589,23 +581,6 @@ export function getHistory(): Track[] {
     return raw ? JSON.parse(raw) : []
   } catch {
     return []
-  }
-}
-
-export function toTrack(entity: any, provider: ProviderHandle): Track {
-  return {
-    id: entity.ref.id,
-    providerId: entity.ref.providerId,
-    pluginId: provider.pluginId,
-    providerName: provider.pluginName,
-    ref: entity.ref,
-    title: entity.title ?? '未知歌曲',
-    artist: (entity.metadata?.artists ?? []).join(' / ') || entity.subtitle || '未知歌手',
-    album: entity.metadata?.album?.title ?? '',
-    durationMs: Number(entity.metadata?.durationMs) || 0,
-    artwork: entity.metadata?.artworkUrl || '/default-cover.png',
-    qualities: entity.metadata?.qualities ?? provider.qualities ?? [],
-    color: entity.extensions?.demoColor
   }
 }
 

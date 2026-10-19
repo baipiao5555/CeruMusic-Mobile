@@ -66,6 +66,13 @@ export function createPlaylist(name: string): LocalPlaylist {
   return playlist
 }
 
+export function createPlaylistWithTracks(name: string, tracks: Track[]): LocalPlaylist {
+  const playlist = createPlaylist(name)
+  playlist.tracks = [...tracks]
+  persist()
+  return playlist
+}
+
 export function renamePlaylist(id: string, name: string): void {
   const playlist = libraryState.playlists.find((item) => item.id === id)
   if (!playlist) return

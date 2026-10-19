@@ -16,6 +16,7 @@ import {
 } from '@/core/playback/player'
 import { isFavorite, toggleFavorite } from '@/core/library'
 import { settingsState } from '@/core/settings'
+import { qualityLabel } from '@/core/quality'
 
 const router = useRouter()
 const track = computed(() => currentTrack())
@@ -189,13 +190,24 @@ onMounted(() => {
 
       <div v-if="track.qualities.length" class="quality-row">
         <button
+          class="chip"
+          :class="{ active: playerState.quality === '' }"
+          @click="setQuality('')"
+        >
+          自动
+        </button>
+        <button
           v-for="quality in track.qualities"
           :key="quality"
           class="chip"
-          :class="{ active: playerState.quality === quality }"
+          :class="{
+            active:
+              playerState.quality === quality ||
+              (playerState.quality === '' && playerState.resolvedQuality === quality)
+          }"
           @click="setQuality(quality)"
         >
-          {{ quality }}
+          {{ qualityLabel(quality) }}
         </button>
       </div>
     </div>
@@ -506,6 +518,7 @@ onMounted(() => {
 }
 .quality-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
   flex: 0 0 auto;

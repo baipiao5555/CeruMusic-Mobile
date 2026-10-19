@@ -3,29 +3,39 @@ import { registerHostHooks } from './plugin/manager'
 
 export interface AppSettings {
   theme: 'system' | 'light' | 'dark'
+  /** Empty means automatic: use the highest quality the current track offers. */
   quality: string
   showLyrics: boolean
   keepScreenOn: boolean
   playOnHeadset: boolean
+  version?: number
 }
 
 const KEY = 'ceru.settings.v1'
 
 export const settingsState = reactive<AppSettings>({
   theme: 'system',
-  quality: '128k',
+  quality: '',
   showLyrics: true,
   keepScreenOn: true,
-  playOnHeadset: true
+  playOnHeadset: true,
+  version: 2
 })
 
 export function restoreSettings(): void {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return
-    Object.assign(settingsState, JSON.parse(raw))
+    const saved = JSON.parse(raw)
+    if (saved && saved.version !== 2) {
+      // v1 defaulted to 128k, which made plugins with higher tiers feel low.
+      if (saved.quality === '128k') saved.quality = ''
+      saved.version = 2
+    }
+    Object.assign(settingsState, saved)
   } catch {}
   applyTheme()
+  persist()
 }
 
 function persist(): void {

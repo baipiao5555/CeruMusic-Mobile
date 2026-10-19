@@ -360,7 +360,7 @@ export class PluginHost {
     if (method === 'services.app.getInfo') {
       return {
         name: '澜音',
-        version: '2.3.1-mobile.1',
+        version: '2.3.1-mobile.2',
         platform: 'android',
         locale: navigator.language || 'zh-CN',
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
@@ -528,6 +528,27 @@ export class PluginHost {
       deadlineAt: Date.now() + 60_000,
       signal: new AbortController().signal
     })
+  }
+
+  async importPlaylist(
+    importerId: string,
+    value: string,
+    cursor?: string,
+    limit = 100
+  ): Promise<any> {
+    await this.ensureReady()
+    if (!this.core) throw new Error('插件未启动')
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 120_000)
+    try {
+      return await this.core.importPlaylist(importerId, value, cursor, limit, {
+        id: randomId(),
+        deadlineAt: Date.now() + 120_000,
+        signal: controller.signal
+      })
+    } finally {
+      clearTimeout(timer)
+    }
   }
 
   async dispose(): Promise<void> {

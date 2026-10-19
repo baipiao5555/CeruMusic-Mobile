@@ -6,6 +6,11 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -154,7 +159,7 @@ public class SecureHttpPlugin extends Plugin {
         }
     }
 
-    private static void validateUrl(URL url) throws Exception {
+    private void validateUrl(URL url) throws Exception {
         String scheme = url.getProtocol();
         if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
             throw new Exception("只支持 HTTP/HTTPS 请求");
@@ -171,9 +176,46 @@ public class SecureHttpPlugin extends Plugin {
         if (addresses.length == 0) {
             throw new Exception("无法解析服务器地址");
         }
+        // VPN/代理客户端常用 198.18.0.0/15、100.64.0.0/10 或 IPv6 ULA
+        // 作为 fake-IP 映射公网域名。此时解析结果不是真实目的地，按真实
+        // 私网地址拦截会让所有插件链接都不可用。域名解析到透明代理网段时
+        // 放行；IP 字面量仍按私网/保留地址严格拦截。
+        boolean vpnActive = isVpnActive();
+        boolean domainName = !isIpLiteral(host);
         for (InetAddress address : addresses) {
-            if (isBlockedAddress(address)) throw new Exception(BLOCKED_MESSAGE);
+            if (isBlockedAddress(address)) {
+                if (isVpnFakeAddress(address) && (vpnActive || domainName)) continue;
+                throw new Exception(BLOCKED_MESSAGE);
+            }
         }
+    }
+
+    private static boolean isIpLiteral(String host) {
+        return host.indexOf(':') >= 0 || host.matches("\\d{1,3}(\\.\\d{1,3}){3}");
+    }
+
+    private boolean isVpnActive() {
+        ConnectivityManager manager =
+                (ConnectivityManager) getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (manager == null) return false;
+        Network network = manager.getActiveNetwork();
+        if (network == null) return false;
+        NetworkCapabilities capabilities = manager.getNetworkCapabilities(network);
+        return capabilities != null && capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN);
+    }
+
+    private static boolean isVpnFakeAddress(InetAddress address) {
+        byte[] bytes = address.getAddress();
+        if (bytes.length == 4) {
+            int a = bytes[0] & 0xff;
+            int b = bytes[1] & 0xff;
+            return (a == 198 && (b == 18 || b == 19))
+                    || (a == 100 && b >= 64 && b <= 127);
+        }
+        if (bytes.length == 16) {
+            return ((bytes[0] & 0xfe) == 0xfc);
+        }
+        return false;
     }
 
     private static boolean isBlockedAddress(InetAddress address) {

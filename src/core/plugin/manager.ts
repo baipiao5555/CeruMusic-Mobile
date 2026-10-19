@@ -3,6 +3,7 @@ import { readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
 import { PluginHost, type PluginHostHooks, type PluginNotice } from './host'
 import { requestRemote } from './network'
 import { idb, sha256Hex } from '../storage/idb'
+import { toTrack, type Track } from '../track'
 
 export interface PluginProviderInfo {
   id: string
@@ -31,6 +32,7 @@ export interface PluginDescriptor {
   permissions: any[]
   homeSections: any[]
   commands: any[]
+  playlistImporters: any[]
 }
 
 interface PluginRecord {
@@ -164,7 +166,8 @@ function descriptorFor(record: PluginRecord, host?: PluginHost): PluginDescripto
       (manifest.config && typeof manifest.config === 'object' ? manifest.config : {}),
     permissions: manifest.permissions ?? [],
     homeSections: manifest.contributes?.homeSections ?? [],
-    commands: manifest.contributes?.commands ?? []
+    commands: manifest.contributes?.commands ?? [],
+    playlistImporters: manifest.contributes?.playlistImporters ?? []
   }
 }
 
@@ -227,6 +230,90 @@ export function allProviders(): ProviderHandle[] {
 export function selectedProvider(): ProviderHandle | undefined {
   const providers = allProviders()
   return providers.find((item) => item.providerId === pluginState.selectedProvider) ?? providers[0]
+}
+
+export interface PlaylistImporterHandle {
+  pluginId: string
+  pluginName: string
+  id: string
+  title: string
+  description?: string
+  placeholder?: string
+  instructions: string[]
+  examples: Array<{ label: string; value: string }>
+  providerId?: string
+}
+
+export interface ImportedPlaylist {
+  name: string
+  tracks: Track[]
+}
+
+export function allImporters(): PlaylistImporterHandle[] {
+  return pluginState.plugins
+    .filter((plugin) => plugin.running)
+    .flatMap((plugin) =>
+      (plugin.playlistImporters ?? []).map((item: any) => ({
+        pluginId: plugin.pluginId,
+        pluginName: plugin.name,
+        id: item.id,
+        title: item.title ?? item.id,
+        description: item.description,
+        placeholder: item.placeholder,
+        instructions: Array.isArray(item.instructions) ? item.instructions : [],
+        examples: Array.isArray(item.examples) ? item.examples : [],
+        providerId: item.providerId
+      }))
+    )
+}
+
+function providerHandleFor(pluginId: string, providerId?: string): ProviderHandle | null {
+  const plugin = pluginState.plugins.find((item) => item.pluginId === pluginId)
+  if (!plugin) return null
+  const provider =
+    plugin.providers.find((item) => item.id === providerId) ?? plugin.providers[0]
+  return {
+    pluginId,
+    manifestId: plugin.manifestId,
+    pluginName: plugin.name,
+    providerId: provider?.id ?? providerId ?? 'import',
+    name: provider?.name ?? providerId ?? '导入歌单',
+    qualities: provider?.qualities ?? [],
+    protocols: provider?.protocols ?? [],
+    methods: provider?.methods ?? []
+  }
+}
+
+/** Import a playlist through a plugin importer, following pagination. */
+export async function importPlaylist(
+  importer: PlaylistImporterHandle,
+  value: string
+): Promise<ImportedPlaylist> {
+  const host = hosts.get(importer.pluginId)
+  if (!host) throw new Error('插件未运行，请先启用插件')
+  const tracks: Track[] = []
+  const seen = new Set<string>()
+  let cursor: string | undefined
+  let name = importer.title
+  for (let page = 0; page < 50; page++) {
+    const result = await host.importPlaylist(importer.id, value, cursor, 100)
+    if (result?.playlist?.name) name = result.playlist.name
+    else if (result?.name) name = result.name
+    for (const item of result?.items ?? []) {
+      if (item?.ref?.kind !== 'track') continue
+      const provider = providerHandleFor(importer.pluginId, importer.providerId ?? item.ref.providerId)
+      if (!provider) continue
+      const track = toTrack(item, provider)
+      const key = `${track.providerId}:${track.id}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      tracks.push(track)
+    }
+    cursor = result?.nextCursor
+    if (!cursor) break
+    if (tracks.length >= 5000) break
+  }
+  return { name, tracks }
 }
 
 export async function initPlugins(): Promise<void> {

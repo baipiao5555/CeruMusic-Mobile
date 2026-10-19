@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import { settingsState, updateSettings } from '@/core/settings'
-import { clearQueue, getHistory } from '@/core/playback/player'
+import { clearQueue, getHistory, setQuality } from '@/core/playback/player'
 import { pluginState } from '@/core/plugin/manager'
+import { availableQualities, qualityDescription, qualityLabel } from '@/core/quality'
 
 const router = useRouter()
 
@@ -13,7 +15,12 @@ const themes = [
   { value: 'dark', label: '深色' }
 ] as const
 
-const qualities = ['128k', '320k', 'flac', '24bit']
+const qualities = computed(() => availableQualities())
+const qualityHint = computed(() => qualityDescription(settingsState.quality))
+
+function chooseQuality(quality: string): void {
+  setQuality(quality)
+}
 
 function clearPlaybackData(): void {
   if (!window.confirm('清除播放队列与播放记录？')) return
@@ -27,7 +34,7 @@ function resetSettings(): void {
   if (!window.confirm('恢复默认设置？')) return
   updateSettings({
     theme: 'system',
-    quality: '128k',
+    quality: '',
     showLyrics: true,
     keepScreenOn: true,
     playOnHeadset: true
@@ -70,16 +77,23 @@ function resetSettings(): void {
       <div class="panel-label">默认音质</div>
       <div class="chips">
         <button
+          class="chip"
+          :class="{ active: settingsState.quality === '' }"
+          @click="chooseQuality('')"
+        >
+          自动（最高）
+        </button>
+        <button
           v-for="quality in qualities"
           :key="quality"
           class="chip"
           :class="{ active: settingsState.quality === quality }"
-          @click="updateSettings({ quality })"
+          @click="chooseQuality(quality)"
         >
-          {{ quality }}
+          {{ qualityLabel(quality) }}
         </button>
       </div>
-      <p class="hint">如果当前歌曲没有所选音质，会自动回落到插件提供的可用音质。</p>
+      <p class="hint">{{ qualityHint }}。如果当前歌曲没有该音质，会自动回落到最接近的可用音质。</p>
     </div>
 
     <div class="card panel" style="margin-top: 12px; padding: 4px 16px">
@@ -146,7 +160,7 @@ function resetSettings(): void {
       <img src="/logo.png" alt="" />
       <div>
         <h3>澜音 · CeruMusic 手机版</h3>
-        <p>版本 2.3.1-mobile.1</p>
+        <p>版本 2.3.1-mobile.2</p>
         <p>插件协议 v2.0 · Android</p>
       </div>
     </div>

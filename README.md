@@ -2,6 +2,9 @@
 
 基于 [timeshiftsauce/CeruMusic](https://github.com/timeshiftsauce/CeruMusic) v2.3.1 移植的 Android 移动端。
 
+- 仓库：https://github.com/baipiao5555/CeruMusic-Mobile
+- 下载：https://github.com/baipiao5555/CeruMusic-Mobile/releases
+
 澜音本身只提供插件运行框架和播放器，不存储、不提供任何音乐文件。歌曲搜索、歌词、播放地址都由你自行安装的合规 v2 插件提供。
 
 ## 截图

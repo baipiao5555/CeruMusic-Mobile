@@ -1,0 +1,480 @@
+import { reactive, ref } from 'vue'
+import { readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
+import { PluginHost, type PluginHostHooks, type PluginNotice } from './host'
+import { requestRemote } from './network'
+import { idb, sha256Hex } from '../storage/idb'
+
+export interface PluginProviderInfo {
+  id: string
+  name: string
+  qualities: string[]
+  protocols: string[]
+  methods: string[]
+  iconUrl?: string
+}
+
+export interface PluginDescriptor {
+  pluginId: string
+  manifestId: string
+  name: string
+  version: string
+  author: string
+  description: string
+  enabled: boolean
+  running: boolean
+  loadError?: string
+  order: number
+  providers: PluginProviderInfo[]
+  iconUrls: Record<string, string>
+  configSchema: any[]
+  configDefaults: Record<string, any>
+  permissions: any[]
+  homeSections: any[]
+  commands: any[]
+}
+
+interface PluginRecord {
+  pluginId: string
+  code: string
+  manifest: any
+  enabled: boolean
+  order: number
+  grants: string[]
+  denied: string[]
+  installedAt: number
+  loadError?: string
+}
+
+export const pluginState = reactive({
+  plugins: [] as PluginDescriptor[],
+  loading: true,
+  initialized: false,
+  selectedProvider: '' as string,
+  selectedSourcePlugin: {} as Record<string, string>
+})
+
+export const pluginToasts = ref<Array<{ id: number; message: string; level: string }>>([])
+export const permissionRequest = ref<{
+  pluginName: string
+  name: string
+  reason: string
+} | null>(null)
+export const navigationRequest = ref<any>(null)
+
+let resolvePermission: ((allowed: boolean) => void) | null = null
+let toastId = 0
+const hosts = new Map<string, PluginHost>()
+const records = new Map<string, PluginRecord>()
+const hostHooks: Partial<PluginHostHooks> = {}
+
+function showToast(message: string, level = 'info'): void {
+  if (!message) return
+  const id = ++toastId
+  pluginToasts.value.push({ id, message, level })
+  setTimeout(() => {
+    pluginToasts.value = pluginToasts.value.filter((item) => item.id !== id)
+  }, 3200)
+}
+
+export function answerPermission(allowed: boolean): void {
+  const resolver = resolvePermission
+  resolvePermission = null
+  permissionRequest.value = null
+  resolver?.(allowed)
+}
+
+export function registerHostHooks(hooks: Partial<PluginHostHooks>): void {
+  Object.assign(hostHooks, hooks)
+}
+
+function hooksFor(pluginId: string): PluginHostHooks {
+  return {
+    onNotice: (notice: PluginNotice) => showToast(notice.message, notice.level ?? 'info'),
+    onPermissionRequest: (request) =>
+      new Promise<boolean>((resolve) => {
+        resolvePermission = resolve
+        permissionRequest.value = {
+          pluginName: request.pluginName,
+          name: request.name,
+          reason: request.reason
+        }
+      }),
+    onNavigate: (request) => {
+      navigationRequest.value = request
+    },
+    player: {
+      getState: (args) => hostHooks.player?.getState?.(args),
+      play: (args) => hostHooks.player?.play?.(args),
+      pause: (args) => hostHooks.player?.pause?.(args),
+      next: (args) => hostHooks.player?.next?.(args),
+      previous: (args) => hostHooks.player?.previous?.(args),
+      seek: (args) => hostHooks.player?.seek?.(args),
+      setVolume: (args) => hostHooks.player?.setVolume?.(args),
+      setMode: (args) => hostHooks.player?.setMode?.(args)
+    },
+    queue: {
+      get: (args) => hostHooks.queue?.get?.(args),
+      append: (args) => hostHooks.queue?.append?.(args),
+      replace: (args) => hostHooks.queue?.replace?.(args),
+      remove: (args) => hostHooks.queue?.remove?.(args),
+      reorder: (args) => hostHooks.queue?.reorder?.(args)
+    },
+    favorites: {
+      contains: (args) => hostHooks.favorites?.contains?.(args),
+      add: (args) => hostHooks.favorites?.add?.(args),
+      remove: (args) => hostHooks.favorites?.remove?.(args)
+    },
+    history: () => hostHooks.history?.() ?? [],
+    settings: hostHooks.settings,
+    library: {
+      list: () => hostHooks.library?.list() ?? [],
+      getTracks: (id) => hostHooks.library?.getTracks?.(id) ?? []
+    }
+  }
+}
+
+function descriptorFor(record: PluginRecord, host?: PluginHost): PluginDescriptor {
+  const manifest = host?.getManifest() ?? record.manifest
+  const methods = host?.getProviderMethods() ?? {}
+  const iconUrls = host?.getProviderIconUrls() ?? {}
+  const providers: PluginProviderInfo[] = (manifest.contributes?.providers ?? []).map((provider: any) => ({
+    id: provider.id,
+    name: provider.name ?? provider.id,
+    qualities: provider.qualities ?? [],
+    protocols: provider.protocols ?? [],
+    methods: methods[provider.id] ?? [],
+    iconUrl: iconUrls[provider.id]
+  }))
+  return {
+    pluginId: record.pluginId,
+    manifestId: manifest.id,
+    name: manifest.name,
+    version: manifest.version,
+    author: manifest.author ?? manifest.publisher ?? '',
+    description: manifest.description ?? '',
+    enabled: record.enabled,
+    running: Boolean(host),
+    loadError: record.loadError,
+    order: record.order,
+    providers,
+    iconUrls,
+    configSchema: host?.getConfigSchema() ?? [],
+    configDefaults:
+      host?.getConfigDefaults() ??
+      (manifest.config && typeof manifest.config === 'object' ? manifest.config : {}),
+    permissions: manifest.permissions ?? [],
+    homeSections: manifest.contributes?.homeSections ?? [],
+    commands: manifest.contributes?.commands ?? []
+  }
+}
+
+function refresh(): void {
+  pluginState.plugins = [...records.values()]
+    .sort((a, b) => a.order - b.order)
+    .map((record) => descriptorFor(record, hosts.get(record.pluginId)))
+  const selected = pluginState.selectedProvider
+  if (!selected || !allProviders().some((item) => item.providerId === selected)) {
+    pluginState.selectedProvider = allProviders()[0]?.providerId ?? ''
+  }
+}
+
+async function save(record: PluginRecord): Promise<void> {
+  records.set(record.pluginId, record)
+  await idb.set('plugins', record.pluginId, record)
+}
+
+async function getConfig(pluginId: string): Promise<Record<string, any>> {
+  return (await idb.get('pluginConfig', pluginId)) ?? {}
+}
+
+async function saveConfig(pluginId: string, config: Record<string, any>): Promise<void> {
+  await idb.set('pluginConfig', pluginId, config)
+}
+
+export interface ProviderHandle {
+  pluginId: string
+  manifestId: string
+  pluginName: string
+  providerId: string
+  name: string
+  qualities: string[]
+  protocols: string[]
+  methods: string[]
+}
+
+export function allProviders(): ProviderHandle[] {
+  const result: ProviderHandle[] = []
+  for (const plugin of pluginState.plugins) {
+    if (!plugin.running) continue
+    for (const provider of plugin.providers) {
+      const owner = pluginState.selectedSourcePlugin[provider.id]
+      if (owner && owner !== plugin.pluginId) continue
+      result.push({
+        pluginId: plugin.pluginId,
+        manifestId: plugin.manifestId,
+        pluginName: plugin.name,
+        providerId: provider.id,
+        name: provider.name,
+        qualities: provider.qualities,
+        protocols: provider.protocols,
+        methods: provider.methods
+      })
+    }
+  }
+  return result
+}
+
+export function selectedProvider(): ProviderHandle | undefined {
+  const providers = allProviders()
+  return providers.find((item) => item.providerId === pluginState.selectedProvider) ?? providers[0]
+}
+
+export async function initPlugins(): Promise<void> {
+  if (pluginState.initialized) return
+  pluginState.initialized = true
+  try {
+    const list = await idb.all<PluginRecord>('plugins')
+    for (const record of list) records.set(record.pluginId, record)
+    refresh()
+    pluginState.loading = false
+    for (const record of list) {
+      if (!record.enabled) continue
+      try {
+        await enablePlugin(record.pluginId)
+      } catch (error) {
+        console.warn('恢复插件失败:', error)
+      }
+    }
+  } catch (error) {
+    console.error('读取插件失败:', error)
+    pluginState.loading = false
+  }
+}
+
+export async function installPlugin(
+  code: string,
+  options: { enable?: boolean; grantDeclared?: boolean } = {}
+): Promise<PluginDescriptor> {
+  const parsed = readPluginArtifact(code)
+  const manifest = parsed.header.manifest
+  if (manifest.manifestVersion !== 2) throw new Error('只支持澜音 v2 插件')
+  const pluginId = (await sha256Hex(manifest.id)).slice(0, 32)
+  const existing = records.get(pluginId)
+  const declarations = manifest.permissions ?? []
+  const grants = options.grantDeclared === false
+    ? existing?.grants ?? []
+    : declarations.map((permission: any) =>
+        `${permission.key}:${permission.name}:${stableScope(permission.scope ?? {})}`
+      )
+  const record: PluginRecord = {
+    pluginId,
+    code,
+    manifest,
+    enabled: existing?.enabled ?? false,
+    order: existing?.order ?? records.size,
+    grants,
+    denied: existing?.denied ?? [],
+    installedAt: existing?.installedAt ?? Date.now()
+  }
+  await save(record)
+  refresh()
+  if (options.enable !== false) await enablePlugin(pluginId)
+  return descriptorFor(record, hosts.get(pluginId))
+}
+
+function stableScope(value: any): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return '[' + value.map(stableScope).join(',') + ']'
+  return (
+    '{' +
+    Object.keys(value)
+      .sort()
+      .map((key) => JSON.stringify(key) + ':' + stableScope(value[key]))
+      .join(',') +
+    '}'
+  )
+}
+
+export async function fetchPluginCode(url: string): Promise<string> {
+  const response = await requestRemote({ url, raw: true, timeoutMs: 30_000 })
+  if (response.status < 200 || response.status >= 300) {
+    throw new Error('下载插件失败: HTTP ' + response.status)
+  }
+  const code = String(response.body ?? '').trim()
+  if (!code) throw new Error('插件文件内容为空')
+  if (code.length > 16 * 1024 * 1024) throw new Error('插件文件过大')
+  return code
+}
+
+export function inspectPlugin(code: string): any {
+  return readPluginArtifact(code).header.manifest
+}
+
+export async function installPluginFromUrl(
+  url: string,
+  options: { enable?: boolean; grantDeclared?: boolean } = {}
+): Promise<PluginDescriptor> {
+  return installPlugin(await fetchPluginCode(url), options)
+}
+
+export async function installDemoPlugin(): Promise<PluginDescriptor> {
+  if (!pluginState.initialized) await initPlugins()
+  const response = await fetch('/demo-plugin.js', { cache: 'no-store' })
+  if (!response.ok) throw new Error('读取内置示例插件失败')
+  return installPlugin(await response.text(), { enable: true, grantDeclared: true })
+}
+
+export async function enablePlugin(pluginId: string): Promise<void> {
+  const record = records.get(pluginId)
+  if (!record) throw new Error('插件不存在')
+  if (hosts.has(pluginId)) {
+    record.enabled = true
+    await save(record)
+    refresh()
+    return
+  }
+  const host = new PluginHost({
+    pluginId,
+    code: record.code,
+    manifest: record.manifest,
+    grants: record.grants,
+    denied: record.denied,
+    saveGrants: async (grants, denied) => {
+      record.grants = grants
+      record.denied = denied
+      await save(record)
+    },
+    getConfig: () => getConfig(pluginId),
+    saveConfig: (config) => saveConfig(pluginId, config),
+    hooks: hooksFor(pluginId)
+  })
+  try {
+    await host.ensureReady()
+  } catch (error: any) {
+    await host.dispose()
+    record.enabled = false
+    record.loadError = error?.message ?? String(error)
+    await save(record)
+    refresh()
+    throw error
+  }
+  hosts.set(pluginId, host)
+  record.enabled = true
+  record.loadError = undefined
+  await save(record)
+  refresh()
+}
+
+export async function disablePlugin(pluginId: string): Promise<void> {
+  const record = records.get(pluginId)
+  if (!record) return
+  const host = hosts.get(pluginId)
+  hosts.delete(pluginId)
+  await host?.dispose()
+  record.enabled = false
+  await save(record)
+  refresh()
+}
+
+export async function removePlugin(pluginId: string): Promise<void> {
+  await disablePlugin(pluginId)
+  records.delete(pluginId)
+  await idb.del('plugins', pluginId)
+  await idb.del('pluginConfig', pluginId)
+  const keys = await idb.keys('pluginStorage')
+  for (const key of keys) {
+    if (String(key).startsWith(pluginId + ':')) await idb.del('pluginStorage', key)
+  }
+  refresh()
+}
+
+export async function reorderPlugin(pluginId: string, direction: -1 | 1): Promise<void> {
+  const list = [...records.values()].sort((a, b) => a.order - b.order)
+  const index = list.findIndex((item) => item.pluginId === pluginId)
+  const target = index + direction
+  if (index < 0 || target < 0 || target >= list.length) return
+  const a = list[index]
+  const b = list[target]
+  const order = a.order
+  a.order = b.order
+  b.order = order
+  await save(a)
+  await save(b)
+  refresh()
+}
+
+export async function getPluginConfig(pluginId: string): Promise<Record<string, any>> {
+  return (await idb.get('pluginConfig', pluginId)) ?? {}
+}
+
+export async function savePluginConfig(
+  pluginId: string,
+  config: Record<string, any>
+): Promise<void> {
+  await idb.set('pluginConfig', pluginId, config)
+}
+
+export function getHost(pluginId: string): PluginHost | undefined {
+  return hosts.get(pluginId)
+}
+
+export async function invokeProvider(
+  provider: ProviderHandle,
+  method: string,
+  args: any[] = []
+): Promise<any> {
+  const host = hosts.get(provider.pluginId)
+  if (!host) throw new Error('插件未运行，请先在设置中启用')
+  return host.invokeProvider(provider.providerId, method, args)
+}
+
+export async function callProviderMethod(
+  providerId: string,
+  method: string,
+  args: any[] = []
+): Promise<any> {
+  const provider = allProviders().find((item) => item.providerId === providerId)
+  if (!provider) throw new Error('没有可用的音源，请先安装并启用插件')
+  return invokeProvider(provider, method, args)
+}
+
+export function selectProvider(providerId: string): void {
+  pluginState.selectedProvider = providerId
+  try {
+    localStorage.setItem('ceru.selectedProvider', providerId)
+  } catch {}
+}
+
+export function restoreProviderSelection(): void {
+  try {
+    const saved = localStorage.getItem('ceru.selectedProvider')
+    if (saved) pluginState.selectedProvider = saved
+  } catch {}
+}
+
+export function pluginContributions(): any[] {
+  return pluginState.plugins
+    .filter((plugin) => plugin.running)
+    .map((plugin) => ({
+      pluginId: plugin.pluginId,
+      manifest: {
+        id: plugin.manifestId,
+        name: plugin.name,
+        version: plugin.version,
+        contributes: {
+          providers: plugin.providers,
+          homeSections: plugin.homeSections,
+          commands: plugin.commands
+        }
+      },
+      enabled: plugin.enabled
+    }))
+}
+
+export function providerIcon(providerId: string): string | undefined {
+  for (const plugin of pluginState.plugins) {
+    const icon = plugin.iconUrls[providerId]
+    if (icon) return icon
+  }
+  return undefined
+}

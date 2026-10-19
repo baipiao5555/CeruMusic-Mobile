@@ -9,10 +9,15 @@ if (!url && !file) {
 }
 const code = file ? fs.readFileSync(file, 'utf8') : undefined
 
+const browserArgs = ['--autoplay-policy=no-user-gesture-required', '--mute-audio']
+if (process.env.CERU_DISABLE_WEB_SECURITY === '1') {
+  browserArgs.push('--disable-web-security')
+}
+
 const browser = await chromium.launch({
   executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
   headless: true,
-  args: ['--autoplay-policy=no-user-gesture-required', '--mute-audio']
+  args: browserArgs
 })
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
 const errors = []
@@ -63,6 +68,35 @@ if (rows) {
   }))
   console.log('playback:', JSON.stringify(state))
 }
+
+if (process.env.CERU_TEST_IMPORT === '1') {
+  const imported = await page.evaluate(async () => {
+    const debug = window.__ceruDebug
+    try {
+      const provider = debug.allProviders().find((item) => item.providerId === 'wy')
+      const categories = await debug.invokeProvider(provider, 'playlists.categories', [])
+      const category = categories.items?.[0]
+      if (!category) return { error: '没有歌单分类' }
+      const page = await debug.invokeProvider(provider, 'playlists.list', [category.ref, undefined])
+      const items = (page.items ?? []).filter((item) => item.ref?.kind === 'playlist')
+      const playlist =
+        items.find((item) => (item.playlist?.trackCount ?? 9999) < 200) ?? items[0]
+      if (!playlist) return { error: '没有可导入歌单' }
+      const importer = debug.allImporters().find((item) => item.title.includes('网易云'))
+      const result = await debug.importPlaylist(importer, String(playlist.ref.id))
+      return {
+        playlistId: playlist.ref.id,
+        name: result.name,
+        count: result.tracks.length,
+        first: result.tracks[0]?.title
+      }
+    } catch (error) {
+      return { error: String((error && error.message) || error) }
+    }
+  })
+  console.log('real import:', JSON.stringify(imported))
+}
+
 console.log('console errors:', errors.length)
 for (const error of errors.slice(0, 8)) console.log('[error]', error)
 await browser.close()

@@ -15,12 +15,31 @@
   --line: rgba(16, 35, 28, 0.08);
   --shadow: 0 18px 50px rgba(16, 60, 45, 0.1);
   --shadow-soft: 0 8px 24px rgba(16, 60, 45, 0.07);
-  --nav-height: calc(64px + env(safe-area-inset-bottom, 0px));
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --nav-height: calc(64px + var(--safe-bottom));
   --mini-height: 66px;
   --radius-xl: 26px;
   --radius-lg: 20px;
   --radius-md: 14px;
   --danger: #e5484d;
+  --nav-bg: rgba(255, 255, 255, 0.94);
+  --nav-shadow: 0 -8px 28px rgba(16, 60, 45, 0.05);
+
+  --ion-font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', Roboto, sans-serif;
+  --ion-color-primary: #00b578;
+  --ion-color-primary-rgb: 0, 181, 120;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #009c68;
+  --ion-color-primary-tint: #1fbe8a;
+  --ion-background-color: transparent;
+  --ion-background-color-rgb: 238, 247, 243;
+  --ion-text-color: #10231c;
+  --ion-text-color-rgb: 16, 35, 28;
+  --ion-item-background: transparent;
+  --ion-tab-bar-background: transparent;
 }
 
 :root[data-theme='dark'] {
@@ -40,6 +59,18 @@
   --line: rgba(234, 245, 240, 0.09);
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
   --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.25);
+  --nav-bg: rgba(17, 28, 24, 0.94);
+  --nav-shadow: 0 -8px 28px rgba(0, 0, 0, 0.3);
+
+  --ion-color-primary: #2dd4a0;
+  --ion-color-primary-rgb: 45, 212, 160;
+  --ion-color-primary-shade: #28bb8d;
+  --ion-color-primary-tint: #42d8a9;
+  --ion-background-color: transparent;
+  --ion-background-color-rgb: 11, 18, 16;
+  --ion-text-color: #eaf5f0;
+  --ion-text-color-rgb: 234, 245, 240;
+  --ion-item-background: transparent;
 }
 
 *,
@@ -121,6 +152,7 @@ a {
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
   max-width: 620px;
   margin: 0 auto;
   overflow: hidden;
@@ -136,12 +168,25 @@ a {
     var(--bg);
 }
 
+/* 状态栏后面始终保持一层底色，页面滚动时不会把文字直接压在时钟上 */
+.status-scrim {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--safe-top);
+  z-index: 40;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
 .page {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 18px 18px calc(var(--nav-height) + 24px);
+  padding: calc(18px + var(--safe-top)) 18px calc(var(--nav-height) + 24px);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -725,44 +770,52 @@ input[type='search']::-webkit-search-results-decoration {
   right: 0;
   bottom: 0;
   z-index: 25;
-  height: var(--nav-height);
-  padding: 8px 20px env(safe-area-inset-bottom, 0px);
   display: flex;
   align-items: flex-start;
   justify-content: space-around;
-  background: var(--surface);
+  height: var(--nav-height);
+  padding: 6px 12px var(--safe-bottom);
+  background: var(--nav-bg);
   border-top: 1px solid var(--line);
   backdrop-filter: blur(24px);
+  box-shadow: var(--nav-shadow);
 }
 
-.nav-item {
+.bottom-nav .nav-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  min-width: 70px;
-  padding: 5px 0;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 0;
   font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
   color: var(--muted);
-  background: transparent;
-  transition: color 0.2s ease;
+  transition: color 0.18s ease;
 }
 
-.nav-item.active {
+.bottom-nav .nav-item.active {
   color: var(--brand);
 }
 
-.nav-item.active .nav-icon {
-  background: var(--brand-soft);
-}
-
-.nav-icon {
+.bottom-nav .nav-icon {
   display: grid;
   place-items: center;
-  width: 40px;
+  width: 46px;
   height: 30px;
-  border-radius: 12px;
-  transition: background 0.2s ease;
+  border-radius: 15px;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.bottom-nav .nav-item.active .nav-icon {
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+}
+
+.bottom-nav .nav-icon ion-icon {
+  font-size: 23px;
 }
 
 .toast-stack {

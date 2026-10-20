@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import Icon from './Icon.vue'
+import { IonIcon } from '@ionic/vue'
+import {
+  compass,
+  compassOutline,
+  musicalNotes,
+  musicalNotesOutline,
+  person,
+  personOutline,
+  search,
+  searchOutline
+} from 'ionicons/icons'
 
 const route = useRoute()
 const router = useRouter()
 
 const items = [
-  { path: '/', label: '发现', icon: 'discover' },
-  { path: '/search', label: '搜索', icon: 'search' },
-  { path: '/playlists', label: '歌单', icon: 'library' },
-  { path: '/library', label: '我的', icon: 'user' }
+  { path: '/', label: '发现', icon: compassOutline, activeIcon: compass },
+  { path: '/search', label: '搜索', icon: searchOutline, activeIcon: search },
+  { path: '/playlists', label: '歌单', icon: musicalNotesOutline, activeIcon: musicalNotes },
+  { path: '/library', label: '我的', icon: personOutline, activeIcon: person }
 ]
 
 const activeIndex = computed(() => {
@@ -41,7 +51,9 @@ function go(path: string): void {
       :class="{ active: activeIndex === index }"
       @click="go(item.path)"
     >
-      <span class="nav-icon"><Icon :name="item.icon" :size="22" /></span>
+      <span class="nav-icon">
+        <ion-icon :icon="activeIndex === index ? item.activeIcon : item.icon" />
+      </span>
       {{ item.label }}
     </button>
   </nav>

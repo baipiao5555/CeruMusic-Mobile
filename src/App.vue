@@ -5,11 +5,13 @@ import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
 import { SplashScreen } from '@capacitor/splash-screen'
 import { StatusBar, Style } from '@capacitor/status-bar'
+import { IonApp } from '@ionic/vue'
 import BottomNav from '@/components/BottomNav.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, navigationRequest } from '@/core/plugin/manager'
 import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
+import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
 import { applyTheme, registerSettingsHostHooks, restoreSettings, settingsState } from '@/core/settings'
 
@@ -24,9 +26,11 @@ async function syncStatusBar(): Promise<void> {
   const dark =
     route.path === '/player' || document.documentElement.classList.contains('dark')
   try {
-    await StatusBar.setBackgroundColor({ color: dark ? '#0B1210' : '#EEF7F3' })
+    await StatusBar.setOverlaysWebView({ overlay: true })
     await StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light })
   } catch {}
+  await applyNavigationBar(dark)
+  await applySystemInsets()
 }
 
 // Android 上闪屏还没隐藏时调用 setStyle 会被系统丢弃，需要在隐藏后重试。
@@ -45,6 +49,7 @@ function scheduleStatusBarSync(): void {
 
 onMounted(async () => {
   restoreSettings()
+  initSystemInsets()
   scheduleStatusBarSync()
   restoreLibrary()
   initPlayer()
@@ -105,8 +110,10 @@ watch(navigationRequest, (request) => {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'has-mini': showMini }">
+  <ion-app>
+    <div class="app-shell" :class="{ 'has-mini': showMini }">
     <div class="app-bg" />
+    <div class="status-scrim" />
     <router-view v-slot="{ Component }">
       <transition name="fade" mode="out-in">
         <component :is="Component" />
@@ -139,5 +146,6 @@ watch(navigationRequest, (request) => {
         </div>
       </div>
     </div>
-  </div>
+    </div>
+  </ion-app>
 </template>

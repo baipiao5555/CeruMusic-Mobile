@@ -1,7 +1,7 @@
 {
   "name": "ceru-music-mobile",
   "private": true,
-  "version": "2.3.1-mobile.9",
+  "version": "2.3.1-mobile.10",
   "description": "澜音 CeruMusic 手机版",
   "type": "module",
   "scripts": {
@@ -25,11 +25,13 @@
     "@capacitor/filesystem": "^6.0.2",
     "@capacitor/splash-screen": "^6.0.3",
     "@capacitor/status-bar": "^6.0.2",
+    "@ionic/vue": "^9.0.8",
     "@noble/curves": "^1.9.0",
     "@noble/hashes": "^1.8.0",
     "@shiqianjiang/ceru-plugin-core": "0.3.14",
     "@shiqianjiang/ceru-plugin-sdk": "0.3.14",
     "buffer": "^6.0.3",
+    "ionicons": "^8.1.0",
     "pinia": "^2.3.1",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0"

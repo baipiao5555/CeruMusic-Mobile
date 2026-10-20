@@ -106,134 +106,202 @@ watch(selected, load)
 </script>
 
 <template>
-  <div class="page">
-    <header class="page-header">
-      <div class="brand">
-        <img class="brand-logo" src="/logo.png" alt="" />
-      </div>
+  <div class="page discover-page">
+    <header class="discover-bar">
+      <img class="brand-logo" src="/logo.png" alt="" />
       <button class="icon-btn" aria-label="设置" @click="router.push('/settings')">
         <Icon name="settings" :size="21" />
       </button>
     </header>
 
-    <section class="hero">
+    <section class="discover-hero">
       <h1>发现音乐</h1>
       <p>你的音源，你的播放器</p>
-      <div class="hero-search" @click="router.push('/search')">
+      <button class="hero-search" @click="router.push('/search')">
         <Icon name="search" :size="19" />
         <span>搜索歌曲、歌手</span>
-      </div>
+      </button>
     </section>
 
-    <template v-if="providers.length">
-      <div class="chips" style="margin-top: 16px">
-        <button
-          v-for="provider in providers"
-          :key="provider.providerId + provider.pluginId"
-          class="chip"
-          :class="{ active: selected?.providerId === provider.providerId }"
-          @click="choose(provider)"
-        >
-          {{ provider.name }}
-        </button>
-      </div>
+    <div class="discover-body">
+      <template v-if="providers.length">
+        <div class="chips" style="margin-top: 16px">
+          <button
+            v-for="provider in providers"
+            :key="provider.providerId + provider.pluginId"
+            class="chip"
+            :class="{ active: selected?.providerId === provider.providerId }"
+            @click="choose(provider)"
+          >
+            {{ provider.name }}
+          </button>
+        </div>
 
-      <div v-if="loading" class="loading-block">
-        <span class="loading-dots"><i /><i /><i /></span>
-      </div>
+        <div v-if="loading" class="loading-block">
+          <span class="loading-dots"><i /><i /><i /></span>
+        </div>
+
+        <template v-else>
+          <template v-if="charts.length">
+            <div class="section-title">
+              <h2>排行榜</h2>
+              <span>{{ charts.length }} 个榜单</span>
+            </div>
+            <div class="grid-cards">
+              <button v-for="chart in charts" :key="chart.ref.id" class="media-card" @click="openChart(chart)">
+                <div class="cover">
+                  <img :src="artworkOf(chart)" alt="" loading="lazy" />
+                  <span class="badge">{{ chart.subtitle || '榜单' }}</span>
+                </div>
+                <h3>{{ chart.title }}</h3>
+                <p>{{ chart.chart?.updateFrequency || '实时更新' }}</p>
+              </button>
+            </div>
+          </template>
+
+          <template v-if="playlists.length">
+            <div class="section-title">
+              <h2>推荐歌单</h2>
+              <span>{{ playlists.length }} 个</span>
+            </div>
+            <div class="grid-cards">
+              <button v-for="playlist in playlists.slice(0, 8)" :key="playlist.ref.id" class="media-card" @click="openChart(playlist)">
+                <div class="cover">
+                  <img :src="artworkOf(playlist)" alt="" loading="lazy" />
+                  <span class="badge">{{ countOf(playlist) }}</span>
+                </div>
+                <h3>{{ playlist.title }}</h3>
+                <p>{{ playlist.playlist?.author || playlist.subtitle || '精选歌单' }}</p>
+              </button>
+            </div>
+          </template>
+
+          <div v-if="!charts.length && !playlists.length" class="card soft-note">
+            <Icon name="info" :size="20" />
+            <div>
+              <h3>当前音源没有提供首页内容</h3>
+              <p>你仍然可以在搜索页直接搜索歌曲。</p>
+            </div>
+          </div>
+        </template>
+      </template>
 
       <template v-else>
-        <template v-if="charts.length">
-          <div class="section-title">
-            <h2>排行榜</h2>
-            <span>{{ charts.length }} 个榜单</span>
-          </div>
-          <div class="grid-cards">
-            <button v-for="chart in charts" :key="chart.ref.id" class="media-card" @click="openChart(chart)">
-              <div class="cover">
-                <img :src="artworkOf(chart)" alt="" loading="lazy" />
-                <span class="badge">{{ chart.subtitle || '榜单' }}</span>
-              </div>
-              <h3>{{ chart.title }}</h3>
-              <p>{{ chart.chart?.updateFrequency || '实时更新' }}</p>
-            </button>
-          </div>
-        </template>
-
-        <template v-if="playlists.length">
-          <div class="section-title">
-            <h2>推荐歌单</h2>
-            <span>{{ playlists.length }} 个</span>
-          </div>
-          <div class="grid-cards">
-            <button v-for="playlist in playlists.slice(0, 8)" :key="playlist.ref.id" class="media-card" @click="openChart(playlist)">
-              <div class="cover">
-                <img :src="artworkOf(playlist)" alt="" loading="lazy" />
-                <span class="badge">{{ countOf(playlist) }}</span>
-              </div>
-              <h3>{{ playlist.title }}</h3>
-              <p>{{ playlist.playlist?.author || playlist.subtitle || '精选歌单' }}</p>
-            </button>
-          </div>
-        </template>
-
-        <div v-if="!charts.length && !playlists.length" class="card soft-note">
-          <Icon name="info" :size="20" />
-          <div>
-            <h3>当前音源没有提供首页内容</h3>
-            <p>你仍然可以在搜索页直接搜索歌曲。</p>
-          </div>
+        <div class="empty">
+          <div class="emoji">🎵</div>
+          <h3>还没有可用的音源</h3>
+          <p>澜音手机版通过插件获取音乐信息。安装一个 v2 音源插件后，就可以搜索和播放。</p>
+          <button class="btn" @click="router.push('/plugins')">
+            <Icon name="plus" :size="18" /> 安装音源插件
+          </button>
         </div>
       </template>
-    </template>
 
-    <template v-else>
-      <div class="empty">
-        <div class="emoji">🎵</div>
-        <h3>还没有可用的音源</h3>
-        <p>澜音手机版通过插件获取音乐信息。安装一个 v2 音源插件后，就可以搜索和播放。</p>
-        <button class="btn" @click="router.push('/plugins')">
-          <Icon name="plus" :size="18" /> 安装音源插件
-        </button>
-      </div>
-    </template>
+      <template v-if="history.length">
+        <div class="section-title">
+          <h2>最近播放</h2>
+          <span>{{ history.length }} 首</span>
+        </div>
+        <div class="hscroll">
+          <button v-for="(track, index) in history" :key="track.providerId + track.id" class="media-card" @click="playHistory(index)">
+            <div class="cover">
+              <img :src="track.artwork" alt="" loading="lazy" />
+            </div>
+            <h3>{{ track.title }}</h3>
+            <p>{{ track.artist }}</p>
+          </button>
+        </div>
+      </template>
 
-    <template v-if="history.length">
-      <div class="section-title">
-        <h2>最近播放</h2>
-        <span>{{ history.length }} 首</span>
-      </div>
-      <div class="hscroll">
-        <button v-for="(track, index) in history" :key="track.providerId + track.id" class="media-card" @click="playHistory(index)">
-          <div class="cover">
-            <img :src="track.artwork" alt="" loading="lazy" />
-          </div>
-          <h3>{{ track.title }}</h3>
-          <p>{{ track.artist }}</p>
-        </button>
-      </div>
-    </template>
-
-    <template v-if="favorites.length">
-      <div class="section-title">
-        <h2>我喜欢的音乐</h2>
-        <span>{{ libraryState.favorites.length }} 首</span>
-      </div>
-      <div class="song-list">
-        <SongRow
-          v-for="(track, index) in favorites.slice(0, 5)"
-          :key="track.providerId + track.id"
-          :track="track"
-          :index="index"
-          :queue="favorites"
-          @play="(queue, i) => playFavorite(i)"
-        />
-      </div>
-    </template>
+      <template v-if="favorites.length">
+        <div class="section-title">
+          <h2>我喜欢的音乐</h2>
+          <span>{{ libraryState.favorites.length }} 首</span>
+        </div>
+        <div class="song-list">
+          <SongRow
+            v-for="(track, index) in favorites.slice(0, 5)"
+            :key="track.providerId + track.id"
+            :track="track"
+            :index="index"
+            :queue="favorites"
+            @play="(queue, i) => playFavorite(i)"
+          />
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.discover-page {
+  padding: 0 0 calc(var(--nav-height) + 24px);
+  background:
+    radial-gradient(120% 80% at 80% -10%, rgba(0, 181, 120, 0.18), transparent 60%),
+    linear-gradient(180deg, #e6f8ef 0%, rgba(238, 247, 243, 0) 460px);
+}
+
+:root[data-theme='dark'] .discover-page {
+  background:
+    radial-gradient(120% 80% at 80% -10%, rgba(45, 212, 160, 0.16), transparent 60%),
+    linear-gradient(180deg, #11211b 0%, rgba(11, 18, 16, 0) 460px);
+}
+
+.discover-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(14px + var(--safe-top)) 20px 0;
+}
+
+.discover-bar .brand-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(0, 181, 120, 0.22);
+}
+
+.discover-hero {
+  padding: 26px 20px 0;
+}
+
+.discover-hero h1 {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.discover-hero p {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.hero-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 50px;
+  margin-top: 18px;
+  padding: 0 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+  color: var(--muted);
+  font-size: 14.5px;
+}
+
+:root[data-theme='dark'] .hero-search {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.discover-body {
+  padding: 4px 18px 0;
+}
+
 .loading-block {
   display: flex;
   justify-content: center;

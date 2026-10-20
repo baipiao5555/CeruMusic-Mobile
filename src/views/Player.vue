@@ -291,7 +291,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 10px;
+  padding: calc(12px + var(--safe-top)) 16px 10px;
   flex: 0 0 auto;
 }
 .player-title {
@@ -325,7 +325,7 @@ onMounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 4px 24px calc(20px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 24px calc(20px + var(--safe-bottom));
   overflow-y: auto;
   scrollbar-width: none;
 }

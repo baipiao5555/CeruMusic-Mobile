@@ -27,8 +27,8 @@ async function syncStatusBar(): Promise<void> {
       await StatusBar.setOverlaysWebView({ overlay: false })
       statusBarOverlayApplied = true
     }
-    await StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light })
-    await StatusBar.setBackgroundColor({ color: dark ? '#0B1210' : '#EEF7F3' })
+    await StatusBar.setStyle({ style: Style.Dark })
+    await StatusBar.setBackgroundColor({ color: dark ? '#0B1210' : '#0B5E46' })
   } catch {}
 }
 

@@ -192,7 +192,7 @@ function openImport(): void {
         <span class="entry-icon"><Icon name="info" :size="19" /></span>
         <div class="info">
           <h3>关于澜音</h3>
-          <p>CeruMusic 手机版 · 2.3.1-mobile.3</p>
+          <p>CeruMusic 手机版 · 2.3.1-mobile.4</p>
         </div>
         <Icon name="chevron" :size="18" class="chev" />
       </button>

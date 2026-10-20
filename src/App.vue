@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { Capacitor } from '@capacitor/core'
+import { StatusBar, Style } from '@capacitor/status-bar'
 import BottomNav from '@/components/BottomNav.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, navigationRequest } from '@/core/plugin/manager'
@@ -12,9 +14,26 @@ import { applyTheme, registerSettingsHostHooks, restoreSettings, settingsState }
 const router = useRouter()
 const route = useRoute()
 const showNav = computed(() => route.path !== '/player')
+const nativePlatform = Capacitor.isNativePlatform()
+let statusBarOverlayApplied = false
+
+async function syncStatusBar(): Promise<void> {
+  if (!nativePlatform) return
+  const dark =
+    route.path === '/player' || document.documentElement.classList.contains('dark')
+  try {
+    if (!statusBarOverlayApplied) {
+      await StatusBar.setOverlaysWebView({ overlay: false })
+      statusBarOverlayApplied = true
+    }
+    await StatusBar.setStyle({ style: dark ? Style.Light : Style.Dark })
+    await StatusBar.setBackgroundColor({ color: dark ? '#0B1210' : '#EEF7F3' })
+  } catch {}
+}
 
 onMounted(async () => {
   restoreSettings()
+  void syncStatusBar()
   restoreLibrary()
   initPlayer()
   registerPlayerHostHooks()
@@ -42,9 +61,25 @@ onMounted(async () => {
   }
   if (pluginState.selectedProvider) selectProvider(pluginState.selectedProvider)
   window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
-    if (settingsState.theme === 'system') applyTheme()
+    if (settingsState.theme === 'system') {
+      applyTheme()
+      void syncStatusBar()
+    }
   })
 })
+
+watch(
+  () => settingsState.theme,
+  () => {
+    applyTheme()
+    void syncStatusBar()
+  }
+)
+
+watch(
+  () => route.path,
+  () => void syncStatusBar()
+)
 
 watch(navigationRequest, (request) => {
   if (!request) return

@@ -8,6 +8,7 @@ import { pluginState } from '@/core/plugin/manager'
 import { availableQualities, qualityDescription, qualityLabel } from '@/core/quality'
 
 const router = useRouter()
+const appVersion = __APP_VERSION__
 
 const themes = [
   { value: 'system', label: '跟随系统' },
@@ -173,7 +174,7 @@ function resetSettings(): void {
       <img src="/logo.png" alt="" />
       <div>
         <h3>澜音 · CeruMusic 手机版</h3>
-        <p>版本 2.3.1-mobile.5</p>
+        <p>版本 {{ appVersion }}</p>
         <p>插件协议 v2.0 · Android</p>
       </div>
     </div>

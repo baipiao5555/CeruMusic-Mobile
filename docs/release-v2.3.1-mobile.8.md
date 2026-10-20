@@ -39,7 +39,7 @@
 - 包名：`com.ceru.music.mobile`
 - versionCode：`23108`
 - 最低系统：Android 6.0（API 23）
-- SHA-256：`725020f309562a60586b484d9aee83f6ff42646d4566c59647de71706c45b256`
+- SHA-256：`e2c868e2f99a0d463b6dbbd0d467270196a80d8ef78f3847a9cc245aea11fe73`
 - 自签名 APK；覆盖安装请使用同一签名
 
 ## 说明

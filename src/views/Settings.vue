@@ -77,7 +77,7 @@ function resetSettings(): void {
     </div>
     <div class="card panel">
       <div class="panel-label">默认音质</div>
-      <div class="chips">
+      <div class="chips quality-chips">
         <button
           class="chip"
           :class="{ active: settingsState.quality === '' }"
@@ -192,6 +192,12 @@ function resetSettings(): void {
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 11px;
+}
+.quality-chips {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 8px;
+  padding: 2px 2px 4px;
 }
 .hint {
   margin-top: 10px;

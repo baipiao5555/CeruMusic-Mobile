@@ -59,7 +59,14 @@ export function qualityDescription(quality: string | null | undefined): string {
   return DESCRIPTIONS[quality] ?? '由插件提供的自定义音质'
 }
 
-/** Qualities declared by the running plugins, ordered low -> high. */
+/** 插件常用的两套音质命名：抽象档位与码率/格式档位。 */
+const ABSTRACT_TIERS = ['low', 'standard', 'high', 'lossless']
+const FORMAT_TIERS = ['128k', '192k', '320k', 'flac', 'flac24bit', 'hires', 'atmos', 'atmos_plus', 'master']
+
+/**
+ * 设置页展示的默认音质档位：插件声明的档位 + 同一套命名下的其余档位。
+ * 当前音源没有的档位不会报错，播放时会自动回落到最接近的可用档位。
+ */
 export function availableQualities(): string[] {
   const values: string[] = []
   for (const provider of allProviders()) {
@@ -67,7 +74,12 @@ export function availableQualities(): string[] {
       if (quality && !values.includes(quality)) values.push(quality)
     }
   }
-  if (!values.length) return [...KNOWN_ORDER]
+  const family = values.some((quality) => ABSTRACT_TIERS.includes(quality))
+    ? ABSTRACT_TIERS
+    : FORMAT_TIERS
+  for (const quality of family) {
+    if (!values.includes(quality)) values.push(quality)
+  }
   return values.sort((a, b) => {
     const left = KNOWN_ORDER.indexOf(a)
     const right = KNOWN_ORDER.indexOf(b)

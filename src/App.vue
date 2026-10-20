@@ -2,6 +2,8 @@
 import { computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
+import { App as NativeApp } from '@capacitor/app'
+import { SplashScreen } from '@capacitor/splash-screen'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import BottomNav from '@/components/BottomNav.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
@@ -16,25 +18,34 @@ const route = useRoute()
 const showNav = computed(() => route.path !== '/player')
 const showMini = computed(() => Boolean(currentTrack()) && route.path !== '/player')
 const nativePlatform = Capacitor.isNativePlatform()
-let statusBarOverlayApplied = false
 
 async function syncStatusBar(): Promise<void> {
   if (!nativePlatform) return
   const dark =
     route.path === '/player' || document.documentElement.classList.contains('dark')
   try {
-    if (!statusBarOverlayApplied) {
-      await StatusBar.setOverlaysWebView({ overlay: false })
-      statusBarOverlayApplied = true
-    }
-    await StatusBar.setStyle({ style: Style.Dark })
-    await StatusBar.setBackgroundColor({ color: dark ? '#0B1210' : '#0B5E46' })
+    await StatusBar.setBackgroundColor({ color: dark ? '#0B1210' : '#EEF7F3' })
+    await StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light })
   } catch {}
+}
+
+// Android 上闪屏还没隐藏时调用 setStyle 会被系统丢弃，需要在隐藏后重试。
+function scheduleStatusBarSync(): void {
+  if (!nativePlatform) return
+  for (const delay of [0, 350, 900, 1800, 3000]) {
+    window.setTimeout(() => void syncStatusBar(), delay)
+  }
+  void SplashScreen.hide()
+    .catch(() => undefined)
+    .finally(() => window.setTimeout(() => void syncStatusBar(), 300))
+  void NativeApp.addListener('appStateChange', ({ isActive }) => {
+    if (isActive) void syncStatusBar()
+  })
 }
 
 onMounted(async () => {
   restoreSettings()
-  void syncStatusBar()
+  scheduleStatusBarSync()
   restoreLibrary()
   initPlayer()
   registerPlayerHostHooks()

@@ -16,6 +16,30 @@ const selectedImporterId = ref('')
 const importValue = ref('')
 const importing = ref(false)
 const importError = ref('')
+const importErrorDetail = ref('')
+
+function describeImportError(error: unknown): { message: string; detail: string } {
+  const raw = error instanceof Error ? error.message : String(error ?? '')
+  const detail = raw.replace(/^\[[^\]]+\]\s*/, '').trim()
+  const text = detail.toLowerCase()
+  if (detail.startsWith('没有解析到歌曲')) return { message: detail, detail: '' }
+  if (/try max num|not found|不存在|invalid|获取失败/.test(text)) {
+    return {
+      message: '没有读取到这个歌单：它可能已删除、未公开，或链接里的 ID 不是歌单 ID。请确认歌单是公开的，再换一个链接或 ID 重试。',
+      detail
+    }
+  }
+  if (/登录|login|auth|token|401|403|permission/.test(text)) {
+    return { message: '这个歌单需要登录才能读取，请先在音源插件里登录对应平台再回来重试。', detail }
+  }
+  if (/timeout|timed out|abort|超时/.test(text)) {
+    return { message: '读取超时，请检查网络或 VPN 后重试。', detail }
+  }
+  if (/not registered|unavailable|不支持/.test(text)) {
+    return { message: '当前插件没有提供该平台的歌单导入能力，请更新或更换音源插件。', detail }
+  }
+  return { message: detail || '导入失败', detail: '' }
+}
 
 const selectedImporter = computed<PlaylistImporterHandle | undefined>(() => {
   return (
@@ -45,14 +69,19 @@ async function startImport(): Promise<void> {
   }
   importing.value = true
   importError.value = ''
+  importErrorDetail.value = ''
   try {
     const result = await importPluginPlaylist(importer, value)
-    if (!result.tracks.length) throw new Error('没有解析到歌曲，请检查链接或插件登录状态')
+    if (!result.tracks.length) {
+      throw new Error('没有解析到歌曲：歌单可能为空、未公开，或需要先在插件里登录。')
+    }
     const playlist = createPlaylistWithTracks(result.name || importer.title, result.tracks)
     emit('close')
     router.push('/playlist/' + playlist.id)
-  } catch (error: any) {
-    importError.value = error?.message ?? '导入失败'
+  } catch (error: unknown) {
+    const described = describeImportError(error)
+    importError.value = described.message
+    importErrorDetail.value = described.detail
   } finally {
     importing.value = false
   }
@@ -103,7 +132,10 @@ async function startImport(): Promise<void> {
             {{ example.label || example.value }}
           </button>
         </div>
-        <p v-if="importError" class="import-error">{{ importError }}</p>
+        <div v-if="importError" class="import-error">
+          <span>{{ importError }}</span>
+          <span v-if="importErrorDetail" class="import-error-detail">插件返回：{{ importErrorDetail }}</span>
+        </div>
         <div class="sheet-actions">
           <button class="btn secondary" @click="emit('close')">取消</button>
           <button class="btn" :disabled="importing || !importValue.trim()" @click="startImport">
@@ -161,12 +193,21 @@ async function startImport(): Promise<void> {
   color: var(--muted-2);
 }
 .import-error {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--danger);
   background: rgba(229, 72, 77, 0.1);
   margin-bottom: 10px;
+}
+.import-error-detail {
+  font-size: 11px;
+  color: var(--muted);
+  user-select: text;
+  word-break: break-all;
 }
 </style>

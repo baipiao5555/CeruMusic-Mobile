@@ -26,6 +26,7 @@
 - 播放：队列、上一首/下一首、随机/单曲循环/列表循环、进度拖动
 - 音质：自动选择当前歌曲可用的最高音质，也可手动选择标准、超高、无损、高清臻音、全景环绕、超清母带等插件支持的档位
 - 歌词：逐行高亮，点击歌词跳转
+- 云歌词：插件没有歌词时，自动从 LrcLib / QQ音乐 匹配同步歌词与翻译；播放页也可以手动触发匹配
 - 收藏、本地歌单、播放历史
 - 深色/浅色主题，跟随系统
 - Android 前台媒体服务：后台播放、通知栏播放/暂停/上一首/下一首、锁屏媒体控制
@@ -37,6 +38,7 @@
 src/
   core/plugin/      插件产物解析、iframe 沙箱、Host RPC、网络访问
   core/playback/    音频播放、队列、歌词、历史
+  core/lyrics/      云歌词匹配（LrcLib / QQ音乐）
   core/library.ts   收藏与本地歌单
   core/native/      Capacitor 原生桥接（后台媒体服务）
   views/            发现 / 搜索 / 我的 / 播放 / 设置 / 插件
@@ -97,6 +99,7 @@ Android 签名配置在 `android/keystore.properties`（已加入 .gitignore）�
 
 - 上游项目：https://github.com/timeshiftsauce/CeruMusic
 - 插件运行时：`@shiqianjiang/ceru-plugin-core` / `ceru-plugin-sdk`
+- 云歌词匹配思路参考：[tomakino/LyricProvider](https://github.com/tomakino/LyricProvider)（Apache-2.0），歌词数据来自 LrcLib 与 QQ音乐公开接口
 - 图标与品牌资源来自上游项目
 
 本项目不分发任何音乐文件或第三方音源插件。请确保你安装和使用的插件符合当地法律法规。

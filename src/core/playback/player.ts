@@ -13,6 +13,7 @@ import {
 } from '../native/backgroundAudio'
 import { toTrack, type Track } from '../track'
 import { selectPlaybackQuality } from '../quality'
+import { matchCloudLyrics } from '../lyrics/cloud'
 
 export type { Track } from '../track'
 export { toTrack }
@@ -40,6 +41,7 @@ export const playerState = reactive({
   resolvedQuality: '',
   lyrics: [] as LyricLine[],
   lyricsLoading: false,
+  lyricSource: '',
   activeLyric: -1,
   error: ''
 })
@@ -293,6 +295,7 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
   playerState.currentTime = seekTo
   playerState.duration = track.durationMs ? track.durationMs / 1000 : 0
   playerState.lyrics = []
+  playerState.lyricSource = ''
   playerState.activeLyric = -1
   attachMediaSession(track)
   void loadLyrics(track)
@@ -526,23 +529,63 @@ export function addToQueue(track: Track, playNext = false): void {
 
 export async function loadLyrics(track: Track): Promise<void> {
   const provider = providerFor(track)
-  if (!provider) return
   playerState.lyricsLoading = true
   playerState.lyrics = []
+  playerState.lyricSource = ''
   try {
-    const document = await invokeProvider(provider, 'tracks.lyrics', [track.ref])
-    if (currentTrack()?.id !== track.id) return
-    playerState.lyrics = (document?.lines ?? []).map((line: any) => ({
-      startTimeMs: Number(line.startTimeMs) || 0,
-      endTimeMs: line.endTimeMs,
-      text: String(line.text ?? ''),
-      translation: line.translation
-    }))
-    updateActiveLyric()
-  } catch {
-    playerState.lyrics = []
+    if (provider) {
+      try {
+        const document = await invokeProvider(provider, 'tracks.lyrics', [track.ref])
+        if (currentTrack()?.id !== track.id) return
+        const lines = (document?.lines ?? [])
+          .map((line: any) => ({
+            startTimeMs: Number(line.startTimeMs) || 0,
+            endTimeMs: line.endTimeMs,
+            text: String(line.text ?? ''),
+            translation: line.translation
+          }))
+          .filter((line: LyricLine) => line.text.trim())
+        if (lines.length) {
+          playerState.lyrics = lines
+          playerState.lyricSource = 'plugin'
+          updateActiveLyric()
+          return
+        }
+      } catch {
+        // Fall through to the cloud lyric sources.
+      }
+    }
+
+    if (settingsState.cloudLyrics) {
+      const cloud = await matchCloudLyrics(track)
+      if (currentTrack()?.id !== track.id) return
+      if (cloud?.lines.length) {
+        playerState.lyrics = cloud.lines
+        playerState.lyricSource = cloud.source
+        updateActiveLyric()
+      }
+    }
   } finally {
-    playerState.lyricsLoading = false
+    if (currentTrack()?.id === track.id) playerState.lyricsLoading = false
+  }
+}
+
+/** Manually search LrcLib / QQ Music for the current track's lyrics. */
+export async function matchLyricsOnline(target: Track | undefined = currentTrack()): Promise<void> {
+  if (!target) return
+  playerState.lyricsLoading = true
+  playerState.lyrics = []
+  playerState.lyricSource = ''
+  try {
+    const cloud = await matchCloudLyrics(target, true)
+    if (currentTrack()?.id !== target.id) return
+    if (cloud?.lines.length) {
+      playerState.lyrics = cloud.lines
+      playerState.lyricSource = cloud.source
+      updateActiveLyric()
+    }
+  } finally {
+    if (currentTrack()?.id === target.id) playerState.lyricsLoading = false
   }
 }
 

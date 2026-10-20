@@ -91,6 +91,7 @@ async function startImport(): Promise<void> {
             rows="3"
             :placeholder="selectedImporter?.placeholder || '粘贴歌单分享链接'"
           />
+          <p class="import-hint">支持直接粘贴分享文案，会自动提取其中的链接或歌单 ID。</p>
         </div>
         <div v-if="selectedImporter?.examples.length" class="examples">
           <button
@@ -152,6 +153,12 @@ async function startImport(): Promise<void> {
   font-size: 11px;
   color: var(--brand);
   background: var(--brand-soft);
+}
+.import-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted-2);
 }
 .import-error {
   padding: 10px 12px;

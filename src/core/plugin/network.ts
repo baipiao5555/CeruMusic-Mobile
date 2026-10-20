@@ -18,6 +18,8 @@ export interface HttpRequestInput {
   headers?: Record<string, string>
   body?: string
   timeoutMs?: number
+  /** Web fetch referrer; native callers should set the Referer header instead. */
+  referrer?: string
   responseType?: 'text' | 'json'
   /** Skip JSON sniffing and return the response body as text. */
   raw?: boolean
@@ -157,8 +159,10 @@ async function webRequest(input: HttpRequestInput, initialUrl: URL): Promise<Htt
         headers,
         body: method === 'GET' || method === 'HEAD' ? undefined : body,
         redirect: 'manual',
-        signal: controller.signal
-      })
+        signal: controller.signal,
+        referrer: input.referrer,
+        referrerPolicy: 'unsafe-url'
+      } as RequestInit)
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         const location = response.headers.get('location')
         if (!location) break

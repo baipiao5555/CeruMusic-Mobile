@@ -6,6 +6,8 @@ export interface AppSettings {
   /** Empty means automatic: use the highest quality the current track offers. */
   quality: string
   showLyrics: boolean
+  /** Search LrcLib / QQ Music when the plugin provides no lyrics. */
+  cloudLyrics: boolean
   keepScreenOn: boolean
   playOnHeadset: boolean
   version?: number
@@ -17,6 +19,7 @@ export const settingsState = reactive<AppSettings>({
   theme: 'system',
   quality: '',
   showLyrics: true,
+  cloudLyrics: true,
   keepScreenOn: true,
   playOnHeadset: true,
   version: 2

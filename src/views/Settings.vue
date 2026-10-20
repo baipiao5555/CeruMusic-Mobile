@@ -36,6 +36,7 @@ function resetSettings(): void {
     theme: 'system',
     quality: '',
     showLyrics: true,
+    cloudLyrics: true,
     keepScreenOn: true,
     playOnHeadset: true
   })
@@ -109,6 +110,18 @@ function resetSettings(): void {
           @click="updateSettings({ showLyrics: !settingsState.showLyrics })"
         />
       </div>
+      <div class="list-item" style="padding-left: 0; padding-right: 0">
+        <div class="info">
+          <h3>自动匹配云歌词</h3>
+          <p>插件没有歌词时，从 LrcLib / QQ音乐 搜索</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.cloudLyrics }"
+          aria-label="自动匹配云歌词"
+          @click="updateSettings({ cloudLyrics: !settingsState.cloudLyrics })"
+        />
+      </div>
       <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
         <div class="info">
           <h3>播放时保持亮屏</h3>
@@ -160,7 +173,7 @@ function resetSettings(): void {
       <img src="/logo.png" alt="" />
       <div>
         <h3>澜音 · CeruMusic 手机版</h3>
-        <p>版本 2.3.1-mobile.4</p>
+        <p>版本 2.3.1-mobile.5</p>
         <p>插件协议 v2.0 · Android</p>
       </div>
     </div>

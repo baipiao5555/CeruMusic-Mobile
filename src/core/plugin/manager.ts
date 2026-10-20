@@ -284,6 +284,28 @@ function providerHandleFor(pluginId: string, providerId?: string): ProviderHandl
   }
 }
 
+const SHARE_URL_RE = /https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/i
+const LABELED_ID_RE = /(?:playlist\s*id|playlistid|pid|歌单\s*id|歌单id)\s*[=:：]\s*([A-Za-z0-9_-]+)/i
+const BARE_ID_RE = /^[A-Za-z0-9_-]+$/
+const TRAILING_PUNCT_RE = /[)\]）】,，。;；!！?？"'”’]+$/
+
+/**
+ * Share sheets usually copy a sentence around the link. Extract the first
+ * usable link or playlist ID so importers do not receive the whole message.
+ */
+export function normalizePlaylistInput(raw: string): string {
+  const value = raw.trim()
+  if (!value) return value
+  const url = value.match(SHARE_URL_RE)?.[0]
+  if (url) return url.replace(TRAILING_PUNCT_RE, '')
+  const labeled = value.match(LABELED_ID_RE)?.[1]
+  if (labeled) return labeled
+  if (BARE_ID_RE.test(value)) return value
+  const numericIds = value.match(/\d{6,}/g)
+  if (numericIds?.length === 1) return numericIds[0]
+  return value
+}
+
 /** Import a playlist through a plugin importer, following pagination. */
 export async function importPlaylist(
   importer: PlaylistImporterHandle,
@@ -291,12 +313,13 @@ export async function importPlaylist(
 ): Promise<ImportedPlaylist> {
   const host = hosts.get(importer.pluginId)
   if (!host) throw new Error('插件未运行，请先启用插件')
+  const target = normalizePlaylistInput(value)
   const tracks: Track[] = []
   const seen = new Set<string>()
   let cursor: string | undefined
   let name = importer.title
   for (let page = 0; page < 50; page++) {
-    const result = await host.importPlaylist(importer.id, value, cursor, 100)
+    const result = await host.importPlaylist(importer.id, target, cursor, 100)
     if (result?.playlist?.name) name = result.playlist.name
     else if (result?.name) name = result.name
     for (const item of result?.items ?? []) {

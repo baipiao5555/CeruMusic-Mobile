@@ -12,7 +12,8 @@ import {
   setQuality,
   togglePlay,
   playTracks,
-  removeFromQueue
+  removeFromQueue,
+  matchLyricsOnline
 } from '@/core/playback/player'
 import { isFavorite, toggleFavorite } from '@/core/library'
 import { settingsState } from '@/core/settings'
@@ -133,6 +134,13 @@ onMounted(() => {
 
       <div v-if="playerState.error" class="player-error">{{ playerState.error }}</div>
 
+      <div
+        v-if="settingsState.showLyrics && playerState.lyricSource && playerState.lyricSource !== 'plugin'"
+        class="lyrics-source"
+      >
+        歌词来源：{{ playerState.lyricSource }}
+      </div>
+
       <div v-if="settingsState.showLyrics" ref="lyricsBox" class="lyrics-box" :class="{ empty: !playerState.lyrics.length }">
         <template v-if="playerState.lyrics.length">
           <p
@@ -146,9 +154,16 @@ onMounted(() => {
             <span v-if="line.translation" class="translation">{{ line.translation }}</span>
           </p>
         </template>
-        <p v-else class="no-lyrics">
-          {{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词' }}
-        </p>
+        <div v-else class="no-lyrics">
+          <p>{{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词' }}</p>
+          <button
+            v-if="!playerState.lyricsLoading"
+            class="match-btn"
+            @click="matchLyricsOnline()"
+          >
+            在线匹配歌词
+          </button>
+        </div>
       </div>
 
       <div class="progress-block">
@@ -436,9 +451,34 @@ onMounted(() => {
   font-weight: 400;
   opacity: 0.7;
 }
+.lyrics-source {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  color: rgba(255, 255, 255, 0.45);
+}
 .no-lyrics {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   font-size: 12px;
-  opacity: 0.5;
+  opacity: 0.7;
+}
+.no-lyrics p {
+  opacity: 0.8;
+}
+.match-btn {
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.match-btn:active {
+  transform: scale(0.96);
 }
 .progress-block {
   flex: 0 0 auto;

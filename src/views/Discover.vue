@@ -109,11 +109,7 @@ watch(selected, load)
   <div class="page">
     <header class="page-header">
       <div class="brand">
-        <img class="brand-logo" src="/logo.png" alt="澜音" />
-        <div>
-          <div class="brand-name">澜音</div>
-          <div class="brand-sub">Ceru Music</div>
-        </div>
+        <img class="brand-logo" src="/logo.png" alt="" />
       </div>
       <button class="icon-btn" aria-label="设置" @click="router.push('/settings')">
         <Icon name="settings" :size="21" />

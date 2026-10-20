@@ -25,7 +25,8 @@ function describeImportError(error: unknown): { message: string; detail: string 
   if (detail.startsWith('没有解析到歌曲')) return { message: detail, detail: '' }
   if (/try max num|not found|不存在|invalid|获取失败/.test(text)) {
     return {
-      message: '没有读取到这个歌单：它可能已删除、未公开，或链接里的 ID 不是歌单 ID。请确认歌单是公开的，再换一个链接或 ID 重试。',
+      message:
+        '没有读取到这个歌单。如果它是「我喜欢」这类个人收藏，通常不能按 ID 读取：请在平台里点「分享 → 复制链接」粘贴完整链接，或先把歌曲转存成一个公开歌单再导入。',
       detail
     }
   }
@@ -120,7 +121,10 @@ async function startImport(): Promise<void> {
             rows="3"
             :placeholder="selectedImporter?.placeholder || '粘贴歌单分享链接'"
           />
-          <p class="import-hint">支持直接粘贴分享文案，会自动提取其中的链接或歌单 ID。</p>
+          <p class="import-hint">
+            支持直接粘贴分享文案，会自动提取其中的链接或歌单 ID。个人收藏（如「我喜欢」）通常无法按 ID
+            读取，请粘贴「分享 → 复制链接」得到的完整链接，或先转存为公开歌单。
+          </p>
         </div>
         <div v-if="selectedImporter?.examples.length" class="examples">
           <button

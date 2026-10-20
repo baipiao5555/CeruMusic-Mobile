@@ -6,7 +6,7 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import BottomNav from '@/components/BottomNav.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, navigationRequest } from '@/core/plugin/manager'
-import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek } from '@/core/playback/player'
+import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
 import { applyTheme, registerSettingsHostHooks, restoreSettings, settingsState } from '@/core/settings'
@@ -14,6 +14,7 @@ import { applyTheme, registerSettingsHostHooks, restoreSettings, settingsState }
 const router = useRouter()
 const route = useRoute()
 const showNav = computed(() => route.path !== '/player')
+const showMini = computed(() => Boolean(currentTrack()) && route.path !== '/player')
 const nativePlatform = Capacitor.isNativePlatform()
 let statusBarOverlayApplied = false
 
@@ -93,7 +94,7 @@ watch(navigationRequest, (request) => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'has-mini': showMini }">
     <div class="app-bg" />
     <router-view v-slot="{ Component }">
       <transition name="fade" mode="out-in">

@@ -141,13 +141,13 @@ a {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 18px 18px calc(var(--nav-height) + var(--mini-height) + 20px);
+  padding: 18px 18px calc(var(--nav-height) + 24px);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 
-.page.no-mini {
-  padding-bottom: calc(var(--nav-height) + 24px);
+.app-shell.has-mini .page {
+  padding-bottom: calc(var(--nav-height) + var(--mini-height) + 24px);
 }
 
 .page.full {
@@ -623,20 +623,17 @@ input[type='search']::-webkit-search-results-decoration {
 
 .mini-player {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: calc(var(--nav-height) + 10px);
+  left: 0;
+  right: 0;
+  bottom: var(--nav-height);
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   height: var(--mini-height);
-  padding: 8px 10px;
-  border-radius: 20px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(22px);
+  padding: 9px 16px;
+  background: var(--surface-solid);
+  border-top: 1px solid var(--line);
   transform: translateY(0);
   transition: transform 0.25s ease, opacity 0.25s ease;
 }
@@ -649,11 +646,10 @@ input[type='search']::-webkit-search-results-decoration {
 
 .mini-player .progress-line {
   position: absolute;
-  left: 16px;
-  right: 16px;
+  left: 0;
+  right: 0;
   top: 0;
   height: 2px;
-  border-radius: 2px;
   overflow: hidden;
   background: var(--line);
 }
@@ -662,11 +658,12 @@ input[type='search']::-webkit-search-results-decoration {
   display: block;
   height: 100%;
   background: var(--brand);
+  transition: width 0.2s linear;
 }
 
 .mini-player .cover {
-  width: 48px;
-  height: 48px;
+  width: 46px;
+  height: 46px;
   border-radius: 14px;
   overflow: hidden;
   flex: 0 0 auto;
@@ -685,7 +682,7 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 .mini-player .info h3 {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 650;
   white-space: nowrap;
   overflow: hidden;
@@ -694,11 +691,32 @@ input[type='search']::-webkit-search-results-decoration {
 
 .mini-player .info p {
   margin-top: 3px;
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.mini-player .icon-action {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+.mini-player .icon-action.primary {
+  background: var(--brand);
+  color: #fff;
+}
+
+.mini-player .icon-action.primary:active {
+  background: var(--brand-strong);
+}
+
+.mini-player .loading-dots i {
+  background: currentColor;
 }
 
 .bottom-nav {

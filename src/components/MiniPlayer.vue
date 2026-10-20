@@ -34,7 +34,11 @@ function open(): void {
         <h3>{{ track!.title }}</h3>
         <p>{{ track!.artist }}</p>
       </div>
-      <button class="icon-action" aria-label="播放或暂停" @click.stop="togglePlay">
+      <button
+        class="icon-action primary"
+        aria-label="播放或暂停"
+        @click.stop="togglePlay"
+      >
         <span v-if="playerState.loading" class="loading-dots"><i /><i /><i /></span>
         <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="25" />
       </button>

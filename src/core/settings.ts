@@ -9,7 +9,16 @@ export interface AppSettings {
   /** Search LrcLib / QQ Music / NetEase when the plugin provides no lyrics. */
   cloudLyrics: boolean
   keepScreenOn: boolean
+  /** Pause when wired headphones or Bluetooth audio disconnect. */
   playOnHeadset: boolean
+  /** Swipe left/right on the player page to change tracks. */
+  swipePlayer: boolean
+  /** Swipe left/right between the four main tabs. */
+  swipeTabs: boolean
+  /** Empty means follow the playback quality. */
+  downloadQuality: string
+  /** How many downloads run at the same time (1-3). */
+  downloadConcurrency: number
   version?: number
 }
 
@@ -22,6 +31,10 @@ export const settingsState = reactive<AppSettings>({
   cloudLyrics: true,
   keepScreenOn: true,
   playOnHeadset: true,
+  swipePlayer: true,
+  swipeTabs: true,
+  downloadQuality: '',
+  downloadConcurrency: 2,
   version: 2
 })
 
@@ -71,6 +84,9 @@ export function registerSettingsHostHooks(): void {
         if (patch.theme === 'light' || patch.theme === 'dark' || patch.theme === 'system')
           allowed.theme = patch.theme
         if (typeof patch.showLyrics === 'boolean') allowed.showLyrics = patch.showLyrics
+        if (typeof patch.cloudLyrics === 'boolean') allowed.cloudLyrics = patch.cloudLyrics
+        if (typeof patch.keepScreenOn === 'boolean') allowed.keepScreenOn = patch.keepScreenOn
+        if (typeof patch.playOnHeadset === 'boolean') allowed.playOnHeadset = patch.playOnHeadset
         updateSettings(allowed)
         return { ...settingsState }
       }

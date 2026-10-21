@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import { settingsState, updateSettings } from '@/core/settings'
-import { clearQueue, getHistory, setQuality } from '@/core/playback/player'
+import { clearQueue, getHistory, playerState, setMode, setQuality } from '@/core/playback/player'
 import { notify, pluginState } from '@/core/plugin/manager'
 import { availableQualities, qualityDescription, qualityLabel } from '@/core/quality'
 import { authState, displayName, login, logout } from '@/core/auth'
@@ -38,6 +38,15 @@ const themes = [
   { value: 'light', label: '浅色' },
   { value: 'dark', label: '深色' }
 ] as const
+
+const playModes = [
+  { value: 'order', label: '顺序播放' },
+  { value: 'repeat-all', label: '列表循环' },
+  { value: 'repeat-one', label: '单曲循环' },
+  { value: 'shuffle', label: '随机播放' }
+] as const
+
+const concurrencies = [1, 2, 3]
 
 const qualities = computed(() => availableQualities())
 const qualityHint = computed(() => qualityDescription(settingsState.quality))
@@ -140,6 +149,22 @@ function resetSettings(): void {
       <p class="hint">{{ qualityHint }}。如果当前歌曲没有该音质，会自动回落到最接近的可用音质。</p>
     </div>
 
+    <div class="card panel" style="margin-top: 12px">
+      <div class="panel-label">播放模式</div>
+      <div class="chips quality-chips">
+        <button
+          v-for="mode in playModes"
+          :key="mode.value"
+          class="chip"
+          :class="{ active: playerState.mode === mode.value }"
+          @click="setMode(mode.value)"
+        >
+          {{ mode.label }}
+        </button>
+      </div>
+      <p class="hint">和播放页的模式按钮同步，切换后立即生效。</p>
+    </div>
+
     <div class="card panel" style="margin-top: 12px; padding: 4px 16px">
       <div class="list-item" style="padding-left: 0; padding-right: 0">
         <div class="info">
@@ -165,7 +190,7 @@ function resetSettings(): void {
           @click="updateSettings({ cloudLyrics: !settingsState.cloudLyrics })"
         />
       </div>
-      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
+      <div class="list-item" style="padding-left: 0; padding-right: 0">
         <div class="info">
           <h3>播放时保持亮屏</h3>
           <p>使用系统 Wake Lock，退出播放页后释放</p>
@@ -177,6 +202,92 @@ function resetSettings(): void {
           @click="updateSettings({ keepScreenOn: !settingsState.keepScreenOn })"
         />
       </div>
+      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
+        <div class="info">
+          <h3>耳机拔出时暂停</h3>
+          <p>有线耳机或蓝牙音频断开时自动暂停</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.playOnHeadset }"
+          aria-label="耳机拔出时暂停"
+          @click="updateSettings({ playOnHeadset: !settingsState.playOnHeadset })"
+        />
+      </div>
+    </div>
+
+    <div class="section-title">
+      <h2>手势</h2>
+    </div>
+    <div class="card panel" style="padding: 4px 16px">
+      <div class="list-item" style="padding-left: 0; padding-right: 0">
+        <div class="info">
+          <h3>播放页左右滑动切歌</h3>
+          <p>左滑下一首，右滑上一首</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.swipePlayer }"
+          aria-label="播放页滑动切歌"
+          @click="updateSettings({ swipePlayer: !settingsState.swipePlayer })"
+        />
+      </div>
+      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
+        <div class="info">
+          <h3>主页面左右滑动切换</h3>
+          <p>在发现 / 搜索 / 歌单 / 我的之间滑动切换</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.swipeTabs }"
+          aria-label="主页面滑动切换"
+          @click="updateSettings({ swipeTabs: !settingsState.swipeTabs })"
+        />
+      </div>
+    </div>
+
+    <div class="section-title">
+      <h2>下载</h2>
+    </div>
+    <div class="card panel">
+      <div class="panel-label">下载音质</div>
+      <div class="chips quality-chips">
+        <button
+          class="chip"
+          :class="{ active: settingsState.downloadQuality === '' }"
+          @click="updateSettings({ downloadQuality: '' })"
+        >
+          跟随播放音质
+        </button>
+        <button
+          v-for="quality in qualities"
+          :key="quality"
+          class="chip"
+          :class="{ active: settingsState.downloadQuality === quality }"
+          @click="updateSettings({ downloadQuality: quality })"
+        >
+          {{ qualityLabel(quality) }}
+        </button>
+      </div>
+      <p class="hint">
+        下载时使用这个音质；选择「跟随播放音质」时使用上面的默认音质。
+      </p>
+    </div>
+
+    <div class="card panel" style="margin-top: 12px">
+      <div class="panel-label">同时下载数量</div>
+      <div class="chips">
+        <button
+          v-for="count in concurrencies"
+          :key="count"
+          class="chip"
+          :class="{ active: settingsState.downloadConcurrency === count }"
+          @click="updateSettings({ downloadConcurrency: count })"
+        >
+          {{ count }} 个
+        </button>
+      </div>
+      <p class="hint">网络较慢时建议设为 1。</p>
     </div>
 
     <div class="section-title">

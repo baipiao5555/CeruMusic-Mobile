@@ -54,6 +54,14 @@ let blobUrl: string | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let wakeLock: any = null
 let lastProgressSync = 0
+let loadTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearLoadTimer(): void {
+  if (loadTimer) {
+    clearTimeout(loadTimer)
+    loadTimer = null
+  }
+}
 
 async function syncWakeLock(): Promise<void> {
   try {
@@ -110,7 +118,15 @@ export function restorePlayer(): void {
     if (saved.mode) playerState.mode = saved.mode
     playerState.quality = settingsState.quality
     if (Number.isFinite(saved.currentTime)) playerState.currentTime = saved.currentTime
+    playerState.loading = false
+    playerState.playing = false
+    playerState.error = ''
     audio!.volume = playerState.volume
+    // The previous audio source does not survive a restart; make sure an old
+    // play() cannot leave the UI spinning on an empty element.
+    audio!.pause()
+    audio!.removeAttribute('src')
+    audio!.load()
     if (currentTrack()) {
       attachMediaSession(currentTrack()!)
       void loadLyrics(currentTrack()!)
@@ -167,10 +183,12 @@ export function initPlayer(): void {
     playerState.loading = true
   })
   audio.addEventListener('playing', () => {
+    clearLoadTimer()
     playerState.loading = false
     playerState.error = ''
   })
   audio.addEventListener('canplay', () => {
+    clearLoadTimer()
     playerState.loading = false
   })
   audio.addEventListener('ended', () => {
@@ -255,6 +273,13 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
   playerState.loading = true
   playerState.error = ''
   playerState.currentTime = seekTo
+  clearLoadTimer()
+  loadTimer = setTimeout(() => {
+    if (token !== resolveToken || !playerState.loading) return
+    playerState.loading = false
+    playerState.playing = false
+    playerState.error = '加载超时，请重试或切换音源'
+  }, 25_000)
   playerState.duration = track.durationMs ? track.durationMs / 1000 : 0
   playerState.lyrics = []
   playerState.lyricSource = ''
@@ -279,6 +304,7 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
       )
     }
     await audio!.play()
+    clearLoadTimer()
     playerState.playing = true
     playerState.loading = false
     startBackgroundAudio(
@@ -291,6 +317,7 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
     persist()
   } catch (error: any) {
     if (token !== resolveToken) return
+    clearLoadTimer()
     playerState.loading = false
     playerState.playing = false
     playerState.error = error?.message ?? '播放失败'
@@ -327,7 +354,14 @@ export async function playTrack(track: Track, queue?: Track[]): Promise<void> {
 }
 
 export async function togglePlay(): Promise<void> {
-  if (!audio || !currentTrack()) return
+  const track = currentTrack()
+  if (!audio || !track) return
+  // After an app restart the restored queue has no audio source. Start the
+  // track instead of calling play() on an empty element forever.
+  if (!audio.getAttribute('src')) {
+    await startPlayback(track, playerState.currentTime || 0)
+    return
+  }
   if (audio.paused) {
     try {
       await audio.play()
@@ -341,6 +375,11 @@ export async function togglePlay(): Promise<void> {
 }
 
 export async function resume(): Promise<void> {
+  const track = currentTrack()
+  if (audio && track && !audio.getAttribute('src')) {
+    await startPlayback(track, playerState.currentTime || 0)
+    return
+  }
   if (audio && audio.paused) {
     try {
       await audio.play()
@@ -458,7 +497,10 @@ export function removeFromQueue(index: number): void {
     if (!playerState.queue.length) {
       playerState.index = -1
       audio?.pause()
-      if (audio) audio.src = ''
+      if (audio) {
+        audio.removeAttribute('src')
+        audio.load()
+      }
       playerState.playing = false
       playerState.currentTime = 0
       playerState.duration = 0
@@ -475,7 +517,10 @@ export function clearQueue(): void {
   playerState.queue = []
   playerState.index = -1
   audio?.pause()
-  if (audio) audio.src = ''
+  if (audio) {
+    audio.removeAttribute('src')
+    audio.load()
+  }
   playerState.playing = false
   playerState.currentTime = 0
   playerState.duration = 0

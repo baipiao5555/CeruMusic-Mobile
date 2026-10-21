@@ -25,7 +25,7 @@ export interface DownloadTask {
 }
 
 const STORAGE_KEY = 'ceru.downloads.v1'
-const MAX_CONCURRENT = 2
+const DEFAULT_CONCURRENT = 2
 const AUDIO_EXTENSIONS = ['mp3', 'flac', 'm4a', 'aac', 'ogg', 'opus', 'wav', 'wma']
 
 export const downloadState = reactive({
@@ -171,8 +171,14 @@ function enqueue(id: string): void {
   pump()
 }
 
+function concurrencyLimit(): number {
+  const value = Number(settingsState.downloadConcurrency)
+  return Math.max(1, Math.min(3, Number.isFinite(value) && value > 0 ? value : DEFAULT_CONCURRENT))
+}
+
 function pump(): void {
-  while (activeCount < MAX_CONCURRENT) {
+  const limit = concurrencyLimit()
+  while (activeCount < limit) {
     const id = pending.shift()
     if (!id) break
     const task = findTask(id)
@@ -233,7 +239,10 @@ async function runTask(task: DownloadTask): Promise<void> {
   }
 }
 
-export function downloadTrack(track: Track, quality = settingsState.quality): DownloadTask {
+export function downloadTrack(
+  track: Track,
+  quality = settingsState.downloadQuality || settingsState.quality
+): DownloadTask {
   const existing = taskFor(track)
   if (existing && existing.status === 'completed') return existing
   if (existing && (existing.status === 'downloading' || existing.status === 'queued')) {
@@ -270,7 +279,10 @@ export function downloadTrack(track: Track, quality = settingsState.quality): Do
   return task
 }
 
-export function downloadTracks(tracks: Track[], quality = settingsState.quality): number {
+export function downloadTracks(
+  tracks: Track[],
+  quality = settingsState.downloadQuality || settingsState.quality
+): number {
   let started = 0
   for (const track of tracks) {
     const task = taskFor(track)

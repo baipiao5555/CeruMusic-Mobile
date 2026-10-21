@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
@@ -52,6 +52,43 @@ function scheduleStatusBarSync(): void {
 }
 
 const ROOT_PATHS = ['/', '/search', '/playlists', '/library']
+let tabSwipe: { x: number; y: number; time: number; path: string } | null = null
+
+function onTabTouchStart(event: TouchEvent): void {
+  if (!settingsState.swipeTabs || event.touches.length !== 1) return
+  if (!ROOT_PATHS.includes(route.path)) return
+  if (document.querySelector('.sheet-mask')) return
+  const target = event.target as HTMLElement
+  if (
+    target.closest(
+      'input, textarea, button, .chips, .song-list, .playlist-list, .task-list, .mini-player, .bottom-nav'
+    )
+  ) {
+    return
+  }
+  tabSwipe = {
+    x: event.touches[0].clientX,
+    y: event.touches[0].clientY,
+    time: Date.now(),
+    path: route.path
+  }
+}
+
+function onTabTouchEnd(event: TouchEvent): void {
+  if (!tabSwipe) return
+  const start = tabSwipe
+  tabSwipe = null
+  if (!settingsState.swipeTabs || event.changedTouches.length !== 1) return
+  if (route.path !== start.path || Date.now() - start.time > 900) return
+  const dx = event.changedTouches[0].clientX - start.x
+  const dy = event.changedTouches[0].clientY - start.y
+  if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.4) return
+  const index = ROOT_PATHS.indexOf(start.path)
+  if (index < 0) return
+  const nextIndex = dx < 0 ? index + 1 : index - 1
+  if (nextIndex < 0 || nextIndex >= ROOT_PATHS.length) return
+  router.push(ROOT_PATHS[nextIndex])
+}
 
 /** Android back gesture/button: close sheets, walk history, exit only at a root tab. */
 function handleBackNavigation(): void {
@@ -85,6 +122,8 @@ async function handleDeepLink(url: string): Promise<void> {
 onMounted(async () => {
   restoreSettings()
   initSystemInsets()
+  window.addEventListener('touchstart', onTabTouchStart, { passive: true })
+  window.addEventListener('touchend', onTabTouchEnd, { passive: true })
   void initAuth()
   void initDownloads()
   if (nativePlatform) {
@@ -143,6 +182,11 @@ watch(
   () => route.path,
   () => void syncStatusBar()
 )
+
+onUnmounted(() => {
+  window.removeEventListener('touchstart', onTabTouchStart)
+  window.removeEventListener('touchend', onTabTouchEnd)
+})
 
 watch(navigationRequest, (request) => {
   if (!request) return

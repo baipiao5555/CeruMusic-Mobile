@@ -1,11 +1,13 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { Track } from '../playback/player'
+import { settingsState } from '../settings'
 
 interface BackgroundAudioOptions {
   title: string
   artist: string
   artwork: string
   playing: boolean
+  pauseOnNoisy: boolean
   position: number
   duration: number
 }
@@ -36,6 +38,7 @@ function optionsFor(
     // Only remote images can be fetched by the native media service.
     artwork: /^https?:\/\//i.test(track.artwork || '') ? track.artwork : '',
     playing,
+    pauseOnNoisy: settingsState.playOnHeadset,
     position: Math.max(0, Math.round(positionMs)),
     duration: Math.max(0, Math.round(durationMs))
   }

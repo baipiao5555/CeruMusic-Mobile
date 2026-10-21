@@ -25,6 +25,7 @@ const lyricsBox = ref<HTMLElement>()
 const showQueue = ref(false)
 const dragging = ref(false)
 const dragValue = ref(0)
+let swipeStart: { x: number; y: number; time: number } | null = null
 
 const progress = computed(() => {
   const duration = playerState.duration || (track.value?.durationMs ?? 0) / 1000
@@ -70,6 +71,30 @@ function close(): void {
   else router.replace('/')
 }
 
+function onTouchStart(event: TouchEvent): void {
+  if (!settingsState.swipePlayer || event.touches.length !== 1) return
+  const target = event.target as HTMLElement
+  if (target.closest('input, button, .sheet-mask, .quality-row')) return
+  swipeStart = {
+    x: event.touches[0].clientX,
+    y: event.touches[0].clientY,
+    time: Date.now()
+  }
+}
+
+function onTouchEnd(event: TouchEvent): void {
+  if (!swipeStart) return
+  const start = swipeStart
+  swipeStart = null
+  if (!settingsState.swipePlayer || event.changedTouches.length !== 1) return
+  if (Date.now() - start.time > 900) return
+  const dx = event.changedTouches[0].clientX - start.x
+  const dy = event.changedTouches[0].clientY - start.y
+  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.4) return
+  if (dx > 0) void previous()
+  else void next()
+}
+
 function playQueue(index: number): void {
   showQueue.value = false
   void playTracks(playerState.queue, index)
@@ -96,7 +121,12 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="track" class="page full player-page">
+  <div
+    v-if="track"
+    class="page full player-page"
+    @touchstart.passive="onTouchStart"
+    @touchend.passive="onTouchEnd"
+  >
     <div class="player-bg">
       <img :src="track.artwork" alt="" />
       <div class="player-bg-mask" />

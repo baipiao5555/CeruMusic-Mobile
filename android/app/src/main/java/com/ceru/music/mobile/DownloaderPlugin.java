@@ -38,7 +38,7 @@ public class DownloaderPlugin extends Plugin {
     private static final long PROGRESS_INTERVAL_MS = 250L;
     private static final String BLOCKED_MESSAGE = "出于安全原因，不能访问本机、回环或局域网地址";
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(2);
+    private final ExecutorService executor = Executors.newFixedThreadPool(3);
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
 
     private static final class Job {

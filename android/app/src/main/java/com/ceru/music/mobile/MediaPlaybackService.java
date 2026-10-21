@@ -5,12 +5,15 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Icon;
+import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
@@ -71,6 +74,7 @@ public class MediaPlaybackService extends Service {
     private Bitmap artwork;
     private String loadingArtworkUrl = "";
     private boolean playing = false;
+    private boolean pauseOnNoisy = true;
     private boolean foregroundStarted = false;
     private long position = 0;
     private long positionBaseRealtime = 0;
@@ -78,6 +82,17 @@ public class MediaPlaybackService extends Service {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
+
+    /** Wired/Bluetooth audio disconnected: pause when the user enabled it. */
+    private final BroadcastReceiver noisyReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (AudioManager.ACTION_AUDIO_BECOMING_NOISY.equals(intent.getAction())
+                    && pauseOnNoisy && playing) {
+                emit("pause");
+            }
+        }
+    };
 
     private final Runnable progressTicker = new Runnable() {
         @Override
@@ -140,6 +155,7 @@ public class MediaPlaybackService extends Service {
             }
         });
         mediaSession.setActive(true);
+        registerReceiver(noisyReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
     }
 
     @Override
@@ -169,6 +185,7 @@ public class MediaPlaybackService extends Service {
             if (intent.hasExtra("artist")) artist = intent.getStringExtra("artist");
             if (intent.hasExtra("duration")) duration = intent.getLongExtra("duration", duration);
             if (intent.hasExtra("artwork")) updateArtwork(intent.getStringExtra("artwork"));
+            pauseOnNoisy = intent.getBooleanExtra("pauseOnNoisy", pauseOnNoisy);
             playing = intent.getBooleanExtra("playing", playing);
             setPosition(intent.getLongExtra("position", currentPosition()));
         }
@@ -502,6 +519,10 @@ public class MediaPlaybackService extends Service {
     public void onDestroy() {
         mainHandler.removeCallbacks(progressTicker);
         artworkExecutor.shutdownNow();
+        try {
+            unregisterReceiver(noisyReceiver);
+        } catch (IllegalArgumentException ignored) {
+        }
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         if (mediaSession != null) {
             mediaSession.release();

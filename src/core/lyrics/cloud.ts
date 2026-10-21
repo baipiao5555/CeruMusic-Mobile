@@ -2,7 +2,7 @@ import { requestRemote } from '../plugin/network'
 import type { Track } from '../track'
 import type { LyricLine } from '../playback/player'
 
-export type CloudLyricSource = 'LrcLib' | 'QQ音乐'
+export type CloudLyricSource = 'LrcLib' | 'QQ音乐' | '网易云'
 
 export interface CloudLyricsResult {
   source: CloudLyricSource
@@ -16,6 +16,8 @@ export interface CloudLyricsResult {
 const USER_AGENT = 'CeruMusic-Mobile/2.3.1 (https://github.com/baipiao5555/CeruMusic-Mobile)'
 const QQ_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+const NETEASE_USER_AGENT = QQ_USER_AGENT
+const NETEASE_REFERER = 'https://music.163.com/'
 const MIN_SCORE = 55
 const lyricCache = new Map<string, CloudLyricsResult | null>()
 
@@ -303,7 +305,87 @@ async function fetchQQ(track: Track): Promise<CloudLyricsResult[]> {
   }
 }
 
-/** Search LrcLib and QQ Music, then return the best matching synced lyrics. */
+interface NetEaseSong {
+  id?: number
+  name?: string
+  duration?: number
+  dt?: number
+  artists?: Array<{ name?: string }>
+  ar?: Array<{ name?: string }>
+  album?: { name?: string }
+  al?: { name?: string }
+}
+
+/** NetEase Cloud Music: public search + lyric API, no login required. */
+async function fetchNetEase(track: Track): Promise<CloudLyricsResult[]> {
+  try {
+    const query = [cleanTitle(track.title), track.artist].filter(Boolean).join(' ')
+    if (!query) return []
+    const search = await requestRemote({
+      url:
+        'https://music.163.com/api/search/get/web?s=' +
+        encodeURIComponent(query) +
+        '&type=1&offset=0&limit=30',
+      headers: {
+        'User-Agent': NETEASE_USER_AGENT,
+        Referer: NETEASE_REFERER,
+        Accept: 'application/json'
+      },
+      referrer: NETEASE_REFERER,
+      timeoutMs: 12_000
+    })
+    if (search.status < 200 || search.status >= 300) return []
+    const songs: NetEaseSong[] = search.body?.result?.songs ?? []
+    const seen = new Set<number>()
+    const candidates: NetEaseSong[] = []
+    for (const song of songs) {
+      if (!song?.id || seen.has(song.id)) continue
+      seen.add(song.id)
+      candidates.push(song)
+      if (candidates.length >= 5) break
+    }
+
+    const results = await Promise.all(
+      candidates.map(async (song) => {
+        try {
+          const lyric = await requestRemote({
+            url: `https://music.163.com/api/song/lyric?id=${song.id}&lv=1&kv=1&tv=-1`,
+            headers: {
+              'User-Agent': NETEASE_USER_AGENT,
+              Referer: NETEASE_REFERER
+            },
+            referrer: NETEASE_REFERER,
+            timeoutMs: 12_000
+          })
+          if (lyric.status < 200 || lyric.status >= 300) return null
+          const parsed = parseLrc(decodeEntities(String(lyric.body?.lrc?.lyric ?? '')))
+          if (!parsed.length) return null
+          const lines = toLyricLines(parsed, String(lyric.body?.tlyric?.lyric ?? ''))
+          const candidate: Candidate = {
+            title: song.name,
+            artist: (song.artists ?? song.ar ?? [])
+              .map((item) => item.name)
+              .filter(Boolean)
+              .join(' / '),
+            album: (song.album ?? song.al)?.name,
+            durationMs: Number(song.duration ?? song.dt) || undefined
+          }
+          const score = scoreCandidate(track, candidate, lines)
+          return Number.isFinite(score)
+            ? ({ source: '网易云', lines, score, ...candidate } as CloudLyricsResult)
+            : null
+        } catch {
+          return null
+        }
+      })
+    )
+    return results.filter((item): item is CloudLyricsResult => Boolean(item))
+  } catch {
+    return []
+  }
+}
+
+/** Search LrcLib, QQ Music and NetEase, then return the best matching synced lyrics. */
 export async function matchCloudLyrics(
   track: Track,
   force = false
@@ -312,13 +394,17 @@ export async function matchCloudLyrics(
   if (!force && lyricCache.has(key)) return lyricCache.get(key) ?? null
 
   const hasCjk = /[\u3400-\u9fff]/.test(`${track.title} ${track.artist}`)
-  const settled = await Promise.allSettled([fetchQQ(track), fetchLrcLib(track)])
+  const settled = await Promise.allSettled([
+    fetchQQ(track),
+    fetchLrcLib(track),
+    fetchNetEase(track)
+  ])
   const results = settled.flatMap((item) => (item.status === 'fulfilled' ? item.value : []))
   const ranked = results
     .filter((item) => item.score >= MIN_SCORE)
     .map((item) => {
-      const sourceBonus =
-        (hasCjk && item.source === 'QQ音乐') || (!hasCjk && item.source === 'LrcLib') ? 5 : 0
+      const chineseSource = item.source === 'QQ音乐' || item.source === '网易云'
+      const sourceBonus = hasCjk ? (chineseSource ? 5 : 0) : item.source === 'LrcLib' ? 5 : 0
       return { item, rank: item.score + sourceBonus }
     })
     .sort((a, b) => b.rank - a.rank)

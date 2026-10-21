@@ -26,7 +26,7 @@
 - 播放：队列、上一首/下一首、随机/单曲循环/列表循环、进度拖动
 - 音质：自动选择当前歌曲可用的最高音质，也可手动选择标准、超高、无损、高清臻音、全景环绕、超清母带等插件支持的档位
 - 歌词：逐行高亮，点击歌词跳转
-- 云歌词：插件没有歌词时，自动从 LrcLib / QQ音乐 匹配同步歌词与翻译；播放页也可以手动触发匹配
+- 云歌词：插件没有歌词时，自动从 LrcLib / QQ音乐 / 网易云 匹配同步歌词与翻译；播放页也可以手动触发匹配
 - 收藏、本地歌单、播放历史
 - 澜音账号登录：与电脑版共用同一个账号（Logto OAuth 2.0 + PKCE），登录页在系统浏览器打开，通过 `cerumusic://oauth/callback` 深链回到应用
 - 云歌单同步：读取电脑版「上传到云端」的歌单，一键导入或更新到手机；导入时自动匹配本机已安装的音源插件
@@ -42,7 +42,7 @@
 src/
   core/plugin/      插件产物解析、iframe 沙箱、Host RPC、网络访问
   core/playback/    音频播放、队列、歌词、历史、插件音源解析
-  core/lyrics/      云歌词匹配（LrcLib / QQ音乐）
+  core/lyrics/      云歌词匹配（LrcLib / QQ音乐 / 网易云）
   core/library.ts   收藏与本地歌单
   core/auth.ts      澜音账号登录（Logto OAuth PKCE + 深链回调）
   core/cloud.ts     云歌单读取与导入
@@ -136,7 +136,7 @@ Android 签名配置在 `android/keystore.properties`（已加入 .gitignore）�
 
 - 上游项目：https://github.com/timeshiftsauce/CeruMusic
 - 插件运行时：`@shiqianjiang/ceru-plugin-core` / `ceru-plugin-sdk`
-- 云歌词匹配思路参考：[tomakino/LyricProvider](https://github.com/tomakino/LyricProvider)（Apache-2.0），歌词数据来自 LrcLib 与 QQ音乐公开接口
+- 云歌词匹配思路参考：[tomakino/LyricProvider](https://github.com/tomakino/LyricProvider)（Apache-2.0）；LyricProvider 是 LSPosed 模块，手机版没有直接复用它的代码，而是接入同类的公开歌词接口：LrcLib、QQ音乐、网易云
 - 图标与品牌资源来自上游项目
 
 本项目不分发任何音乐文件或第三方音源插件。请确保你安装和使用的插件符合当地法律法规。

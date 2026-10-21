@@ -18,6 +18,7 @@ import * as auth from './core/auth'
 import * as downloads from './core/downloads'
 import * as cloud from './core/cloud'
 import * as updater from './core/updater'
+import * as lyrics from './core/lyrics/cloud'
 
 if (import.meta.env.DEV) {
   ;(window as any).__ceruDebug = {
@@ -26,7 +27,8 @@ if (import.meta.env.DEV) {
     auth,
     downloads,
     cloud,
-    updater
+    updater,
+    lyrics
   }
 }
 

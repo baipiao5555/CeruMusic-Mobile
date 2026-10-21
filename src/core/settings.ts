@@ -6,7 +6,7 @@ export interface AppSettings {
   /** Empty means automatic: use the highest quality the current track offers. */
   quality: string
   showLyrics: boolean
-  /** Search LrcLib / QQ Music when the plugin provides no lyrics. */
+  /** Search LrcLib / QQ Music / NetEase when the plugin provides no lyrics. */
   cloudLyrics: boolean
   keepScreenOn: boolean
   playOnHeadset: boolean

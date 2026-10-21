@@ -156,7 +156,7 @@ function resetSettings(): void {
       <div class="list-item" style="padding-left: 0; padding-right: 0">
         <div class="info">
           <h3>自动匹配云歌词</h3>
-          <p>插件没有歌词时，从 LrcLib / QQ音乐 搜索</p>
+          <p>插件没有歌词时，从 LrcLib / QQ音乐 / 网易云 搜索</p>
         </div>
         <button
           class="switch"

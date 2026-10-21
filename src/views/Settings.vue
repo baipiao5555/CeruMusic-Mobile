@@ -7,9 +7,11 @@ import { clearQueue, getHistory, playerState, setMode, setQuality } from '@/core
 import { notify, pluginState } from '@/core/plugin/manager'
 import { availableQualities, qualityDescription, qualityLabel } from '@/core/quality'
 import { authState, displayName, login, logout } from '@/core/auth'
-import { downloadSummary } from '@/core/downloads'
+import { downloadSummary, formatDownloadTemplate } from '@/core/downloads'
 import { libraryState } from '@/core/library'
 import { updateState } from '@/core/updater'
+import type { Track } from '@/core/track'
+import type { AccentColor } from '@/core/settings'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
@@ -47,6 +49,48 @@ const playModes = [
 ] as const
 
 const concurrencies = [1, 2, 3]
+
+const accents: Array<{ value: AccentColor; label: string; color: string }> = [
+  { value: 'green', label: '青绿', color: '#00b578' },
+  { value: 'blue', label: '蓝色', color: '#2f7cf6' },
+  { value: 'purple', label: '紫色', color: '#7c5cff' },
+  { value: 'orange', label: '橙色', color: '#f08a24' }
+]
+
+const speedOptions = [0.75, 1, 1.25, 1.5, 2]
+const lyricScales = [
+  { value: 0.9, label: '小' },
+  { value: 1, label: '标准' },
+  { value: 1.12, label: '大' },
+  { value: 1.25, label: '特大' }
+]
+
+const previewTrack = {
+  id: 'preview',
+  providerId: 'demo',
+  providerName: '示例音源',
+  pluginId: '',
+  ref: { providerId: 'demo', kind: 'track', id: 'preview' },
+  title: '夜曲',
+  artist: '周杰伦',
+  album: '十一月的萧邦',
+  durationMs: 0,
+  artwork: '',
+  qualities: []
+} as unknown as Track
+
+const templatePreview = computed(
+  () =>
+    formatDownloadTemplate(
+      settingsState.downloadFilenameTemplate,
+      previewTrack,
+      settingsState.downloadQuality || settingsState.quality
+    ) + '.mp3'
+)
+
+function onTemplateInput(event: Event): void {
+  updateSettings({ downloadFilenameTemplate: (event.target as HTMLInputElement).value })
+}
 
 const qualities = computed(() => availableQualities())
 const qualityHint = computed(() => qualityDescription(settingsState.quality))
@@ -121,6 +165,19 @@ function resetSettings(): void {
           {{ theme.label }}
         </button>
       </div>
+      <div class="panel-label" style="margin-top: 14px">主题色</div>
+      <div class="chips">
+        <button
+          v-for="accent in accents"
+          :key="accent.value"
+          class="chip accent-chip"
+          :class="{ active: settingsState.accent === accent.value }"
+          @click="updateSettings({ accent: accent.value })"
+        >
+          <span class="accent-dot" :style="{ background: accent.color }" />
+          {{ accent.label }}
+        </button>
+      </div>
     </div>
 
     <div class="section-title">
@@ -163,6 +220,34 @@ function resetSettings(): void {
         </button>
       </div>
       <p class="hint">和播放页的模式按钮同步，切换后立即生效。</p>
+    </div>
+
+    <div class="card panel" style="margin-top: 12px">
+      <div class="panel-label">播放速度</div>
+      <div class="chips">
+        <button
+          v-for="rate in speedOptions"
+          :key="rate"
+          class="chip"
+          :class="{ active: settingsState.playbackRate === rate }"
+          @click="updateSettings({ playbackRate: rate })"
+        >
+          {{ rate }}x
+        </button>
+      </div>
+      <div class="panel-label" style="margin-top: 14px">歌词字号</div>
+      <div class="chips">
+        <button
+          v-for="scale in lyricScales"
+          :key="scale.value"
+          class="chip"
+          :class="{ active: settingsState.lyricScale === scale.value }"
+          @click="updateSettings({ lyricScale: scale.value })"
+        >
+          {{ scale.label }}
+        </button>
+      </div>
+      <p class="hint">播放速度作用于当前和后续歌曲；歌词字号会立即应用到播放页。</p>
     </div>
 
     <div class="card panel" style="margin-top: 12px; padding: 4px 16px">
@@ -302,6 +387,26 @@ function resetSettings(): void {
       <p class="hint">
         下载时使用这个音质；选择「跟随播放音质」时使用上面的默认音质。
       </p>
+    </div>
+
+    <div class="card panel" style="margin-top: 12px">
+      <div class="panel-label">下载文件名</div>
+      <input
+        class="input template-input"
+        :value="settingsState.downloadFilenameTemplate"
+        maxlength="80"
+        placeholder="%t - %s"
+        @input="onTemplateInput"
+      />
+      <div class="token-hints">
+        <span>%t 歌名</span>
+        <span>%s 歌手</span>
+        <span>%a 专辑</span>
+        <span>%u 平台</span>
+        <span>%q 音质</span>
+        <span>%d 日期</span>
+      </div>
+      <p class="hint">预览：{{ templatePreview }}</p>
     </div>
 
     <div class="card panel" style="margin-top: 12px">
@@ -456,6 +561,34 @@ function resetSettings(): void {
 .update-badge {
   color: var(--brand);
   font-weight: 600;
+}
+.accent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.accent-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+.template-input {
+  width: 100%;
+  margin-top: 2px;
+}
+.token-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.token-hints span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  color: var(--muted);
+  background: var(--brand-softer);
 }
 .dot {
   width: 8px;

@@ -140,6 +140,7 @@ export function initPlayer(): void {
   audio = new Audio()
   audio.preload = 'auto'
   audio.volume = playerState.volume
+  applyPlaybackRate()
   audio.addEventListener('play', () => {
     playerState.playing = true
     void syncWakeLock()
@@ -211,6 +212,16 @@ export function initPlayer(): void {
     })
   }
   playerState.ready = true
+}
+
+/** Applies the configured playback speed to the shared audio element. */
+export function applyPlaybackRate(): void {
+  if (!audio) return
+  const rate = Math.max(0.5, Math.min(2, Number(settingsState.playbackRate) || 1))
+  try {
+    audio.playbackRate = rate
+    ;(audio as any).preservesPitch = true
+  } catch {}
 }
 
 function updatePositionState(): void {

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
-import { deletePlaylist, getPlaylist } from '@/core/library'
+import { deletePlaylist, getPlaylist, renamePlaylist } from '@/core/library'
 import { playTracks } from '@/core/playback/player'
 import { downloadTracks } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
@@ -11,6 +11,23 @@ import { notify } from '@/core/plugin/manager'
 const route = useRoute()
 const router = useRouter()
 const playlist = computed(() => getPlaylist(String(route.params.id)))
+const showRename = ref(false)
+const renameValue = ref('')
+
+function openRename(): void {
+  if (!playlist.value) return
+  renameValue.value = playlist.value.name
+  showRename.value = true
+}
+
+function saveRename(): void {
+  if (!playlist.value) return
+  const name = renameValue.value.trim()
+  if (!name) return
+  renamePlaylist(playlist.value.id, name)
+  showRename.value = false
+  notify('歌单已重命名')
+}
 
 function play(index: number): void {
   const tracks = playlist.value?.tracks ?? []
@@ -43,9 +60,14 @@ function downloadAll(): void {
       <button class="icon-btn" aria-label="返回" @click="router.back()">
         <Icon name="back" :size="20" />
       </button>
-      <button class="icon-btn" aria-label="删除歌单" @click="remove">
-        <Icon name="trash" :size="19" />
-      </button>
+      <div class="header-actions">
+        <button class="icon-btn" aria-label="重命名歌单" @click="openRename">
+          <Icon name="edit" :size="19" />
+        </button>
+        <button class="icon-btn" aria-label="删除歌单" @click="remove">
+          <Icon name="trash" :size="19" />
+        </button>
+      </div>
     </header>
 
     <template v-if="playlist">
@@ -99,10 +121,34 @@ function downloadAll(): void {
       <h3>歌单不存在</h3>
       <button class="btn secondary" @click="router.replace('/library')">返回我的</button>
     </div>
+
+    <div v-if="showRename" class="sheet-mask" @click.self="showRename = false">
+      <div class="sheet">
+        <h2>重命名歌单</h2>
+        <p class="sub">修改后会立即保存到本地。</p>
+        <div class="field">
+          <input
+            v-model="renameValue"
+            class="input"
+            maxlength="40"
+            placeholder="歌单名称"
+            @keyup.enter="saveRename"
+          />
+        </div>
+        <div class="sheet-actions">
+          <button class="btn secondary" @click="showRename = false">取消</button>
+          <button class="btn" :disabled="!renameValue.trim()" @click="saveRename">保存</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.header-actions {
+  display: flex;
+  gap: 6px;
+}
 .playlist-hero {
   display: flex;
   gap: 16px;

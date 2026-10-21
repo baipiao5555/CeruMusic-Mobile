@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core'
 import { Directory, Filesystem } from '@capacitor/filesystem'
 import { resolveTrackSource } from './playback/source'
 import { settingsState } from './settings'
+import { qualityLabel } from './quality'
 import type { Track } from './track'
 import { Downloader, type DownloadProgressEvent } from './native/plugins'
 
@@ -98,12 +99,38 @@ function extensionFromUrl(url: string): string {
   return ''
 }
 
+/** Expands the desktop-style %t/%s/%a/%u/%q/%d filename template. */
+export function formatDownloadTemplate(template: string, track: Track, quality: string): string {
+  const date = new Date()
+  const day = [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0')
+  ].join('-')
+  const values: Record<string, string> = {
+    '%t': track.title || '未知歌曲',
+    '%s': track.artist || '未知歌手',
+    '%a': track.album || '',
+    '%u': track.providerName || track.providerId || '',
+    '%q': qualityLabel(quality),
+    '%d': day
+  }
+  let name = template || '%t - %s'
+  for (const [token, value] of Object.entries(values)) {
+    name = name.split(token).join(value)
+  }
+  name = name.replace(/\s+/g, ' ').replace(/^[\s\-_.]+|[\s\-_.]+$/g, '')
+  if (!name) name = `${track.artist || '未知歌手'} - ${track.title || '未知歌曲'}`
+  return name
+}
+
 function buildFileName(track: Track, url: string, quality: string): string {
   const extension =
     extensionFromUrl(url) ||
     (quality.includes('flac') || quality === 'lossless' ? 'flac' : 'mp3')
-  const artist = track.artist && track.artist !== '未知歌手' ? track.artist : ''
-  const base = sanitizeFileName(artist ? `${artist} - ${track.title}` : track.title)
+  const base = sanitizeFileName(
+    formatDownloadTemplate(settingsState.downloadFilenameTemplate, track, quality)
+  )
   return `${base}.${extension}`
 }
 

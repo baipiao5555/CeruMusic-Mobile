@@ -462,14 +462,14 @@ onMounted(() => {
 }
 .lyric-line {
   padding: 7px 4px;
-  font-size: 14px;
+  font-size: calc(14px * var(--lyric-scale, 1));
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.38);
   transition: color 0.25s ease, transform 0.25s ease;
 }
 .lyric-line.active {
   color: #fff;
-  font-size: 16px;
+  font-size: calc(16px * var(--lyric-scale, 1));
   font-weight: 650;
   transform: scale(1.02);
   text-shadow: 0 0 22px rgba(45, 212, 160, 0.45);
@@ -477,7 +477,7 @@ onMounted(() => {
 .lyric-line .translation {
   display: block;
   margin-top: 3px;
-  font-size: 11px;
+  font-size: calc(11px * var(--lyric-scale, 1));
   font-weight: 400;
   opacity: 0.7;
 }

@@ -13,7 +13,7 @@ import { handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
 import { registerDownloadHostHooks } from '@/core/downloadHost'
 import { checkForUpdate, updateState } from '@/core/updater'
-import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack, refreshBackgroundLyrics } from '@/core/playback/player'
+import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack, refreshBackgroundLyrics, applyPlaybackRate } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
@@ -190,6 +190,11 @@ watch(
 watch(
   () => [settingsState.systemLyrics, settingsState.systemLyricsTranslation],
   () => refreshBackgroundLyrics()
+)
+
+watch(
+  () => settingsState.playbackRate,
+  () => applyPlaybackRate()
 )
 
 watch(

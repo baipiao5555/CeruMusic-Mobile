@@ -10,6 +10,8 @@ const router = createRouter({
     { path: '/player', name: 'player', component: () => import('@/views/Player.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/views/Settings.vue') },
     { path: '/plugins', name: 'plugins', component: () => import('@/views/Plugins.vue') },
+    { path: '/cloud', name: 'cloud', component: () => import('@/views/CloudPlaylists.vue') },
+    { path: '/downloads', name: 'downloads', component: () => import('@/views/Downloads.vue') },
     { path: '/playlist/:id', name: 'playlist', component: () => import('@/views/PlaylistDetail.vue') },
     { path: '/browse', name: 'browse', component: () => import('@/views/Browse.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' }

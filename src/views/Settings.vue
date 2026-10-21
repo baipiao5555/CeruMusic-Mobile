@@ -4,11 +4,33 @@ import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import { settingsState, updateSettings } from '@/core/settings'
 import { clearQueue, getHistory, setQuality } from '@/core/playback/player'
-import { pluginState } from '@/core/plugin/manager'
+import { notify, pluginState } from '@/core/plugin/manager'
 import { availableQualities, qualityDescription, qualityLabel } from '@/core/quality'
+import { authState, displayName, login, logout } from '@/core/auth'
+import { downloadSummary } from '@/core/downloads'
+import { libraryState } from '@/core/library'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
+
+const downloads = computed(() => downloadSummary())
+const cloudCount = computed(
+  () => libraryState.playlists.filter((playlist) => playlist.cloudId).length
+)
+
+async function signIn(): Promise<void> {
+  try {
+    await login()
+  } catch (error: any) {
+    notify(error?.message ?? '打开登录页失败', 'error')
+  }
+}
+
+function signOut(): void {
+  if (!window.confirm('退出澜音账号？电脑端的登录状态不受影响。')) return
+  logout()
+  notify('已退出登录')
+}
 
 const themes = [
   { value: 'system', label: '跟随系统' },
@@ -54,7 +76,26 @@ function resetSettings(): void {
       <span style="width: 42px" />
     </header>
 
-    <div class="section-title" style="margin-top: 4px">
+    <section class="card account-card">
+      <div class="account-avatar">
+        <img v-if="authState.user?.picture" :src="authState.user.picture" alt="" />
+        <Icon v-else name="user" :size="22" />
+      </div>
+      <div class="account-info">
+        <h3>{{ authState.authenticated ? displayName() : '澜音账号' }}</h3>
+        <p>
+          {{
+            authState.authenticated
+              ? '已登录 · 可从电脑同步歌单'
+              : '登录后把电脑上的歌单同步到手机'
+          }}
+        </p>
+      </div>
+      <button v-if="!authState.authenticated" class="btn small" @click="signIn">登录</button>
+      <button v-else class="btn ghost small" @click="signOut">退出</button>
+    </section>
+
+    <div class="section-title" style="margin-top: 14px">
       <h2>外观</h2>
     </div>
     <div class="card panel">
@@ -149,6 +190,31 @@ function resetSettings(): void {
         </div>
         <Icon name="chevron" :size="18" class="chev" />
       </button>
+      <button class="list-item" @click="router.push('/cloud')">
+        <span class="entry-icon"><Icon name="cloud" :size="19" /></span>
+        <div class="info">
+          <h3>云端歌单</h3>
+          <p>
+            {{
+              authState.authenticated
+                ? `已导入 ${cloudCount} 个 · 登录为 ${displayName()}`
+                : '未登录 · 登录后从电脑同步'
+            }}
+          </p>
+        </div>
+        <Icon name="chevron" :size="18" class="chev" />
+      </button>
+      <button class="list-item" @click="router.push('/downloads')">
+        <span class="entry-icon"><Icon name="download" :size="19" /></span>
+        <div class="info">
+          <h3>下载管理</h3>
+          <p>
+            {{ downloads.completed }} 首已下载<template v-if="downloads.active"> · {{ downloads.active }} 首进行中</template
+            ><template v-if="downloads.failed"> · {{ downloads.failed }} 首失败</template>
+          </p>
+        </div>
+        <Icon name="chevron" :size="18" class="chev" />
+      </button>
       <button class="list-item" @click="clearPlaybackData">
         <span class="entry-icon"><Icon name="trash" :size="19" /></span>
         <div class="info">
@@ -185,6 +251,52 @@ function resetSettings(): void {
 </template>
 
 <style scoped>
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  overflow: hidden;
+  color: var(--brand);
+  background: var(--brand-soft);
+  flex: 0 0 auto;
+}
+.account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.account-info {
+  flex: 1;
+  min-width: 0;
+}
+.account-info h3 {
+  font-size: 14.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-info p {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.btn.small {
+  padding: 8px 14px;
+  font-size: 12.5px;
+  flex: 0 0 auto;
+}
 .panel {
   padding: 16px;
 }

@@ -7,6 +7,11 @@ export interface LocalPlaylist {
   name: string
   createdAt: number
   tracks: Track[]
+  description?: string
+  cover?: string
+  /** 云端歌单 id（来自澜音账号的云歌单） */
+  cloudId?: string
+  cloudUpdatedAt?: string
 }
 
 const KEY = 'ceru.library.v1'
@@ -15,6 +20,10 @@ export const libraryState = reactive({
   favorites: [] as Track[],
   playlists: [] as LocalPlaylist[]
 })
+
+export function persistLibrary(): void {
+  persist()
+}
 
 function persist(): void {
   try {
@@ -103,6 +112,27 @@ export function removeTrackFromPlaylist(id: string, track: Track): void {
 
 export function getPlaylist(id: string): LocalPlaylist | undefined {
   return libraryState.playlists.find((item) => item.id === id)
+}
+
+export function findPlaylistByCloudId(cloudId: string): LocalPlaylist | undefined {
+  return libraryState.playlists.find((item) => item.cloudId === cloudId)
+}
+
+export function updatePlaylistTracks(id: string, tracks: Track[]): void {
+  const playlist = getPlaylist(id)
+  if (!playlist) return
+  playlist.tracks = [...tracks]
+  persist()
+}
+
+export function updatePlaylistFields(
+  id: string,
+  patch: Partial<Pick<LocalPlaylist, 'name' | 'description' | 'cover' | 'cloudId' | 'cloudUpdatedAt'>>
+): void {
+  const playlist = getPlaylist(id)
+  if (!playlist) return
+  Object.assign(playlist, patch)
+  persist()
 }
 
 export function registerLibraryHostHooks(): void {

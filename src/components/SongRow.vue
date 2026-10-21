@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import Icon from './Icon.vue'
 import { addToQueue, playerState, type Track } from '@/core/playback/player'
 import { isFavorite, toggleFavorite } from '@/core/library'
+import { downloadTrack, isDownloaded, isDownloading } from '@/core/downloads'
+import { notify } from '@/core/plugin/manager'
 
 const props = withDefaults(
   defineProps<{
@@ -24,9 +26,24 @@ const active = computed(
 )
 
 const favorite = computed(() => isFavorite(props.track))
+const downloaded = computed(() => isDownloaded(props.track))
+const downloading = computed(() => isDownloading(props.track))
 
 function play(): void {
   emit('play', props.queue ?? [props.track], props.index)
+}
+
+function download(): void {
+  if (downloaded.value) {
+    notify('这首歌已经下载好了')
+    return
+  }
+  if (downloading.value) {
+    notify('这首歌正在下载中')
+    return
+  }
+  downloadTrack(props.track)
+  notify('已加入下载队列')
 }
 
 function formatDuration(ms: number): string {
@@ -57,6 +74,14 @@ function formatDuration(ms: number): string {
         @click="toggleFavorite(track)"
       >
         <Icon :name="favorite ? 'heart-filled' : 'heart'" :size="19" />
+      </button>
+      <button
+        class="icon-action"
+        :class="{ active: downloaded, busy: downloading }"
+        :aria-label="downloaded ? '已下载' : '下载'"
+        @click="download"
+      >
+        <Icon :name="downloaded ? 'check' : 'download'" :size="19" />
       </button>
       <button class="icon-action" aria-label="加入播放队列" @click="addToQueue(track)">
         <Icon name="plus" :size="19" />

@@ -78,6 +78,11 @@ function showToast(message: string, level = 'info'): void {
   }, 3200)
 }
 
+/** General-purpose toast, reusing the plugin toast stack. */
+export function notify(message: string, level = 'info'): void {
+  showToast(message, level)
+}
+
 export function answerPermission(allowed: boolean): void {
   const resolver = resolvePermission
   resolvePermission = null
@@ -131,7 +136,8 @@ function hooksFor(pluginId: string): PluginHostHooks {
     library: {
       list: () => hostHooks.library?.list() ?? [],
       getTracks: (id) => hostHooks.library?.getTracks?.(id) ?? []
-    }
+    },
+    downloads: hostHooks.downloads
   }
 }
 

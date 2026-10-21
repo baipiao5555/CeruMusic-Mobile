@@ -8,7 +8,10 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import { IonApp } from '@ionic/vue'
 import BottomNav from '@/components/BottomNav.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
-import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, navigationRequest } from '@/core/plugin/manager'
+import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, navigationRequest, notify } from '@/core/plugin/manager'
+import { handleAuthCallback, initAuth } from '@/core/auth'
+import { initDownloads } from '@/core/downloads'
+import { registerDownloadHostHooks } from '@/core/downloadHost'
 import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
@@ -47,15 +50,37 @@ function scheduleStatusBarSync(): void {
   })
 }
 
+async function handleDeepLink(url: string): Promise<void> {
+  if (!url.startsWith('cerumusic://oauth')) return
+  try {
+    const user = await handleAuthCallback(url)
+    if (user) {
+      notify('登录成功，正在读取云歌单')
+      router.replace('/cloud')
+    }
+  } catch (error: any) {
+    notify(error?.message ?? '登录失败', 'error')
+  }
+}
+
 onMounted(async () => {
   restoreSettings()
   initSystemInsets()
+  void initAuth()
+  void initDownloads()
+  if (nativePlatform) {
+    void NativeApp.getLaunchUrl().then((launch) => {
+      if (launch?.url) void handleDeepLink(launch.url)
+    })
+    void NativeApp.addListener('appUrlOpen', ({ url }) => void handleDeepLink(url))
+  }
   scheduleStatusBarSync()
   restoreLibrary()
   initPlayer()
   registerPlayerHostHooks()
   registerLibraryHostHooks()
   registerSettingsHostHooks()
+  registerDownloadHostHooks()
   restorePlayer()
   onMediaAction((action) => {
     if (action === 'play') void resume()

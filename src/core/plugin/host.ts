@@ -38,6 +38,7 @@ export interface PluginHostHooks {
     list: () => any[]
     getTracks: (id: string) => any[]
   }
+  downloads?: Record<string, (args: any[]) => any>
 }
 
 export interface PluginHostState {
@@ -360,7 +361,7 @@ export class PluginHost {
     if (method === 'services.app.getInfo') {
       return {
         name: '澜音',
-        version: '2.3.1-mobile.5',
+        version: __APP_VERSION__,
         platform: 'android',
         locale: navigator.language || 'zh-CN',
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
@@ -397,6 +398,12 @@ export class PluginHost {
       if (!this.state.hooks.settings) throw new Error('设置服务不可用')
       return this.state.hooks.settings.update(data.args?.[0] ?? {})
     }
+    if (method.startsWith('services.downloads.')) {
+      const name = method.slice(method.lastIndexOf('.') + 1)
+      const fn = this.state.hooks.downloads?.[name]
+      if (!fn) throw new Error('手机版暂不支持该下载操作')
+      return await fn(data.args ?? [])
+    }
     if (method.startsWith('services.library.') || method.startsWith('library.playlists.')) {
       const name = method.slice(method.lastIndexOf('.') + 1)
       if (name === 'list') return { items: this.state.hooks.library?.list() ?? [] }
@@ -412,7 +419,11 @@ export class PluginHost {
         { service: 'player', methods: ['getState', 'play', 'pause', 'next', 'previous', 'seek', 'setVolume', 'setMode'] },
         { service: 'queue', methods: ['get', 'append', 'replace', 'remove', 'reorder'] },
         { service: 'favorites', methods: ['contains', 'add', 'remove'] },
-        { service: 'history', methods: ['list'] }
+        { service: 'history', methods: ['list'] },
+        {
+          service: 'downloads',
+          methods: ['list', 'create', 'pause', 'resume', 'cancel', 'retry', 'reveal']
+        }
       ]
       if (method.endsWith('.list')) return services.map((item) => ({ ...item, version: '1.0.0', available: true, permissionGroups: [] }))
       return services.find((item) => item.service === data.args?.[0]) ?? { service: data.args?.[0], available: false }

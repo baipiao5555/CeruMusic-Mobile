@@ -14,11 +14,17 @@ import App from './App.vue'
 import router from './router'
 import * as pluginManager from './core/plugin/manager'
 import * as playback from './core/playback/player'
+import * as auth from './core/auth'
+import * as downloads from './core/downloads'
+import * as cloud from './core/cloud'
 
 if (import.meta.env.DEV) {
   ;(window as any).__ceruDebug = {
     ...pluginManager,
-    player: playback
+    player: playback,
+    auth,
+    downloads,
+    cloud
   }
 }
 

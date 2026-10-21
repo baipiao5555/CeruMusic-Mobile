@@ -60,6 +60,9 @@ function removePlaylist(playlist: LocalPlaylist): void {
         <h2>我的歌单</h2>
         <p>{{ playlists.length }} 个歌单 · {{ totalTracks }} 首歌曲</p>
       </div>
+      <button class="round-action" aria-label="云端歌单" @click="router.push('/cloud')">
+        <Icon name="cloud" :size="20" />
+      </button>
       <button class="round-action" aria-label="导入歌单" @click="showImport = true">
         <Icon name="folder" :size="20" />
       </button>
@@ -71,6 +74,7 @@ function removePlaylist(playlist: LocalPlaylist): void {
     <div class="section-title">
       <h2>全部歌单</h2>
       <div class="title-actions">
+        <button class="create-btn" @click="router.push('/cloud')"><Icon name="cloud" :size="16" /> 云端</button>
         <button class="create-btn" @click="showImport = true"><Icon name="folder" :size="16" /> 导入</button>
         <button class="create-btn" @click="showCreate = true"><Icon name="plus" :size="16" /> 新建</button>
       </div>

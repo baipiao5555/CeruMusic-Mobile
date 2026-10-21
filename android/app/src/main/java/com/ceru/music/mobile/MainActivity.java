@@ -18,6 +18,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(BackgroundAudioPlugin.class);
         registerPlugin(SecureHttpPlugin.class);
         registerPlugin(SystemBarsPlugin.class);
+        registerPlugin(DownloaderPlugin.class);
+        registerPlugin(ExternalPlugin.class);
         super.onCreate(savedInstanceState);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

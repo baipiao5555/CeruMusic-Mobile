@@ -5,6 +5,8 @@ import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
 import { deletePlaylist, getPlaylist } from '@/core/library'
 import { playTracks } from '@/core/playback/player'
+import { downloadTracks } from '@/core/downloads'
+import { notify } from '@/core/plugin/manager'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,6 +29,12 @@ function remove(): void {
     router.replace('/library')
   }
 }
+
+function downloadAll(): void {
+  const tracks = playlist.value?.tracks ?? []
+  const started = downloadTracks(tracks)
+  notify(started ? `已加入下载队列：${started} 首` : '这个歌单里的歌曲都已下载')
+}
 </script>
 
 <template>
@@ -48,10 +56,21 @@ function remove(): void {
         </div>
         <div class="meta">
           <h1>{{ playlist.name }}</h1>
-          <p>{{ playlist.tracks.length }} 首歌曲</p>
-          <button class="btn" style="margin-top: 14px" :disabled="!playlist.tracks.length" @click="playAll">
-            <Icon name="play" :size="17" /> 播放全部
-          </button>
+          <p>
+            {{ playlist.tracks.length }} 首歌曲<template v-if="playlist.cloudId"> · 来自云端</template>
+          </p>
+          <div class="hero-actions">
+            <button class="btn" :disabled="!playlist.tracks.length" @click="playAll">
+              <Icon name="play" :size="17" /> 播放全部
+            </button>
+            <button
+              class="btn secondary"
+              :disabled="!playlist.tracks.length"
+              @click="downloadAll"
+            >
+              <Icon name="download" :size="17" /> 下载全部
+            </button>
+          </div>
         </div>
       </section>
 
@@ -122,5 +141,11 @@ function remove(): void {
   margin-top: 6px;
   font-size: 12px;
   color: var(--muted);
+}
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
 }
 </style>

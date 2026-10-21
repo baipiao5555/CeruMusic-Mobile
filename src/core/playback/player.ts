@@ -12,8 +12,9 @@ import {
   syncBackgroundAudio
 } from '../native/backgroundAudio'
 import { toTrack, type Track } from '../track'
-import { selectPlaybackQuality } from '../quality'
 import { matchCloudLyrics } from '../lyrics/cloud'
+import { playableUrl, providerForTrack } from './source'
+import { localUrlFor } from '../downloads'
 
 export type { Track } from '../track'
 export { toTrack }
@@ -225,59 +226,13 @@ function absoluteArtwork(url: string): string {
   return new URL(url, location.href).href
 }
 
-function providerFor(track: Track): ProviderHandle | undefined {
-  return (
-    allProviders().find(
-      (provider) =>
-        provider.providerId === track.providerId && provider.pluginId === track.pluginId
-    ) ??
-    allProviders().find((provider) => provider.providerId === track.providerId)
-  )
-}
-
 async function resolvePlaybackUrl(track: Track): Promise<string> {
-  const provider = providerFor(track)
-  if (!provider) throw new Error('音源插件未启用')
-  const order = provider.qualities.length ? provider.qualities : track.qualities
-  const available = track.qualities.length ? track.qualities : provider.qualities
-  const quality = selectPlaybackQuality(order, available, playerState.quality)
-  playerState.resolvedQuality = quality ?? ''
-  const result = await invokeProvider(provider, 'tracks.resolve', [track.ref, quality])
-  if (!result?.ok) throw new Error(result?.error?.message || '无法获取播放地址')
-  if (result.requestHeaders && Object.keys(result.requestHeaders).length) {
-    return await fetchWithHeaders(result.url, result.requestHeaders)
+  const local = localUrlFor(track)
+  if (local) {
+    playerState.resolvedQuality = 'local'
+    return local
   }
-  return result.url
-}
-
-async function fetchWithHeaders(url: string, headers: Record<string, string>): Promise<string> {
-  const { Capacitor, CapacitorHttp } = await import('@capacitor/core')
-  if (!Capacitor.isNativePlatform()) {
-    const response = await fetch(url, { headers })
-    if (!response.ok) throw new Error('音频下载失败: HTTP ' + response.status)
-    return URL.createObjectURL(await response.blob())
-  }
-  const response = await CapacitorHttp.request({
-    url,
-    method: 'GET',
-    headers,
-    responseType: 'arraybuffer'
-  })
-  if (response.status < 200 || response.status >= 300) {
-    throw new Error('音频下载失败: HTTP ' + response.status)
-  }
-  let blob: Blob
-  if (response.data instanceof ArrayBuffer) {
-    blob = new Blob([response.data], { type: 'audio/mpeg' })
-  } else if (typeof response.data === 'string') {
-    const binary = atob(response.data)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-    blob = new Blob([bytes], { type: 'audio/mpeg' })
-  } else {
-    blob = new Blob([JSON.stringify(response.data)], { type: 'audio/mpeg' })
-  }
-  return URL.createObjectURL(blob)
+  return playableUrl(track, playerState.quality)
 }
 
 function releaseBlob(): void {
@@ -528,7 +483,7 @@ export function addToQueue(track: Track, playNext = false): void {
 }
 
 export async function loadLyrics(track: Track): Promise<void> {
-  const provider = providerFor(track)
+  const provider = providerForTrack(track)
   playerState.lyricsLoading = true
   playerState.lyrics = []
   playerState.lyricSource = ''
@@ -629,7 +584,7 @@ export function getHistory(): Track[] {
 
 export function providerForCurrent(): ProviderHandle | undefined {
   const track = currentTrack()
-  return track ? providerFor(track) : undefined
+  return track ? providerForTrack(track) : undefined
 }
 
 export function syncMediaSessionState(): void {

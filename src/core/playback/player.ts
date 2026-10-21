@@ -32,6 +32,8 @@ export interface LyricLine {
 
 export const playerState = reactive({
   ready: false,
+  sleepEndAt: 0,
+  sleepAtTrackEnd: false,
   queue: [] as Track[],
   index: -1,
   playing: false,
@@ -432,6 +434,44 @@ export function setMode(mode: PlayMode): void {
   persist()
 }
 
+let sleepTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Stops playback after the given number of minutes (0 cancels). */
+export function setSleepTimer(minutes: number): void {
+  if (sleepTimer) {
+    clearTimeout(sleepTimer)
+    sleepTimer = null
+  }
+  playerState.sleepAtTrackEnd = false
+  playerState.sleepEndAt = 0
+  if (!Number.isFinite(minutes) || minutes <= 0) return
+  playerState.sleepEndAt = Date.now() + minutes * 60_000
+  sleepTimer = setTimeout(() => {
+    sleepTimer = null
+    playerState.sleepEndAt = 0
+    pause()
+  }, minutes * 60_000)
+}
+
+/** Stops after the current track instead of advancing the queue. */
+export function sleepAfterCurrentTrack(): void {
+  if (sleepTimer) {
+    clearTimeout(sleepTimer)
+    sleepTimer = null
+  }
+  playerState.sleepEndAt = 0
+  playerState.sleepAtTrackEnd = true
+}
+
+export function cancelSleepTimer(): void {
+  if (sleepTimer) {
+    clearTimeout(sleepTimer)
+    sleepTimer = null
+  }
+  playerState.sleepEndAt = 0
+  playerState.sleepAtTrackEnd = false
+}
+
 export function cycleMode(): void {
   const modes: PlayMode[] = ['order', 'repeat-all', 'repeat-one', 'shuffle']
   setMode(modes[(modes.indexOf(playerState.mode) + 1) % modes.length])
@@ -487,6 +527,12 @@ export async function previous(): Promise<void> {
 }
 
 async function handleEnded(): Promise<void> {
+  if (playerState.sleepAtTrackEnd) {
+    playerState.sleepAtTrackEnd = false
+    pause()
+    playerState.playing = false
+    return
+  }
   if (playerState.mode === 'repeat-one') {
     seek(0)
     await resume()
@@ -631,7 +677,7 @@ export function updateActiveLyric(): void {
     playerState.activeLyric = -1
     return
   }
-  const time = playerState.currentTime * 1000
+  const time = playerState.currentTime * 1000 - (Number(settingsState.lyricOffsetMs) || 0)
   let index = -1
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].startTimeMs <= time) index = i

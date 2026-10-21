@@ -10,6 +10,10 @@ export interface AppSettings {
   lyricScale: number
   playbackRate: number
   downloadFilenameTemplate: string
+  /** Show translation lines under the original lyric text. */
+  showLyricTranslation: boolean
+  /** Positive values delay the lyric highlight (milliseconds). */
+  lyricOffsetMs: number
   /** Empty means automatic: use the highest quality the current track offers. */
   quality: string
   showLyrics: boolean
@@ -41,6 +45,8 @@ export const settingsState = reactive<AppSettings>({
   lyricScale: 1,
   playbackRate: 1,
   downloadFilenameTemplate: '%t - %s',
+  showLyricTranslation: true,
+  lyricOffsetMs: 0,
   quality: '',
   showLyrics: true,
   cloudLyrics: true,

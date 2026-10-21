@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import {
@@ -13,19 +13,108 @@ import {
   togglePlay,
   playTracks,
   removeFromQueue,
-  matchLyricsOnline
+  matchLyricsOnline,
+  cancelSleepTimer,
+  setSleepTimer,
+  sleepAfterCurrentTrack,
+  updateActiveLyric
 } from '@/core/playback/player'
 import { isFavorite, toggleFavorite } from '@/core/library'
-import { settingsState } from '@/core/settings'
+import { settingsState, updateSettings } from '@/core/settings'
 import { qualityLabel } from '@/core/quality'
+import { downloadTrack, isDownloaded } from '@/core/downloads'
+import { notify } from '@/core/plugin/manager'
 
 const router = useRouter()
 const track = computed(() => currentTrack())
 const lyricsBox = ref<HTMLElement>()
 const showQueue = ref(false)
+const showSettings = ref(false)
 const dragging = ref(false)
 const dragValue = ref(0)
+const now = ref(Date.now())
+const sleepMinutes = ref(0)
+let sleepPoll: ReturnType<typeof setInterval> | null = null
 let swipeStart: { x: number; y: number; time: number } | null = null
+
+const speedOptions = [0.75, 1, 1.25, 1.5, 2]
+const lyricScales = [
+  { value: 0.9, label: '小' },
+  { value: 1, label: '标准' },
+  { value: 1.12, label: '大' },
+  { value: 1.25, label: '特大' }
+]
+const offsets = [-500, -200, 0, 200, 500]
+
+const sleepLabel = computed(() => {
+  if (playerState.sleepAtTrackEnd) return '播完当前歌曲后停止'
+  if (playerState.sleepEndAt > now.value) {
+    const total = Math.max(0, Math.round((playerState.sleepEndAt - now.value) / 1000))
+    const minutes = Math.floor(total / 60)
+    const seconds = total % 60
+    return `剩余 ${minutes}:${String(seconds).padStart(2, '0')}`
+  }
+  return '未设置'
+})
+
+function openSettings(): void {
+  showSettings.value = true
+  now.value = Date.now()
+  if (sleepPoll) clearInterval(sleepPoll)
+  sleepPoll = setInterval(() => {
+    now.value = Date.now()
+  }, 1000)
+}
+
+function closeSettings(): void {
+  showSettings.value = false
+  if (sleepPoll) {
+    clearInterval(sleepPoll)
+    sleepPoll = null
+  }
+}
+
+function chooseSleep(minutes: number): void {
+  sleepMinutes.value = minutes
+  setSleepTimer(minutes)
+  now.value = Date.now()
+}
+
+function sleepAtEnd(): void {
+  sleepMinutes.value = 0
+  sleepAfterCurrentTrack()
+}
+
+function stopSleep(): void {
+  sleepMinutes.value = 0
+  cancelSleepTimer()
+}
+
+function downloadCurrent(): void {
+  if (!track.value) return
+  if (isDownloaded(track.value)) {
+    closeSettings()
+    notify('这首歌已经下载好了')
+    return
+  }
+  downloadTrack(track.value)
+  closeSettings()
+  notify('已加入下载队列')
+}
+
+function lyricSeek(line: { startTimeMs: number }): void {
+  seek((line.startTimeMs + (Number(settingsState.lyricOffsetMs) || 0)) / 1000)
+}
+
+function offsetLabel(value: number): string {
+  if (!value) return '0s'
+  return `${value > 0 ? '+' : ''}${(value / 1000).toFixed(1)}s`
+}
+
+function chooseOffset(value: number): void {
+  updateSettings({ lyricOffsetMs: value })
+  updateActiveLyric()
+}
 
 const progress = computed(() => {
   const duration = playerState.duration || (track.value?.durationMs ?? 0) / 1000
@@ -118,6 +207,13 @@ onMounted(() => {
   }
   setTimeout(scrollActiveLyric, 300)
 })
+
+onUnmounted(() => {
+  if (sleepPoll) {
+    clearInterval(sleepPoll)
+    sleepPoll = null
+  }
+})
 </script>
 
 <template>
@@ -140,9 +236,14 @@ onMounted(() => {
         <span>正在播放</span>
         <small>{{ track.providerName }}</small>
       </div>
-      <button class="icon-btn glass" aria-label="播放队列" @click="showQueue = true">
-        <Icon name="queue" :size="20" />
-      </button>
+      <div class="header-actions">
+        <button class="icon-btn glass" aria-label="播放设置" @click="openSettings">
+          <Icon name="settings" :size="20" />
+        </button>
+        <button class="icon-btn glass" aria-label="播放队列" @click="showQueue = true">
+          <Icon name="queue" :size="20" />
+        </button>
+      </div>
     </header>
 
     <div class="player-body">
@@ -178,10 +279,13 @@ onMounted(() => {
             :key="index"
             class="lyric-line"
             :class="{ active: index === playerState.activeLyric, passed: index < playerState.activeLyric }"
-            @click="seek(line.startTimeMs / 1000)"
+            @click="lyricSeek(line)"
           >
             {{ line.text || '♪' }}
-            <span v-if="line.translation" class="translation">{{ line.translation }}</span>
+            <span
+              v-if="line.translation && settingsState.showLyricTranslation"
+              class="translation"
+            >{{ line.translation }}</span>
           </p>
         </template>
         <div v-else class="no-lyrics">
@@ -281,10 +385,153 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <div v-if="showSettings" class="sheet-mask" @click.self="closeSettings">
+      <div class="sheet player-settings">
+        <div class="sheet-head">
+          <h2>播放设置</h2>
+          <button class="icon-action" aria-label="关闭" @click="closeSettings">
+            <Icon name="close" :size="18" />
+          </button>
+        </div>
+
+        <div class="settings-label">播放速度</div>
+        <div class="chips wrap-chips">
+          <button
+            v-for="rate in speedOptions"
+            :key="rate"
+            class="chip"
+            :class="{ active: settingsState.playbackRate === rate }"
+            @click="updateSettings({ playbackRate: rate })"
+          >
+            {{ rate }}x
+          </button>
+        </div>
+
+        <div class="settings-label">歌词字号</div>
+        <div class="chips wrap-chips">
+          <button
+            v-for="scale in lyricScales"
+            :key="scale.value"
+            class="chip"
+            :class="{ active: settingsState.lyricScale === scale.value }"
+            @click="updateSettings({ lyricScale: scale.value })"
+          >
+            {{ scale.label }}
+          </button>
+        </div>
+
+        <div class="settings-label">歌词偏移</div>
+        <div class="chips wrap-chips">
+          <button
+            v-for="value in offsets"
+            :key="value"
+            class="chip"
+            :class="{ active: settingsState.lyricOffsetMs === value }"
+            @click="chooseOffset(value)"
+          >
+            {{ offsetLabel(value) }}
+          </button>
+        </div>
+        <p class="settings-hint">正值表示歌词延后显示；点击歌词跳转时会按偏移量校正。</p>
+
+        <div class="list-item settings-row" style="border-bottom: 0">
+          <div class="info">
+            <h3>显示翻译</h3>
+            <p>在歌词下方显示翻译</p>
+          </div>
+          <button
+            class="switch"
+            :class="{ on: settingsState.showLyricTranslation }"
+            aria-label="显示翻译"
+            @click="
+              updateSettings({ showLyricTranslation: !settingsState.showLyricTranslation })
+            "
+          />
+        </div>
+
+        <div class="settings-label">定时停止</div>
+        <div class="chips wrap-chips">
+          <button
+            class="chip"
+            :class="{
+              active: !playerState.sleepEndAt && !playerState.sleepAtTrackEnd
+            }"
+            @click="stopSleep"
+          >
+            关闭
+          </button>
+          <button
+            v-for="minutes in [15, 30, 60]"
+            :key="minutes"
+            class="chip"
+            :class="{ active: sleepMinutes === minutes && playerState.sleepEndAt > 0 }"
+            @click="chooseSleep(minutes)"
+          >
+            {{ minutes }} 分钟
+          </button>
+          <button
+            class="chip"
+            :class="{ active: playerState.sleepAtTrackEnd }"
+            @click="sleepAtEnd"
+          >
+            播完当前歌
+          </button>
+        </div>
+        <p class="settings-hint">{{ sleepLabel }}</p>
+
+        <button class="btn secondary player-download" @click="downloadCurrent">
+          <Icon name="download" :size="17" /> 下载当前歌曲
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.header-actions {
+  display: flex;
+  gap: 6px;
+}
+.player-settings {
+  color: var(--text);
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.sheet-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.settings-label {
+  margin: 16px 0 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.wrap-chips {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 8px;
+  padding: 2px;
+}
+.settings-hint {
+  margin: 8px 2px 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.settings-row {
+  padding-left: 0;
+  padding-right: 0;
+}
+.player-download {
+  width: 100%;
+  margin-top: 18px;
+}
 .player-page {
   position: relative;
   display: flex;

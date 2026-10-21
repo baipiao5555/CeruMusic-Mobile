@@ -40,11 +40,11 @@
 ## 安装
 
 - 文件：`CeruMusic-Mobile-v2.3.1-mobile.20.apk`
-- 大小：<!-- SIZE --> 字节
+- 大小：5368420 字节
 - 包名：`com.ceru.music.mobile`
 - versionCode：`23120`
 - 最低系统：Android 6.0（API 23），targetSdk 34
-- SHA-256：`<!-- SHA256 -->`
+- SHA-256：`3ce2fff54ce4be82a1b530f5ce9c5352764b1ff43525891e9f43b12b237cc2d2`
 - 自签名 APK；覆盖安装请使用同一签名
 
 ## 说明

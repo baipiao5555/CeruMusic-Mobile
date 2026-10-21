@@ -2,6 +2,7 @@
   "name": "ceru-music-mobile",
   "private": true,
   "version": "2.3.1-mobile.16",
+  "upstreamVersion": "2.3.1",
   "description": "澜音 CeruMusic 手机版",
   "type": "module",
   "scripts": {
@@ -16,7 +17,9 @@
     "preview": "vite preview --host 0.0.0.0",
     "cap:sync": "npm run build:only && cap sync android",
     "cap:open": "cap open android",
-    "android:apk": "cd android && gradlew.bat assembleRelease"
+    "android:apk": "cd android && gradlew.bat assembleRelease",
+    "check:upstream": "node scripts/check-upstream.mjs",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

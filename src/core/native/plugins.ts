@@ -31,6 +31,8 @@ export interface DownloaderPlugin {
 
 export interface ExternalPlugin {
   open(options: { url: string }): Promise<void>
+  installApk(options: { fileName: string }): Promise<{ needsPermission?: boolean; started?: boolean }>
+  notifyUpdate(options: { title: string; body: string }): Promise<void>
 }
 
 export const Downloader = registerPlugin<DownloaderPlugin>('Downloader')

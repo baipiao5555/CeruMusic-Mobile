@@ -31,6 +31,7 @@
 - 澜音账号登录：与电脑版共用同一个账号（Logto OAuth 2.0 + PKCE），登录页在系统浏览器打开，通过 `cerumusic://oauth/callback` 深链回到应用
 - 云歌单同步：读取电脑版「上传到云端」的歌单，一键导入或更新到手机；导入时自动匹配本机已安装的音源插件
 - 下载：原生流式下载到应用专属目录，实时进度、断点重下（重新下载）、取消、失败重试、下载管理页；下载完成后播放同一首歌会直接使用本地文件，可离线播放
+- 应用内更新：启动时检查 GitHub Release（12 小时最多一次），发现新版本发系统通知；更新页展示更新说明，可直接下载 APK 并调起系统安装器覆盖安装
 - 深色/浅色主题，跟随系统
 - Android 前台媒体服务：后台播放、通知栏播放/暂停/上一首/下一首、锁屏媒体控制
 - 数据全部保存在本机（IndexedDB / localStorage）；账号只保存 OAuth token，不保存密码
@@ -46,9 +47,10 @@ src/
   core/auth.ts      澜音账号登录（Logto OAuth PKCE + 深链回调）
   core/cloud.ts     云歌单读取与导入
   core/downloads.ts 下载队列、进度、离线文件
-  core/native/      Capacitor 原生桥接（后台媒体服务、下载器、外部浏览器）
-  views/            发现 / 搜索 / 我的 / 播放 / 云端歌单 / 下载 / 设置 / 插件
-android/            Capacitor Android 工程 + 前台媒体服务 + 下载插件
+  core/updater.ts   应用内检查更新、下载与安装 APK
+  core/native/      Capacitor 原生桥接（后台媒体服务、下载器、外部浏览器、安装器、通知）
+  views/            发现 / 搜索 / 我的 / 播放 / 云端歌单 / 下载 / 更新 / 设置 / 插件
+android/            Capacitor Android 工程 + 前台媒体服务 + 下载/安装/通知插件
 public/plugin-runtime/  构建时从 @shiqianjiang/ceru-plugin-core 复制（不纳入版本库）
 ```
 
@@ -70,6 +72,26 @@ gradlew.bat assembleRelease
 
 产物：`android/app/build/outputs/apk/release/app-release.apk`
 
+## 发版与跟随上游
+
+一条命令发版（递增版本号与 versionCode、构建、校验签名、生成 SHA-256、提交、打 tag、推送、创建 Release）：
+
+```bash
+npm run release
+npm run release -- --dry-run          # 只打印步骤
+npm run release -- --version 2.3.2-mobile.1
+```
+
+发版说明放在 `docs/release-v<版本>.md`，可用 `<!-- SHA256 -->` 和 `<!-- SIZE -->` 占位，脚本会回填。
+
+检查桌面版是否有新版本、需要移植哪些文件：
+
+```bash
+npm run check:upstream
+```
+
+移植映射与清单见 [docs/upstream-sync.md](docs/upstream-sync.md)。`package.json` 的 `upstreamVersion` 记录当前移植到桌面版的哪个版本。
+
 开发调试：
 
 ```bash
@@ -88,6 +110,7 @@ Android 签名配置在 `android/keystore.properties`（已加入 .gitignore）�
 - 响应体限制 16 MB，请求超时 60 秒，重定向最多 5 次
 - 插件逻辑运行在独立 iframe 中，无法访问主界面 DOM 或本地数据
 - 下载器对每一跳重定向都重新解析域名并做同样的公网校验，跨域重定向会丢弃 Authorization、Cookie 等敏感请求头
+- 应用内更新只从本仓库 GitHub Release 的 HTTPS 地址下载 APK，同样经过下载器的逐跳校验；安装时通过 FileProvider 把文件交给系统安装器，不接受任意路径
 - 账号 token 只保存在本机 localStorage，登录密码始终在系统浏览器中由认证服务处理，应用不会接触密码
 
 ## 与桌面版的差异

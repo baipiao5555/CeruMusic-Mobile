@@ -17,6 +17,7 @@ import * as playback from './core/playback/player'
 import * as auth from './core/auth'
 import * as downloads from './core/downloads'
 import * as cloud from './core/cloud'
+import * as updater from './core/updater'
 
 if (import.meta.env.DEV) {
   ;(window as any).__ceruDebug = {
@@ -24,7 +25,8 @@ if (import.meta.env.DEV) {
     player: playback,
     auth,
     downloads,
-    cloud
+    cloud,
+    updater
   }
 }
 

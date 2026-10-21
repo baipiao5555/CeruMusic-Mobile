@@ -9,6 +9,7 @@ import { availableQualities, qualityDescription, qualityLabel } from '@/core/qua
 import { authState, displayName, login, logout } from '@/core/auth'
 import { downloadSummary } from '@/core/downloads'
 import { libraryState } from '@/core/library'
+import { updateState } from '@/core/updater'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
@@ -215,6 +216,20 @@ function resetSettings(): void {
         </div>
         <Icon name="chevron" :size="18" class="chev" />
       </button>
+      <button class="list-item" @click="router.push('/update')">
+        <span class="entry-icon"><Icon name="refresh" :size="19" /></span>
+        <div class="info">
+          <h3>检查更新</h3>
+          <p>
+            当前 {{ appVersion
+            }}<template v-if="updateState.hasUpdate">
+              · <span class="update-badge">发现 {{ updateState.latest?.tag }}</span></template
+            >
+          </p>
+        </div>
+        <span v-if="updateState.hasUpdate" class="dot" />
+        <Icon name="chevron" :size="18" class="chev" />
+      </button>
       <button class="list-item" @click="clearPlaybackData">
         <span class="entry-icon"><Icon name="trash" :size="19" /></span>
         <div class="info">
@@ -296,6 +311,18 @@ function resetSettings(): void {
   padding: 8px 14px;
   font-size: 12.5px;
   flex: 0 0 auto;
+}
+.update-badge {
+  color: var(--brand);
+  font-weight: 600;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e05353;
+  flex: 0 0 auto;
+  margin-right: 4px;
 }
 .panel {
   padding: 16px;

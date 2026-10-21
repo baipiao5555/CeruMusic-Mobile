@@ -12,6 +12,7 @@ import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginS
 import { handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
 import { registerDownloadHostHooks } from '@/core/downloadHost'
+import { checkForUpdate, updateState } from '@/core/updater'
 import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
@@ -102,6 +103,7 @@ onMounted(async () => {
     }
   }
   if (pluginState.selectedProvider) selectProvider(pluginState.selectedProvider)
+  if (updateState.autoCheck) void checkForUpdate({ silent: false })
   window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
     if (settingsState.theme === 'system') {
       applyTheme()

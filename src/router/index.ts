@@ -12,6 +12,7 @@ const router = createRouter({
     { path: '/plugins', name: 'plugins', component: () => import('@/views/Plugins.vue') },
     { path: '/cloud', name: 'cloud', component: () => import('@/views/CloudPlaylists.vue') },
     { path: '/downloads', name: 'downloads', component: () => import('@/views/Downloads.vue') },
+    { path: '/update', name: 'update', component: () => import('@/views/Update.vue') },
     { path: '/playlist/:id', name: 'playlist', component: () => import('@/views/PlaylistDetail.vue') },
     { path: '/browse', name: 'browse', component: () => import('@/views/Browse.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' }

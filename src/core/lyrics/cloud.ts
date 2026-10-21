@@ -216,6 +216,17 @@ async function fetchLrcLib(track: Track): Promise<CloudLyricsResult[]> {
   return []
 }
 
+/**
+ * QQ Music treats the raw UTF-8 bytes of a JSON body as GBK, so Chinese
+ * queries come back as unrelated songs. Escaping every non-ASCII character
+ * keeps the body pure ASCII and makes the server decode \uXXXX correctly.
+ */
+function asciiJson(value: unknown): string {
+  return JSON.stringify(value).replace(/[\u007f-\uffff]/g, (char) => {
+    return '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')
+  })
+}
+
 async function fetchQQ(track: Track): Promise<CloudLyricsResult[]> {
   try {
     const query = [cleanTitle(track.title), track.artist].filter(Boolean).join(' ')
@@ -230,7 +241,7 @@ async function fetchQQ(track: Track): Promise<CloudLyricsResult[]> {
         Referer: 'https://y.qq.com/'
       },
       referrer: 'https://y.qq.com/',
-      body: JSON.stringify({
+      body: asciiJson({
         comm: { ct: '19', cv: '1859', uin: '0' },
         req: {
           method: 'DoSearchForQQMusicDesktop',

@@ -313,7 +313,27 @@ export async function importPlaylist(
 ): Promise<ImportedPlaylist> {
   const host = hosts.get(importer.pluginId)
   if (!host) throw new Error('插件未运行，请先启用插件')
-  const target = normalizePlaylistInput(value)
+  // 桌面端把内容原样交给插件；部分插件会从整段分享文案里解析参数。
+  // 先按原样调用，失败后再用提取出的链接/ID 重试。
+  const candidates = [value.trim().slice(0, 8192), normalizePlaylistInput(value)].filter(
+    (item, index, list) => item && list.indexOf(item) === index
+  )
+  let lastError: unknown
+  for (const candidate of candidates) {
+    try {
+      return await importPlaylistWith(host, importer, candidate)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('导入失败')
+}
+
+async function importPlaylistWith(
+  host: PluginHost,
+  importer: PlaylistImporterHandle,
+  target: string
+): Promise<ImportedPlaylist> {
   const tracks: Track[] = []
   const seen = new Set<string>()
   let cursor: string | undefined

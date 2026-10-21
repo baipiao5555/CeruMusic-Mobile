@@ -9,7 +9,8 @@ import { settingsState, updateSettings } from '../settings'
 import {
   startBackgroundAudio,
   stopBackgroundAudio,
-  syncBackgroundAudio
+  syncBackgroundAudio,
+  syncBackgroundProgress
 } from '../native/backgroundAudio'
 import { toTrack, type Track } from '../track'
 import { matchCloudLyrics } from '../lyrics/cloud'
@@ -52,6 +53,7 @@ let resolveToken = 0
 let blobUrl: string | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let wakeLock: any = null
+let lastProgressSync = 0
 
 async function syncWakeLock(): Promise<void> {
   try {
@@ -138,6 +140,11 @@ export function initPlayer(): void {
     playerState.currentTime = audio.currentTime
     updateActiveLyric()
     updatePositionState()
+    const now = Date.now()
+    if (playerState.playing && now - lastProgressSync > 5000) {
+      lastProgressSync = now
+      syncBackgroundProgress(playerState.currentTime * 1000, playerState.duration * 1000)
+    }
   })
   audio.addEventListener('durationchange', () => {
     if (!audio) return
@@ -354,6 +361,10 @@ export function seek(time: number): void {
     playerState.currentTime = value
     updateActiveLyric()
     updatePositionState()
+    const track = currentTrack()
+    if (track) {
+      syncBackgroundAudio(track, playerState.playing, value * 1000, (duration || 0) * 1000)
+    }
   } catch {}
 }
 

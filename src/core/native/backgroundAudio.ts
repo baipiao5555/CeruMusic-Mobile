@@ -4,6 +4,7 @@ import type { Track } from '../playback/player'
 interface BackgroundAudioOptions {
   title: string
   artist: string
+  artwork: string
   playing: boolean
   position: number
   duration: number
@@ -12,6 +13,7 @@ interface BackgroundAudioOptions {
 interface BackgroundAudioPlugin {
   start(options: BackgroundAudioOptions): Promise<void>
   update(options: BackgroundAudioOptions): Promise<void>
+  progress(options: { position: number; duration: number }): Promise<void>
   stop(): Promise<void>
   addListener(
     eventName: 'mediaAction',
@@ -22,6 +24,23 @@ interface BackgroundAudioPlugin {
 const BackgroundAudio = registerPlugin<BackgroundAudioPlugin>('BackgroundAudio')
 export const isNativePlatform = Capacitor.isNativePlatform()
 
+function optionsFor(
+  track: Track,
+  playing: boolean,
+  positionMs: number,
+  durationMs: number
+): BackgroundAudioOptions {
+  return {
+    title: track.title || '澜音',
+    artist: track.artist || '',
+    // Only remote images can be fetched by the native media service.
+    artwork: /^https?:\/\//i.test(track.artwork || '') ? track.artwork : '',
+    playing,
+    position: Math.max(0, Math.round(positionMs)),
+    duration: Math.max(0, Math.round(durationMs))
+  }
+}
+
 export function syncBackgroundAudio(
   track: Track,
   playing: boolean,
@@ -29,14 +48,9 @@ export function syncBackgroundAudio(
   durationMs: number
 ): void {
   if (!isNativePlatform) return
-  const options: BackgroundAudioOptions = {
-    title: track.title || '澜音',
-    artist: track.artist || '',
-    playing,
-    position: Math.max(0, Math.round(positionMs)),
-    duration: Math.max(0, Math.round(durationMs))
-  }
-  void BackgroundAudio.update(options).catch(() => undefined)
+  void BackgroundAudio.update(optionsFor(track, playing, positionMs, durationMs)).catch(
+    () => undefined
+  )
 }
 
 export function startBackgroundAudio(
@@ -46,10 +60,15 @@ export function startBackgroundAudio(
   durationMs: number
 ): void {
   if (!isNativePlatform) return
-  void BackgroundAudio.start({
-    title: track.title || '澜音',
-    artist: track.artist || '',
-    playing,
+  void BackgroundAudio.start(optionsFor(track, playing, positionMs, durationMs)).catch(
+    () => undefined
+  )
+}
+
+/** Keeps the lock-screen / notification progress in sync without rebuilding the notification. */
+export function syncBackgroundProgress(positionMs: number, durationMs: number): void {
+  if (!isNativePlatform) return
+  void BackgroundAudio.progress({
     position: Math.max(0, Math.round(positionMs)),
     duration: Math.max(0, Math.round(durationMs))
   }).catch(() => undefined)

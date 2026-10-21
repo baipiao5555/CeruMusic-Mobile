@@ -51,6 +51,24 @@ function scheduleStatusBarSync(): void {
   })
 }
 
+const ROOT_PATHS = ['/', '/search', '/playlists', '/library']
+
+/** Android back gesture/button: close sheets, walk history, exit only at a root tab. */
+function handleBackNavigation(): void {
+  const mask = document.querySelector('.sheet-mask') as HTMLElement | null
+  if (mask) {
+    mask.click()
+    return
+  }
+  if (ROOT_PATHS.includes(route.path)) {
+    void NativeApp.exitApp()
+    return
+  }
+  const canGoBack = Boolean(window.history.state && window.history.state.back != null)
+  if (canGoBack) router.back()
+  else void router.replace('/')
+}
+
 async function handleDeepLink(url: string): Promise<void> {
   if (!url.startsWith('cerumusic://oauth')) return
   try {
@@ -74,6 +92,7 @@ onMounted(async () => {
       if (launch?.url) void handleDeepLink(launch.url)
     })
     void NativeApp.addListener('appUrlOpen', ({ url }) => void handleDeepLink(url))
+    void NativeApp.addListener('backButton', () => handleBackNavigation())
   }
   scheduleStatusBarSync()
   restoreLibrary()

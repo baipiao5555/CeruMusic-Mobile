@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from './Icon.vue'
-import { addToQueue, playerState, type Track } from '@/core/playback/player'
+import SongActionsSheet from './SongActionsSheet.vue'
+import { playerState, type Track } from '@/core/playback/player'
 import { isFavorite, toggleFavorite } from '@/core/library'
 import { downloadTrack, isDownloaded, isDownloading } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
@@ -13,9 +14,13 @@ const props = withDefaults(
     queue?: Track[]
     showIndex?: boolean
     showCover?: boolean
+    /** When set, the action sheet offers "remove from this playlist". */
+    playlistId?: string
   }>(),
   { index: 0, showIndex: false, showCover: true }
 )
+
+const showActions = ref(false)
 
 const emit = defineEmits<{ play: [queue: Track[], index: number] }>()
 
@@ -83,11 +88,20 @@ function formatDuration(ms: number): string {
       >
         <Icon :name="downloaded ? 'check' : 'download'" :size="19" />
       </button>
-      <button class="icon-action" aria-label="加入播放队列" @click="addToQueue(track)">
-        <Icon name="plus" :size="19" />
+      <button class="icon-action" aria-label="更多操作" @click="showActions = true">
+        <Icon name="more" :size="19" />
       </button>
     </div>
   </div>
+
+  <Teleport to="body">
+    <SongActionsSheet
+      v-if="showActions"
+      :track="track"
+      :playlist-id="playlistId"
+      @close="showActions = false"
+    />
+  </Teleport>
 </template>
 
 <style scoped>

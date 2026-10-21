@@ -81,6 +81,7 @@ function downloadAll(): void {
           :track="track"
           :index="index"
           :queue="playlist.tracks"
+          :playlist-id="playlist.id"
           show-index
           @play="play(index)"
         />

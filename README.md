@@ -37,7 +37,9 @@
 - Android 前台媒体服务：后台播放、通知栏与锁屏显示歌曲封面、播放进度、播放/暂停/上一首/下一首、锁屏媒体控制
 - Android 返回手势/返回键：优先关闭弹层，其次返回上一页，在底部主页面退出应用
 - 左右滑动：播放页滑动切歌，主页面在发现 / 搜索 / 歌单 / 我的之间切换，可在设置中单独关闭
-- 设置项：主题、默认音质、播放模式、显示歌词、云歌词来源、保持亮屏、耳机拔出暂停、下载音质、同时下载数量、手势开关、自动检查更新
+- 系统歌词共享：通过 Lyricon Provider 和 ColorOS 锁屏 `lyricInfo` 元数据，把当前歌词共享到状态栏、锁屏或车机；设置里可以开关和选择是否共享翻译
+- 设置项：主题、默认音质、播放模式、显示歌词、云歌词来源、保持亮屏、耳机拔出暂停、歌词共享、下载音质、同时下载数量、手势开关、自动检查更新
+- 悬浮胶囊底栏：底部导航改为悬浮样式，选中项带滑动指示器；页面切换与退出应用带淡出/缩放动画
 - 数据全部保存在本机（IndexedDB / localStorage）；账号只保存 OAuth token，不保存密码
 
 ## 技术结构
@@ -51,6 +53,7 @@ src/
   core/auth.ts      澜音账号登录（Logto OAuth PKCE + 深链回调）
   core/cloud.ts     云歌单读取与导入
   core/downloads.ts 下载队列、进度、离线文件
+android/.../MediaPlaybackService.java  媒体服务、封面/进度、ColorOS 歌词与 Lyricon 发布
   core/updater.ts   应用内检查更新、下载与安装 APK
   core/native/      Capacitor 原生桥接（后台媒体服务、下载器、外部浏览器、安装器、通知）
   views/            发现 / 搜索 / 我的 / 播放 / 云端歌单 / 下载 / 更新 / 设置 / 插件
@@ -141,6 +144,7 @@ Android 签名配置在 `android/keystore.properties`（已加入 .gitignore）�
 - 上游项目：https://github.com/timeshiftsauce/CeruMusic
 - 插件运行时：`@shiqianjiang/ceru-plugin-core` / `ceru-plugin-sdk`
 - 云歌词匹配思路参考：[tomakino/LyricProvider](https://github.com/tomakino/LyricProvider)（Apache-2.0）；LyricProvider 是 LSPosed 模块，手机版没有直接复用它的代码，而是接入同类的公开歌词接口：LrcLib、QQ音乐、网易云
+- 系统歌词共享：[Lyricon](https://github.com/proify/lyricon) Provider（Apache-2.0）；ColorOS 锁屏歌词参考 [ColorOS Live Lyrics Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge)
 - 图标与品牌资源来自上游项目
 
 本项目不分发任何音乐文件或第三方音源插件。请确保你安装和使用的插件符合当地法律法规。

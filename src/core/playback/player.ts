@@ -10,6 +10,7 @@ import {
   startBackgroundAudio,
   stopBackgroundAudio,
   syncBackgroundAudio,
+  syncBackgroundLyrics,
   syncBackgroundProgress
 } from '../native/backgroundAudio'
 import { toTrack, type Track } from '../track'
@@ -284,6 +285,7 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
   playerState.lyrics = []
   playerState.lyricSource = ''
   playerState.activeLyric = -1
+  syncBackgroundLyrics(track, [])
   attachMediaSession(track)
   void loadLyrics(track)
   try {
@@ -504,6 +506,7 @@ export function removeFromQueue(index: number): void {
       playerState.playing = false
       playerState.currentTime = 0
       playerState.duration = 0
+      syncBackgroundLyrics(undefined, [])
       stopBackgroundAudio()
     } else {
       playerState.index = Math.min(playerState.index, playerState.queue.length - 1)
@@ -525,6 +528,7 @@ export function clearQueue(): void {
   playerState.currentTime = 0
   playerState.duration = 0
   releaseBlob()
+  syncBackgroundLyrics(undefined, [])
   stopBackgroundAudio()
   persist()
 }
@@ -543,6 +547,7 @@ export async function loadLyrics(track: Track): Promise<void> {
   playerState.lyricsLoading = true
   playerState.lyrics = []
   playerState.lyricSource = ''
+  syncBackgroundLyrics(track, [])
   try {
     if (provider) {
       try {
@@ -559,6 +564,7 @@ export async function loadLyrics(track: Track): Promise<void> {
         if (lines.length) {
           playerState.lyrics = lines
           playerState.lyricSource = 'plugin'
+          syncBackgroundLyrics(track, playerState.lyrics)
           updateActiveLyric()
           return
         }
@@ -573,6 +579,7 @@ export async function loadLyrics(track: Track): Promise<void> {
       if (cloud?.lines.length) {
         playerState.lyrics = cloud.lines
         playerState.lyricSource = cloud.source
+        syncBackgroundLyrics(track, playerState.lyrics)
         updateActiveLyric()
       }
     }
@@ -587,17 +594,24 @@ export async function matchLyricsOnline(target: Track | undefined = currentTrack
   playerState.lyricsLoading = true
   playerState.lyrics = []
   playerState.lyricSource = ''
+  syncBackgroundLyrics(target, [])
   try {
     const cloud = await matchCloudLyrics(target, true)
     if (currentTrack()?.id !== target.id) return
     if (cloud?.lines.length) {
       playerState.lyrics = cloud.lines
       playerState.lyricSource = cloud.source
+      syncBackgroundLyrics(target, playerState.lyrics)
       updateActiveLyric()
     }
   } finally {
     if (currentTrack()?.id === target.id) playerState.lyricsLoading = false
   }
+}
+
+/** Re-publishes the current lyrics after the sharing settings change. */
+export function refreshBackgroundLyrics(): void {
+  syncBackgroundLyrics(currentTrack(), playerState.lyrics)
 }
 
 export function updateActiveLyric(): void {

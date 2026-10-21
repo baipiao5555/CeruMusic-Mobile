@@ -116,7 +116,7 @@ watch(
       <button type="submit" class="search-btn">搜索</button>
     </form>
 
-    <div v-if="providers.length" class="chips" style="margin-top: 14px">
+    <div v-if="providers.length" class="chips source-chips" style="margin-top: 14px">
       <button
         v-for="provider in providers"
         :key="provider.providerId + provider.pluginId"
@@ -175,6 +175,12 @@ watch(
 </template>
 
 <style scoped>
+.source-chips {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 8px;
+  padding: 2px 2px 4px;
+}
 .search-btn {
   padding: 7px 13px;
   border-radius: 10px;

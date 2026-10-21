@@ -17,7 +17,7 @@
   --shadow-soft: 0 8px 24px rgba(16, 60, 45, 0.07);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --nav-height: calc(64px + var(--safe-bottom));
+  --nav-height: calc(76px + var(--safe-bottom));
   --mini-height: 66px;
   --radius-xl: 26px;
   --radius-lg: 20px;
@@ -156,6 +156,13 @@ a {
   max-width: 620px;
   margin: 0 auto;
   overflow: hidden;
+  transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: center center;
+}
+
+.app-shell.app-exiting {
+  opacity: 0;
+  transform: scale(0.965);
 }
 
 .app-bg {
@@ -766,56 +773,71 @@ input[type='search']::-webkit-search-results-decoration {
 
 .bottom-nav {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 14px;
+  right: 14px;
+  bottom: calc(8px + var(--safe-bottom));
   z-index: 25;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-around;
-  height: var(--nav-height);
-  padding: 6px 12px var(--safe-bottom);
+  align-items: stretch;
+  height: 60px;
+  padding: 6px;
+  border-radius: 26px;
   background: var(--nav-bg);
-  border-top: 1px solid var(--line);
-  backdrop-filter: blur(24px);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(24px) saturate(160%);
   box-shadow: var(--nav-shadow);
+  overflow: hidden;
+}
+
+.bottom-nav .nav-indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc((100% - 12px) / 4);
+  border-radius: 20px;
+  background: var(--brand-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: transform 0.38s cubic-bezier(0.34, 1.46, 0.64, 1);
+  pointer-events: none;
 }
 
 .bottom-nav .nav-item {
+  position: relative;
+  z-index: 1;
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  justify-content: center;
+  gap: 2px;
   min-width: 0;
-  padding: 4px 0;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.2px;
   color: var(--muted);
-  transition: color 0.18s ease;
+  transition: color 0.2s ease, transform 0.24s ease;
 }
 
 .bottom-nav .nav-item.active {
   color: var(--brand);
+  transform: translateY(-1px);
 }
 
 .bottom-nav .nav-icon {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 30px;
-  border-radius: 15px;
-  transition: background 0.18s ease, transform 0.18s ease;
+  width: 40px;
+  height: 28px;
+  transition: transform 0.24s cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
 .bottom-nav .nav-item.active .nav-icon {
-  background: var(--brand-soft);
-  transform: translateY(-1px);
+  transform: scale(1.08);
 }
 
 .bottom-nav .nav-icon ion-icon {
-  font-size: 23px;
+  font-size: 22px;
 }
 
 .toast-stack {
@@ -1031,10 +1053,17 @@ input[type='search']::-webkit-search-results-decoration {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.18s ease;
+  transition:
+    opacity 0.22s ease,
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.fade-enter-from,
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px) scale(0.995);
+}
+
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(-6px) scale(0.995);
 }

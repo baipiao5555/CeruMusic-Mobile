@@ -49,8 +49,18 @@ repositories {
     }
 }
 
+configurations.all {
+    resolutionStrategy {
+        // Lyricon pulls core 1.17, which requires AGP 8.9+; the APIs it uses
+        // are already available in 1.13 and our toolchain stays on AGP 8.2.
+        force 'androidx.core:core:1.13.1'
+        force 'androidx.core:core-ktx:1.13.1'
+    }
+}
+
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation 'io.github.proify.lyricon:provider:0.1.70'
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"

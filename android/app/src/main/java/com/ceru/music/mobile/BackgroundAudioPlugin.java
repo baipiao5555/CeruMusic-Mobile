@@ -33,6 +33,16 @@ public class BackgroundAudioPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void lyrics(PluginCall call) {
+        Context context = getContext();
+        Intent intent = new Intent(context, MediaPlaybackService.class)
+                .setAction(MediaPlaybackService.ACTION_LYRICS);
+        intent.putExtra("lyrics", call.getString("payload", ""));
+        context.startService(intent);
+        call.resolve();
+    }
+
+    @PluginMethod
     public void progress(PluginCall call) {
         Context context = getContext();
         Intent intent = new Intent(context, MediaPlaybackService.class)

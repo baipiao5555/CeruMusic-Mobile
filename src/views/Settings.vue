@@ -247,6 +247,36 @@ function resetSettings(): void {
     </div>
 
     <div class="section-title">
+      <h2>歌词共享</h2>
+    </div>
+    <div class="card panel" style="padding: 4px 16px">
+      <div class="list-item" style="padding-left: 0; padding-right: 0">
+        <div class="info">
+          <h3>启用歌词共享</h3>
+          <p>把当前歌词共享到状态栏、锁屏或车机（需要系统支持或 Lyricon 模块）</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.systemLyrics }"
+          aria-label="启用歌词共享"
+          @click="updateSettings({ systemLyrics: !settingsState.systemLyrics })"
+        />
+      </div>
+      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
+        <div class="info">
+          <h3>共享翻译</h3>
+          <p>有翻译歌词时一起共享</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.systemLyricsTranslation, off: !settingsState.systemLyrics }"
+          aria-label="共享翻译"
+          @click="updateSettings({ systemLyricsTranslation: !settingsState.systemLyricsTranslation })"
+        />
+      </div>
+    </div>
+
+    <div class="section-title">
       <h2>下载</h2>
     </div>
     <div class="card panel">

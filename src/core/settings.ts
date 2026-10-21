@@ -15,6 +15,10 @@ export interface AppSettings {
   swipePlayer: boolean
   /** Swipe left/right between the four main tabs. */
   swipeTabs: boolean
+  /** Publish the current lyric line to the system / lyricon consumers. */
+  systemLyrics: boolean
+  /** Include translations in the shared lyrics. */
+  systemLyricsTranslation: boolean
   /** Empty means follow the playback quality. */
   downloadQuality: string
   /** How many downloads run at the same time (1-3). */
@@ -33,6 +37,8 @@ export const settingsState = reactive<AppSettings>({
   playOnHeadset: true,
   swipePlayer: true,
   swipeTabs: true,
+  systemLyrics: true,
+  systemLyricsTranslation: true,
   downloadQuality: '',
   downloadConcurrency: 2,
   version: 2
@@ -87,6 +93,10 @@ export function registerSettingsHostHooks(): void {
         if (typeof patch.cloudLyrics === 'boolean') allowed.cloudLyrics = patch.cloudLyrics
         if (typeof patch.keepScreenOn === 'boolean') allowed.keepScreenOn = patch.keepScreenOn
         if (typeof patch.playOnHeadset === 'boolean') allowed.playOnHeadset = patch.playOnHeadset
+        if (typeof patch.systemLyrics === 'boolean') allowed.systemLyrics = patch.systemLyrics
+        if (typeof patch.systemLyricsTranslation === 'boolean') {
+          allowed.systemLyricsTranslation = patch.systemLyricsTranslation
+        }
         updateSettings(allowed)
         return { ...settingsState }
       }

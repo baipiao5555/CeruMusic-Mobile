@@ -44,6 +44,10 @@ function go(path: string): void {
 
 <template>
   <nav class="bottom-nav">
+    <span
+      class="nav-indicator"
+      :style="{ transform: `translateX(${activeIndex * 100}%)` }"
+    />
     <button
       v-for="(item, index) in items"
       :key="item.path"

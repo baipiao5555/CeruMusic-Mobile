@@ -13,7 +13,7 @@ import { handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
 import { registerDownloadHostHooks } from '@/core/downloadHost'
 import { checkForUpdate, updateState } from '@/core/updater'
-import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack } from '@/core/playback/player'
+import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack, refreshBackgroundLyrics } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
@@ -53,6 +53,7 @@ function scheduleStatusBarSync(): void {
 
 const ROOT_PATHS = ['/', '/search', '/playlists', '/library']
 let tabSwipe: { x: number; y: number; time: number; path: string } | null = null
+let appExiting = false
 
 function onTabTouchStart(event: TouchEvent): void {
   if (!settingsState.swipeTabs || event.touches.length !== 1) return
@@ -98,7 +99,15 @@ function handleBackNavigation(): void {
     return
   }
   if (ROOT_PATHS.includes(route.path)) {
-    void NativeApp.exitApp()
+    if (appExiting) return
+    appExiting = true
+    const shell = document.querySelector('.app-shell') as HTMLElement | null
+    if (shell) {
+      shell.classList.add('app-exiting')
+      window.setTimeout(() => void NativeApp.exitApp(), 190)
+    } else {
+      void NativeApp.exitApp()
+    }
     return
   }
   const canGoBack = Boolean(window.history.state && window.history.state.back != null)
@@ -176,6 +185,11 @@ watch(
     applyTheme()
     void syncStatusBar()
   }
+)
+
+watch(
+  () => [settingsState.systemLyrics, settingsState.systemLyricsTranslation],
+  () => refreshBackgroundLyrics()
 )
 
 watch(

@@ -25,10 +25,23 @@ import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.LruCache;
 
+import io.github.proify.lyricon.lyric.model.RichLyricLine;
+import io.github.proify.lyricon.lyric.model.Song;
+import io.github.proify.lyricon.provider.LyriconFactory;
+import io.github.proify.lyricon.provider.LyriconProvider;
+import io.github.proify.lyricon.provider.ProviderInfo;
+import io.github.proify.lyricon.provider.RemotePlayer;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -36,6 +49,7 @@ public class MediaPlaybackService extends Service {
     public static final String ACTION_START = "com.ceru.music.mobile.action.START";
     public static final String ACTION_UPDATE = "com.ceru.music.mobile.action.UPDATE";
     public static final String ACTION_PROGRESS = "com.ceru.music.mobile.action.PROGRESS";
+    public static final String ACTION_LYRICS = "com.ceru.music.mobile.action.LYRICS";
     public static final String ACTION_STOP = "com.ceru.music.mobile.action.STOP";
     public static final String ACTION_TOGGLE = "com.ceru.music.mobile.action.TOGGLE";
     public static final String ACTION_PREVIOUS = "com.ceru.music.mobile.action.PREVIOUS";
@@ -60,7 +74,23 @@ public class MediaPlaybackService extends Service {
         void onAction(String action);
     }
 
+    private static final class LyricLineData {
+        final long start;
+        final long end;
+        final String text;
+        final String translation;
+
+        LyricLineData(long start, long end, String text, String translation) {
+            this.start = start;
+            this.end = end;
+            this.text = text;
+            this.translation = translation;
+        }
+    }
+
     private static ActionListener actionListener;
+    /** Lyrics can arrive before the foreground service starts; apply them then. */
+    private static String pendingLyrics;
 
     public static void setActionListener(ActionListener listener) {
         actionListener = listener;
@@ -70,7 +100,15 @@ public class MediaPlaybackService extends Service {
     private PowerManager.WakeLock wakeLock;
     private String title = "澜音";
     private String artist = "";
+    private String album = "";
+    private String mediaId = "";
     private String artworkUrl = "";
+    private String colorOsLyric;
+    private boolean lyricsEnabled = true;
+    private boolean lyricsTranslation = true;
+    private LyriconProvider lyriconProvider;
+    private long lyricGeneration = 0;
+    private final List<LyricLineData> lyricLines = new ArrayList<>();
     private Bitmap artwork;
     private String loadingArtworkUrl = "";
     private boolean playing = false;
@@ -180,6 +218,17 @@ public class MediaPlaybackService extends Service {
             return START_STICKY;
         }
 
+        if (ACTION_LYRICS.equals(action)) {
+            String payload = intent != null ? intent.getStringExtra("lyrics") : null;
+            if (!foregroundStarted) {
+                pendingLyrics = payload;
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            applyLyrics(payload);
+            return START_STICKY;
+        }
+
         if (intent != null) {
             if (intent.hasExtra("title")) title = intent.getStringExtra("title");
             if (intent.hasExtra("artist")) artist = intent.getStringExtra("artist");
@@ -202,6 +251,11 @@ public class MediaPlaybackService extends Service {
                 || ACTION_TOGGLE.equals(action) || ACTION_PREVIOUS.equals(action)
                 || ACTION_NEXT.equals(action)) {
             startAsForeground();
+            if (pendingLyrics != null) {
+                String payload = pendingLyrics;
+                pendingLyrics = null;
+                applyLyrics(payload);
+            }
             updateSession();
             updateWakeLock();
             updateTicker();
@@ -336,6 +390,205 @@ public class MediaPlaybackService extends Service {
         if (manager != null) manager.notify(NOTIFICATION_ID, buildNotification());
     }
 
+    /** Accepts the current lyric timeline from the WebView and republishes it. */
+    private void applyLyrics(String raw) {
+        lyricLines.clear();
+        colorOsLyric = null;
+        if (raw == null || raw.isEmpty()) {
+            clearLyriconSong();
+            updateMetadata();
+            updatePlaybackState();
+            refreshNotification();
+            return;
+        }
+        try {
+            JSONObject data = new JSONObject(raw);
+            lyricsEnabled = data.optBoolean("enabled", true);
+            lyricsTranslation = data.optBoolean("translation", true);
+            String nextId = data.optString("id", "");
+            if (!nextId.equals(mediaId)) lyricGeneration += 1;
+            mediaId = nextId;
+            title = data.optString("title", title);
+            artist = data.optString("artist", artist);
+            album = data.optString("album", "");
+            long nextDuration = data.optLong("duration", duration);
+            if (nextDuration > 0) duration = nextDuration;
+            JSONArray lines = data.optJSONArray("lines");
+            if (lines != null) {
+                for (int index = 0; index < lines.length(); index++) {
+                    JSONObject line = lines.optJSONObject(index);
+                    if (line == null) continue;
+                    String text = line.optString("text", "");
+                    if (text.isEmpty()) continue;
+                    long start = Math.max(0, line.optLong("start", 0));
+                    long end = line.optLong("end", start + 5000);
+                    if (end <= start) end = start + 5000;
+                    String translation = lyricsTranslation ? line.optString("translation", "") : "";
+                    lyricLines.add(new LyricLineData(start, end, text, translation));
+                }
+            }
+        } catch (Exception ignored) {
+        }
+
+        if (lyricsEnabled && !lyricLines.isEmpty()) {
+            publishLyriconSong();
+            colorOsLyric = buildColorOsLyric();
+        } else {
+            clearLyriconSong();
+        }
+        updateMetadata();
+        updatePlaybackState();
+        refreshNotification();
+    }
+
+    private void ensureLyricon() {
+        if (lyriconProvider != null) return;
+        try {
+            ProviderInfo info = new ProviderInfo(
+                    getPackageName(),
+                    getPackageName(),
+                    null,
+                    null,
+                    null
+            );
+            LyriconProvider provider = LyriconFactory.INSTANCE.createProvider(
+                    this,
+                    info,
+                    null,
+                    "com.android.systemui"
+            );
+            provider.setAutoSync(true);
+            provider.register();
+            lyriconProvider = provider;
+        } catch (Throwable ignored) {
+            lyriconProvider = null;
+        }
+    }
+
+    private void publishLyriconSong() {
+        if (!lyricsEnabled || lyricLines.isEmpty()) {
+            clearLyriconSong();
+            return;
+        }
+        ensureLyricon();
+        if (lyriconProvider == null) return;
+        try {
+            List<RichLyricLine> lines = new ArrayList<>(lyricLines.size());
+            for (LyricLineData line : lyricLines) {
+                lines.add(new RichLyricLine(
+                        line.start,
+                        line.end,
+                        Math.max(1, line.end - line.start),
+                        false,
+                        null,
+                        line.text,
+                        null,
+                        null,
+                        null,
+                        line.translation.isEmpty() ? null : line.translation,
+                        null,
+                        null
+                ));
+            }
+            Song song = new Song(
+                    mediaId.isEmpty() ? title + "-" + artist : mediaId,
+                    title,
+                    artist,
+                    duration,
+                    null,
+                    lines
+            );
+            RemotePlayer player = lyriconProvider.getPlayer();
+            player.setDisplayTranslation(lyricsTranslation);
+            player.setDisplayRoma(false);
+            player.setSong(song);
+            player.setPosition(currentPosition());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void clearLyriconSong() {
+        if (lyriconProvider == null) return;
+        try {
+            lyriconProvider.getPlayer().setSong(null);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void updateLyriconPlayback() {
+        if (lyriconProvider == null) return;
+        try {
+            long position = currentPosition();
+            RemotePlayer player = lyriconProvider.getPlayer();
+            player.setPosition(position);
+            player.setPlaybackState(new PlaybackState.Builder()
+                    .setState(
+                            playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
+                            position,
+                            playing ? 1.0f : 0.0f,
+                            SystemClock.elapsedRealtime()
+                    )
+                    .build());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void destroyLyricon() {
+        if (lyriconProvider == null) return;
+        try {
+            lyriconProvider.getPlayer().setSong(null);
+        } catch (Throwable ignored) {
+        }
+        try {
+            lyriconProvider.destroy();
+        } catch (Throwable ignored) {
+        }
+        lyriconProvider = null;
+    }
+
+    /** ColorOS / OPlus lock screen lyrics read this JSON from the media metadata. */
+    private String buildColorOsLyric() {
+        try {
+            StringBuilder lrc = new StringBuilder();
+            StringBuilder translation = new StringBuilder();
+            for (LyricLineData line : lyricLines) {
+                lrc.append('[').append(timestamp(line.start)).append(']')
+                        .append(singleLine(line.text)).append('\n');
+                if (!line.translation.isEmpty()) {
+                    translation.append('[').append(timestamp(line.start)).append(']')
+                            .append(singleLine(line.translation)).append('\n');
+                }
+            }
+            JSONObject payload = new JSONObject()
+                    .put("songName", title)
+                    .put("artist", artist)
+                    .put("songId", mediaId)
+                    .put("lyricType", 0)
+                    .put("lyric", lrc.toString())
+                    .put("noLyric", lyricLines.isEmpty())
+                    .put("provider", getPackageName())
+                    .put("sessionGeneration", lyricGeneration);
+            if (translation.length() > 0) {
+                payload.put("translationLyric", translation.toString());
+            }
+            String value = payload.toString();
+            return value.length() <= 128 * 1024 ? value : null;
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    private static String timestamp(long timeMs) {
+        long minutes = timeMs / 60_000L;
+        long seconds = (timeMs / 1_000L) % 60L;
+        long millis = timeMs % 1_000L;
+        return String.format(Locale.ROOT, "%02d:%02d.%03d", minutes, seconds, millis);
+    }
+
+    private static String singleLine(String text) {
+        return text == null ? "" : text.replace('\r', ' ').replace('\n', ' ');
+    }
+
     private void updateSession() {
         updateMetadata();
         updatePlaybackState();
@@ -346,7 +599,12 @@ public class MediaPlaybackService extends Service {
         MediaMetadata.Builder metadata = new MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title)
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, album)
+                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, mediaId)
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, duration);
+        if (lyricsEnabled && colorOsLyric != null) {
+            metadata.putString("lyricInfo", colorOsLyric);
+        }
         if (artwork != null) {
             metadata.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artwork);
             metadata.putBitmap(MediaMetadata.METADATA_KEY_ART, artwork);
@@ -375,6 +633,7 @@ public class MediaPlaybackService extends Service {
                         )
                         .build()
         );
+        updateLyriconPlayback();
     }
 
     /** Loads artwork in the background and refreshes metadata + notification when ready. */
@@ -492,6 +751,7 @@ public class MediaPlaybackService extends Service {
     private void stopPlayback() {
         playing = false;
         mainHandler.removeCallbacks(progressTicker);
+        destroyLyricon();
         updateWakeLock();
         if (mediaSession != null) {
             mediaSession.setActive(false);
@@ -518,6 +778,7 @@ public class MediaPlaybackService extends Service {
     @Override
     public void onDestroy() {
         mainHandler.removeCallbacks(progressTicker);
+        destroyLyricon();
         artworkExecutor.shutdownNow();
         try {
             unregisterReceiver(noisyReceiver);

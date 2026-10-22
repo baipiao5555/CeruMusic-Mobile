@@ -1070,17 +1070,10 @@ input[type='search']::-webkit-search-results-decoration {
 
 .fade-enter-active,
 .fade-leave-active {
-  transition:
-    opacity 0.22s ease,
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.18s ease;
 }
 
-.fade-enter-from {
-  opacity: 0;
-  transform: translateY(8px) scale(0.995);
-}
-
+.fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-  transform: translateY(-6px) scale(0.995);
 }

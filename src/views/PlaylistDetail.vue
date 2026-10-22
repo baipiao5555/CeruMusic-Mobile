@@ -297,20 +297,24 @@ onMounted(() => {
 
 <style scoped>
 .playlist-page {
-  padding-top: 0;
+  padding-top: calc(63px + var(--safe-top));
   overflow-anchor: none;
 }
 .playlist-page.selection-active {
   padding-bottom: calc(var(--nav-height) + var(--mini-height) + 112px);
 }
 .playlist-header {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 20;
+  left: 0;
+  right: 0;
+  z-index: 30;
   display: grid;
   grid-template-columns: 42px 1fr 90px;
   align-items: center;
-  margin: 0 -18px;
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
   padding: calc(10px + var(--safe-top)) 18px 10px;
   background: var(--surface-solid);
   border-bottom: 1px solid var(--line);

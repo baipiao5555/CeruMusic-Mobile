@@ -145,7 +145,7 @@ watch(
       </button>
       <div class="header-title">
         <span>PLAYLIST</span>
-        <strong>歌单</strong>
+        <strong>{{ playlist?.name || '歌单' }}</strong>
       </div>
       <div class="header-actions">
         <button class="icon-btn" aria-label="重命名歌单" @click="openRename">
@@ -298,20 +298,32 @@ watch(
 </template>
 
 <style scoped>
+.playlist-page {
+  padding-top: 0;
+}
 .playlist-page.selection-active {
   padding-bottom: calc(var(--nav-height) + var(--mini-height) + 112px);
 }
 .playlist-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: grid;
   grid-template-columns: 42px 1fr 90px;
   align-items: center;
-  padding-bottom: 14px;
+  margin: 0 -18px;
+  padding: calc(10px + var(--safe-top)) 18px 10px;
+  background: var(--surface-solid);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgba(16, 60, 45, 0.04);
+  backdrop-filter: blur(20px) saturate(150%);
 }
 .header-title {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  min-width: 0;
   color: var(--muted-2);
   line-height: 1.1;
 }
@@ -321,9 +333,13 @@ watch(
   letter-spacing: 1.8px;
 }
 .header-title strong {
-  font-size: 15px;
+  max-width: 190px;
+  overflow: hidden;
+  font-size: 14px;
   font-weight: 650;
   color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .header-actions {
   display: flex;
@@ -333,8 +349,9 @@ watch(
 .playlist-hero {
   position: relative;
   overflow: hidden;
-  padding: 18px;
-  border-radius: 26px;
+  margin-top: 8px;
+  padding: 15px;
+  border-radius: 24px;
   border: 1px solid var(--line);
   background: var(--surface);
   box-shadow: var(--shadow-soft);
@@ -364,16 +381,16 @@ watch(
 .hero-content {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 .cover {
   display: grid;
   place-items: center;
-  width: 122px;
-  height: 122px;
+  width: 100px;
+  height: 100px;
   flex: 0 0 auto;
   overflow: hidden;
-  border-radius: 22px;
+  border-radius: 20px;
   color: var(--brand);
   background: var(--brand-soft);
   box-shadow: 0 14px 32px rgba(16, 60, 45, 0.18);
@@ -393,8 +410,8 @@ watch(
   color: var(--muted-2);
 }
 .meta h1 {
-  margin-top: 6px;
-  font-size: 22px;
+  margin-top: 5px;
+  font-size: 20px;
   line-height: 1.25;
   overflow: hidden;
   display: -webkit-box;
@@ -402,7 +419,7 @@ watch(
   -webkit-box-orient: vertical;
 }
 .meta p {
-  margin-top: 7px;
+  margin-top: 6px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -410,10 +427,10 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 17px;
+  margin-top: 13px;
 }
 .hero-actions .btn {
-  padding: 11px 15px;
+  padding: 10px 13px;
   font-size: 13px;
 }
 .hero-actions .btn:first-child {
@@ -524,8 +541,8 @@ watch(
 }
 @media (max-width: 360px) {
   .cover {
-    width: 104px;
-    height: 104px;
+    width: 88px;
+    height: 88px;
   }
   .meta h1 {
     font-size: 19px;

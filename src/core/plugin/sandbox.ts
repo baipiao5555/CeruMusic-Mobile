@@ -115,7 +115,6 @@ export class IframePluginSandbox {
   private iframe?: HTMLIFrameElement
   private generation = randomId()
   private pending = new Map<string, PendingCall>()
-  private started = false
   private disposed = false
   private messageHandler?: (event: MessageEvent) => void
 
@@ -170,7 +169,6 @@ export class IframePluginSandbox {
             return
           }
           if (type === 'active') {
-            this.started = true
             clearTimeout(timer)
             resolve()
             return

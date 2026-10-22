@@ -79,7 +79,7 @@ function versionSegments(value: string): number[] {
 }
 
 /** > 0 when a is newer than b. */
-export function compareVersions(a: string, b: string): number {
+function compareVersions(a: string, b: string): number {
   const left = versionSegments(a)
   const right = versionSegments(b)
   const length = Math.max(left.length, right.length)

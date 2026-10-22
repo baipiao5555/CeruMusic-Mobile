@@ -5,7 +5,7 @@ import { requestRemote } from './network'
 import { idb, sha256Hex } from '../storage/idb'
 import { toTrack, type Track } from '../track'
 
-export interface PluginProviderInfo {
+interface PluginProviderInfo {
   id: string
   name: string
   qualities: string[]
@@ -94,7 +94,7 @@ export function registerHostHooks(hooks: Partial<PluginHostHooks>): void {
   Object.assign(hostHooks, hooks)
 }
 
-function hooksFor(pluginId: string): PluginHostHooks {
+function hooksFor(): PluginHostHooks {
   return {
     onNotice: (notice: PluginNotice) => showToast(notice.message, notice.level ?? 'info'),
     onPermissionRequest: (request) =>
@@ -182,8 +182,9 @@ function refresh(): void {
     .sort((a, b) => a.order - b.order)
     .map((record) => descriptorFor(record, hosts.get(record.pluginId)))
   const selected = pluginState.selectedProvider
-  if (!selected || !allProviders().some((item) => item.providerId === selected)) {
-    pluginState.selectedProvider = allProviders()[0]?.providerId ?? ''
+  const providers = allProviders()
+  if (!selected || !providers.some((item) => item.providerId === selected)) {
+    pluginState.selectedProvider = providers[0]?.providerId ?? ''
   }
 }
 
@@ -211,6 +212,28 @@ export interface ProviderHandle {
   methods: string[]
 }
 
+function providerHandle(
+  plugin: Pick<PluginDescriptor, 'pluginId' | 'manifestId' | 'name'>,
+  provider: {
+    id: string
+    name?: string
+    qualities?: string[]
+    protocols?: string[]
+    methods?: string[]
+  }
+): ProviderHandle {
+  return {
+    pluginId: plugin.pluginId,
+    manifestId: plugin.manifestId,
+    pluginName: plugin.name,
+    providerId: provider.id,
+    name: provider.name ?? provider.id,
+    qualities: provider.qualities ?? [],
+    protocols: provider.protocols ?? [],
+    methods: provider.methods ?? []
+  }
+}
+
 export function allProviders(): ProviderHandle[] {
   const result: ProviderHandle[] = []
   for (const plugin of pluginState.plugins) {
@@ -218,24 +241,10 @@ export function allProviders(): ProviderHandle[] {
     for (const provider of plugin.providers) {
       const owner = pluginState.selectedSourcePlugin[provider.id]
       if (owner && owner !== plugin.pluginId) continue
-      result.push({
-        pluginId: plugin.pluginId,
-        manifestId: plugin.manifestId,
-        pluginName: plugin.name,
-        providerId: provider.id,
-        name: provider.name,
-        qualities: provider.qualities,
-        protocols: provider.protocols,
-        methods: provider.methods
-      })
+      result.push(providerHandle(plugin, provider))
     }
   }
   return result
-}
-
-export function selectedProvider(): ProviderHandle | undefined {
-  const providers = allProviders()
-  return providers.find((item) => item.providerId === pluginState.selectedProvider) ?? providers[0]
 }
 
 export interface PlaylistImporterHandle {
@@ -276,18 +285,14 @@ export function allImporters(): PlaylistImporterHandle[] {
 function providerHandleFor(pluginId: string, providerId?: string): ProviderHandle | null {
   const plugin = pluginState.plugins.find((item) => item.pluginId === pluginId)
   if (!plugin) return null
-  const provider =
-    plugin.providers.find((item) => item.id === providerId) ?? plugin.providers[0]
-  return {
-    pluginId,
-    manifestId: plugin.manifestId,
-    pluginName: plugin.name,
-    providerId: provider?.id ?? providerId ?? 'import',
+  const provider = plugin.providers.find((item) => item.id === providerId) ?? plugin.providers[0]
+  return providerHandle(plugin, {
+    id: provider?.id ?? providerId ?? 'import',
     name: provider?.name ?? providerId ?? '导入歌单',
-    qualities: provider?.qualities ?? [],
-    protocols: provider?.protocols ?? [],
-    methods: provider?.methods ?? []
-  }
+    qualities: provider?.qualities,
+    protocols: provider?.protocols,
+    methods: provider?.methods
+  })
 }
 
 const SHARE_URL_RE = /https?:\/\/[A-Za-z0-9\-._~:/?#[\]@!$&'()*+,;=%]+/i
@@ -299,7 +304,7 @@ const TRAILING_PUNCT_RE = /[)\]）】,，。;；!！?？"'”’]+$/
  * Share sheets usually copy a sentence around the link. Extract the first
  * usable link or playlist ID so importers do not receive the whole message.
  */
-export function normalizePlaylistInput(raw: string): string {
+function normalizePlaylistInput(raw: string): string {
   const value = raw.trim()
   if (!value) return value
   const url = value.match(SHARE_URL_RE)?.[0]
@@ -446,13 +451,6 @@ export function inspectPlugin(code: string): any {
   return readPluginArtifact(code).header.manifest
 }
 
-export async function installPluginFromUrl(
-  url: string,
-  options: { enable?: boolean; grantDeclared?: boolean } = {}
-): Promise<PluginDescriptor> {
-  return installPlugin(await fetchPluginCode(url), options)
-}
-
 export async function installDemoPlugin(): Promise<PluginDescriptor> {
   if (!pluginState.initialized) await initPlugins()
   const response = await fetch('/demo-plugin.js', { cache: 'no-store' })
@@ -482,7 +480,7 @@ export async function enablePlugin(pluginId: string): Promise<void> {
     },
     getConfig: () => getConfig(pluginId),
     saveConfig: (config) => saveConfig(pluginId, config),
-    hooks: hooksFor(pluginId)
+    hooks: hooksFor()
   })
   try {
     await host.ensureReady()
@@ -524,21 +522,6 @@ export async function removePlugin(pluginId: string): Promise<void> {
   refresh()
 }
 
-export async function reorderPlugin(pluginId: string, direction: -1 | 1): Promise<void> {
-  const list = [...records.values()].sort((a, b) => a.order - b.order)
-  const index = list.findIndex((item) => item.pluginId === pluginId)
-  const target = index + direction
-  if (index < 0 || target < 0 || target >= list.length) return
-  const a = list[index]
-  const b = list[target]
-  const order = a.order
-  a.order = b.order
-  b.order = order
-  await save(a)
-  await save(b)
-  refresh()
-}
-
 export async function getPluginConfig(pluginId: string): Promise<Record<string, any>> {
   return (await idb.get('pluginConfig', pluginId)) ?? {}
 }
@@ -548,10 +531,6 @@ export async function savePluginConfig(
   config: Record<string, any>
 ): Promise<void> {
   await idb.set('pluginConfig', pluginId, config)
-}
-
-export function getHost(pluginId: string): PluginHost | undefined {
-  return hosts.get(pluginId)
 }
 
 export async function invokeProvider(
@@ -564,53 +543,9 @@ export async function invokeProvider(
   return host.invokeProvider(provider.providerId, method, args)
 }
 
-export async function callProviderMethod(
-  providerId: string,
-  method: string,
-  args: any[] = []
-): Promise<any> {
-  const provider = allProviders().find((item) => item.providerId === providerId)
-  if (!provider) throw new Error('没有可用的音源，请先安装并启用插件')
-  return invokeProvider(provider, method, args)
-}
-
 export function selectProvider(providerId: string): void {
   pluginState.selectedProvider = providerId
   try {
     localStorage.setItem('ceru.selectedProvider', providerId)
   } catch {}
-}
-
-export function restoreProviderSelection(): void {
-  try {
-    const saved = localStorage.getItem('ceru.selectedProvider')
-    if (saved) pluginState.selectedProvider = saved
-  } catch {}
-}
-
-export function pluginContributions(): any[] {
-  return pluginState.plugins
-    .filter((plugin) => plugin.running)
-    .map((plugin) => ({
-      pluginId: plugin.pluginId,
-      manifest: {
-        id: plugin.manifestId,
-        name: plugin.name,
-        version: plugin.version,
-        contributes: {
-          providers: plugin.providers,
-          homeSections: plugin.homeSections,
-          commands: plugin.commands
-        }
-      },
-      enabled: plugin.enabled
-    }))
-}
-
-export function providerIcon(providerId: string): string | undefined {
-  for (const plugin of pluginState.plugins) {
-    const icon = plugin.iconUrls[providerId]
-    if (icon) return icon
-  }
-  return undefined
 }

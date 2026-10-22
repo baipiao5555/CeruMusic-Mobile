@@ -117,7 +117,7 @@ const ACCENTS: Record<AccentColor, { brand: string; strong: string; soft: string
   }
 }
 
-export function applyAccent(): void {
+function applyAccent(): void {
   const accent = ACCENTS[settingsState.accent] ?? ACCENTS.green
   const root = document.documentElement
   root.style.setProperty('--brand', accent.brand)
@@ -126,7 +126,7 @@ export function applyAccent(): void {
   root.style.setProperty('--brand-softer', accent.softer)
 }
 
-export function applyLyricScale(): void {
+function applyLyricScale(): void {
   const scale = Math.max(0.8, Math.min(1.4, Number(settingsState.lyricScale) || 1))
   document.documentElement.style.setProperty('--lyric-scale', String(scale))
 }

@@ -7,7 +7,7 @@ import { qualityLabel } from './quality'
 import type { Track } from './track'
 import { Downloader, type DownloadProgressEvent } from './native/plugins'
 
-export type DownloadStatus = 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled'
+type DownloadStatus = 'queued' | 'downloading' | 'completed' | 'failed' | 'cancelled'
 
 export interface DownloadTask {
   id: string
@@ -50,13 +50,13 @@ function findTask(id: string): DownloadTask | undefined {
   return downloadState.tasks.find((task) => task.id === id)
 }
 
-export function taskFor(track: Track): DownloadTask | undefined {
+function taskFor(track: Track): DownloadTask | undefined {
   return downloadState.tasks.find(
     (task) => task.track.id === track.id && task.track.providerId === track.providerId
   )
 }
 
-export function completedTaskFor(track: Track): DownloadTask | undefined {
+function completedTaskFor(track: Track): DownloadTask | undefined {
   const task = taskFor(track)
   return task?.status === 'completed' ? task : undefined
 }

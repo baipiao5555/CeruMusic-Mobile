@@ -21,7 +21,7 @@ import { localUrlFor } from '../downloads'
 export type { Track } from '../track'
 export { toTrack }
 
-export type PlayMode = 'order' | 'repeat-all' | 'repeat-one' | 'shuffle'
+type PlayMode = 'order' | 'repeat-all' | 'repeat-one' | 'shuffle'
 
 export interface LyricLine {
   startTimeMs: number
@@ -69,6 +69,14 @@ function clearLoadTimer(): void {
   }
 }
 
+/** Stops the shared audio element and drops its current source. */
+function detachAudioSource(): void {
+  if (!audio) return
+  audio.pause()
+  audio.removeAttribute('src')
+  audio.load()
+}
+
 /** Cancels an in-flight start when the user presses pause before it begins. */
 function cancelPendingStart(): boolean {
   if (!startPending) return false
@@ -79,11 +87,7 @@ function cancelPendingStart(): boolean {
   playerState.playing = false
   // Drop the previous track's source as well: otherwise pressing play again
   // would resume the old song while the UI already shows the new one.
-  if (audio) {
-    audio.pause()
-    audio.removeAttribute('src')
-    audio.load()
-  }
+  detachAudioSource()
   releaseBlob()
   playerState.currentTime = pendingStartSeek
   const track = currentTrack()
@@ -326,11 +330,7 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
   loadTimer = setTimeout(() => {
     if (token !== resolveToken || !playerState.loading) return
     startPending = false
-    if (audio) {
-      audio.pause()
-      audio.removeAttribute('src')
-      audio.load()
-    }
+    detachAudioSource()
     releaseBlob()
     playerState.loading = false
     playerState.playing = false
@@ -384,11 +384,7 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
     if (token !== resolveToken) return
     clearLoadTimer()
     startPending = false
-    if (audio) {
-      audio.pause()
-      audio.removeAttribute('src')
-      audio.load()
-    }
+    detachAudioSource()
     releaseBlob()
     playerState.loading = false
     playerState.playing = false
@@ -500,7 +496,7 @@ export function seek(time: number): void {
   } catch {}
 }
 
-export function setVolume(value: number): void {
+function setVolume(value: number): void {
   const volume = Math.max(0, Math.min(1, Number(value) || 0))
   playerState.volume = volume
   if (audio) audio.volume = volume
@@ -643,11 +639,7 @@ export function removeFromQueue(index: number): void {
       cancelPendingStart()
       reloadRequired = false
       playerState.index = -1
-      audio?.pause()
-      if (audio) {
-        audio.removeAttribute('src')
-        audio.load()
-      }
+      detachAudioSource()
       playerState.loading = false
       playerState.error = ''
       playerState.playing = false
@@ -668,11 +660,7 @@ export function clearQueue(): void {
   reloadRequired = false
   playerState.queue = []
   playerState.index = -1
-  audio?.pause()
-  if (audio) {
-    audio.removeAttribute('src')
-    audio.load()
-  }
+  detachAudioSource()
   playerState.loading = false
   playerState.error = ''
   playerState.playing = false
@@ -693,7 +681,7 @@ export function addToQueue(track: Track, playNext = false): void {
   persist()
 }
 
-export async function loadLyrics(track: Track): Promise<void> {
+async function loadLyrics(track: Track): Promise<void> {
   const provider = providerForTrack(track)
   playerState.lyricsLoading = true
   playerState.lyrics = []
@@ -782,7 +770,7 @@ export function updateActiveLyric(): void {
 
 const HISTORY_KEY = 'ceru.history.v1'
 
-export function addHistory(track: Track): void {
+function addHistory(track: Track): void {
   try {
     const raw = localStorage.getItem(HISTORY_KEY)
     const list: Track[] = raw ? JSON.parse(raw) : []
@@ -803,14 +791,9 @@ export function getHistory(): Track[] {
   }
 }
 
-export function providerForCurrent(): ProviderHandle | undefined {
+function providerForCurrent(): ProviderHandle | undefined {
   const track = currentTrack()
   return track ? providerForTrack(track) : undefined
-}
-
-export function syncMediaSessionState(): void {
-  if (!('mediaSession' in navigator)) return
-  navigator.mediaSession.playbackState = playerState.playing ? 'playing' : 'paused'
 }
 
 export function registerPlayerHostHooks(): void {

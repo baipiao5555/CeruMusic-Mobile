@@ -162,10 +162,6 @@ async function refreshSession(): Promise<string> {
   return refreshing
 }
 
-export function hasSession(): boolean {
-  return Boolean(session?.accessToken)
-}
-
 export async function getAccessToken(): Promise<string> {
   if (!session?.accessToken) {
     if (session?.refreshToken) return refreshSession()
@@ -215,6 +211,7 @@ export async function initAuth(): Promise<void> {
   }
 }
 
+/** Exported for the browser test harness in scripts/. @public */
 export function buildAuthorizeUrl(challenge: string, state: string, nonce: string): string {
   const url = new URL('oidc/auth', AUTH_ENDPOINT)
   url.searchParams.set('client_id', APP_ID)

@@ -167,6 +167,12 @@ pkg.version = version
 log(`更新 package.json → ${version}`)
 if (!dryRun) write('package.json', JSON.stringify(pkg, null, 2) + '\n')
 
+// Keep the lockfile root version in sync with package.json.
+const lock = JSON.parse(read('package-lock.json'))
+lock.version = version
+if (lock.packages?.['']) lock.packages[''].version = version
+if (!dryRun) write('package-lock.json', JSON.stringify(lock, null, 2) + '\n')
+
 let gradle = read('android/app/build.gradle')
 const codeMatch = gradle.match(/versionCode\s+(\d+)/)
 if (!codeMatch) fail('android/app/build.gradle 中没有 versionCode')

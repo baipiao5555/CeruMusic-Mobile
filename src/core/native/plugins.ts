@@ -7,7 +7,7 @@ export interface DownloadProgressEvent {
   total: number
 }
 
-export interface DownloadResult {
+interface DownloadResult {
   id: string
   path: string
   fileName: string

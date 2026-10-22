@@ -225,7 +225,7 @@ watch(selected, load)
             :track="track"
             :index="index"
             :queue="favorites"
-            @play="(queue, i) => playFavorite(i)"
+            @play="(_, i) => playFavorite(i)"
           />
         </div>
       </template>

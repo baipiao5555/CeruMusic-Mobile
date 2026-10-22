@@ -25,7 +25,7 @@ interface BackgroundAudioPlugin {
 }
 
 const BackgroundAudio = registerPlugin<BackgroundAudioPlugin>('BackgroundAudio')
-export const isNativePlatform = Capacitor.isNativePlatform()
+const isNativePlatform = Capacitor.isNativePlatform()
 
 function optionsFor(
   track: Track,

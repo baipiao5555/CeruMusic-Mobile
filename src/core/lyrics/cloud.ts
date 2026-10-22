@@ -2,7 +2,7 @@ import { requestRemote } from '../plugin/network'
 import type { Track } from '../track'
 import type { LyricLine } from '../playback/player'
 
-export type CloudLyricSource = 'LrcLib' | 'QQ音乐' | '网易云'
+type CloudLyricSource = 'LrcLib' | 'QQ音乐' | '网易云'
 
 export interface CloudLyricsResult {
   source: CloudLyricSource

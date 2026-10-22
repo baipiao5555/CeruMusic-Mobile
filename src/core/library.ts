@@ -21,10 +21,6 @@ export const libraryState = reactive({
   playlists: [] as LocalPlaylist[]
 })
 
-export function persistLibrary(): void {
-  persist()
-}
-
 function persist(): void {
   try {
     localStorage.setItem(

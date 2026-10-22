@@ -237,6 +237,7 @@ watch(navigationRequest, (request) => {
         <component :is="Component" />
       </transition>
     </router-view>
+    <div v-if="showNav || showMini" class="bottom-scrim" />
     <MiniPlayer />
     <BottomNav v-if="showNav" />
 

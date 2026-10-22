@@ -773,6 +773,21 @@ input[type='search']::-webkit-search-results-decoration {
   background: currentColor;
 }
 
+.bottom-scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 22;
+  height: calc(var(--nav-height) + 10px);
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--bg) 78%);
+}
+
+.app-shell.has-mini .bottom-scrim {
+  height: calc(var(--nav-height) + var(--mini-height) + 10px);
+}
+
 .bottom-nav {
   position: absolute;
   left: 14px;

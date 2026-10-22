@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
@@ -135,6 +135,14 @@ watch(
   () => playlist.value?.id,
   () => exitSelection()
 )
+
+onMounted(() => {
+  // The routed view can reuse the previous page's scroll container.
+  requestAnimationFrame(() => {
+    const page = document.querySelector<HTMLElement>('.playlist-page')
+    if (page) page.scrollTop = 0
+  })
+})
 </script>
 
 <template>

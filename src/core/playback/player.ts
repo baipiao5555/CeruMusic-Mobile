@@ -66,6 +66,14 @@ function clearLoadTimer(): void {
   }
 }
 
+/** Cancels an in-flight start when the user presses pause before the URL resolves. */
+function cancelPendingStart(): void {
+  resolveToken += 1
+  clearLoadTimer()
+  playerState.loading = false
+  playerState.playing = false
+}
+
 async function syncWakeLock(): Promise<void> {
   try {
     const wanted = settingsState.keepScreenOn && playerState.playing
@@ -319,6 +327,11 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
       )
     }
     await audio!.play()
+    if (token !== resolveToken) {
+      // Pause was pressed while the source was resolving.
+      audio!.pause()
+      return
+    }
     clearLoadTimer()
     playerState.playing = true
     playerState.loading = false
@@ -371,6 +384,13 @@ export async function playTrack(track: Track, queue?: Track[]): Promise<void> {
 export async function togglePlay(): Promise<void> {
   const track = currentTrack()
   if (!audio || !track) return
+  // While a track is resolving, the button means "cancel this start".
+  if (playerState.loading) {
+    cancelPendingStart()
+    audio.pause()
+    updatePositionState()
+    return
+  }
   // After an app restart the restored queue has no audio source. Start the
   // track instead of calling play() on an empty element forever.
   if (!audio.getAttribute('src')) {
@@ -403,6 +423,7 @@ export async function resume(): Promise<void> {
 }
 
 export function pause(): void {
+  cancelPendingStart()
   audio?.pause()
 }
 

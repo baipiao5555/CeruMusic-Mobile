@@ -14,15 +14,21 @@ const props = withDefaults(
     queue?: Track[]
     showIndex?: boolean
     showCover?: boolean
+    /** Renders a checkbox and turns row taps into selection toggles. */
+    selectable?: boolean
+    selected?: boolean
     /** When set, the action sheet offers "remove from this playlist". */
     playlistId?: string
   }>(),
-  { index: 0, showIndex: false, showCover: true }
+  { index: 0, showIndex: false, showCover: true, selectable: false, selected: false }
 )
 
 const showActions = ref(false)
 
-const emit = defineEmits<{ play: [queue: Track[], index: number] }>()
+const emit = defineEmits<{
+  play: [queue: Track[], index: number]
+  'toggle-select': []
+}>()
 
 const active = computed(
   () =>
@@ -35,6 +41,10 @@ const downloaded = computed(() => isDownloaded(props.track))
 const downloading = computed(() => isDownloading(props.track))
 
 function play(): void {
+  if (props.selectable) {
+    emit('toggle-select')
+    return
+  }
   emit('play', props.queue ?? [props.track], props.index)
 }
 
@@ -61,8 +71,15 @@ function formatDuration(ms: number): string {
 </script>
 
 <template>
-  <div class="song-row" :class="{ playing: active }" @click="play">
-    <span v-if="showIndex" class="song-index">{{ index + 1 }}</span>
+  <div
+    class="song-row"
+    :class="{ playing: active, selecting: selectable, selected: selectable && selected }"
+    @click="play"
+  >
+    <span v-if="selectable" class="select-check" :class="{ checked: selected }" aria-hidden="true">
+      <Icon v-if="selected" name="check" :size="13" />
+    </span>
+    <span v-else-if="showIndex" class="song-index">{{ index + 1 }}</span>
     <div v-if="showCover" class="cover">
       <img :src="track.artwork" alt="" loading="lazy" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
     </div>
@@ -70,7 +87,7 @@ function formatDuration(ms: number): string {
       <h3>{{ track.title }}</h3>
       <p>{{ track.artist }}<template v-if="track.album"> · {{ track.album }}</template></p>
     </div>
-    <div class="row-actions" @click.stop>
+    <div v-if="!selectable" class="row-actions" @click.stop>
       <span v-if="showIndex" class="duration">{{ formatDuration(track.durationMs) }}</span>
       <button
         class="icon-action"
@@ -111,6 +128,31 @@ function formatDuration(ms: number): string {
   font-size: 12px;
   color: var(--muted-2);
   font-variant-numeric: tabular-nums;
+}
+.select-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  color: #fff;
+  background: var(--surface);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.select-check.checked {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+.song-row.selecting.selected {
+  background: var(--brand-softer);
+}
+.song-row.selecting:active .select-check {
+  transform: scale(0.9);
 }
 .duration {
   font-size: 11px;

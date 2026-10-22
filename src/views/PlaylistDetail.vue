@@ -166,15 +166,6 @@ onMounted(() => {
             >
               <Icon name="download" :size="17" /> 下载全部
             </button>
-            <button
-              v-if="!selectionMode"
-              class="btn ghost"
-              :disabled="!playlist.tracks.length"
-              @click="enterSelection"
-            >
-              选择
-            </button>
-            <button v-else class="btn ghost" @click="exitSelection">完成</button>
           </div>
         </div>
       </section>
@@ -182,7 +173,7 @@ onMounted(() => {
       <div v-if="playlist.tracks.length" class="song-list-toolbar">
         <span>歌曲 {{ playlist.tracks.length }}</span>
         <button v-if="!selectionMode" class="toolbar-action" @click="enterSelection">
-          批量选择
+          选择
         </button>
         <button v-else class="toolbar-action" @click="toggleSelectAll">
           {{ allSelected ? '取消全选' : '全选' }}

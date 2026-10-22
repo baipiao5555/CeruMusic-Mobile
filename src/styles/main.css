@@ -673,17 +673,19 @@ input[type='search']::-webkit-search-results-decoration {
 
 .mini-player {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: var(--nav-height);
+  left: 14px;
+  right: 14px;
+  bottom: calc(var(--nav-height) + 10px);
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: var(--mini-height);
-  padding: 9px 16px;
+  gap: 10px;
+  height: 62px;
+  padding: 9px 12px;
+  border-radius: 22px;
   background: var(--surface-solid);
-  border-top: 1px solid var(--line);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 26px rgba(20, 60, 45, 0.12);
   transform: translateY(0);
   transition: transform 0.25s ease, opacity 0.25s ease;
 }
@@ -696,10 +698,11 @@ input[type='search']::-webkit-search-results-decoration {
 
 .mini-player .progress-line {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 14px;
+  right: 14px;
   top: 0;
   height: 2px;
+  border-radius: 0 0 2px 2px;
   overflow: hidden;
   background: var(--line);
 }
@@ -712,9 +715,9 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 .mini-player .cover {
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   overflow: hidden;
   flex: 0 0 auto;
   background: var(--brand-soft);
@@ -732,7 +735,7 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 .mini-player .info h3 {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 650;
   white-space: nowrap;
   overflow: hidden;
@@ -741,7 +744,7 @@ input[type='search']::-webkit-search-results-decoration {
 
 .mini-player .info p {
   margin-top: 3px;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -749,20 +752,21 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 .mini-player .icon-action {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   border-radius: 50%;
   color: var(--muted);
 }
 
 .mini-player .icon-action.primary {
-  background: var(--brand);
-  color: #fff;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
 }
 
 .mini-player .icon-action.primary:active {
-  background: var(--brand-strong);
+  background: var(--brand);
+  color: #fff;
 }
 
 .mini-player .loading-dots i {

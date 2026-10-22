@@ -93,7 +93,7 @@ function formatDuration(ms: number): string {
       <p class="song-meta">
         <span v-if="bestQuality" class="quality-tag">{{ qualityLabel(bestQuality) }}</span>
         <span v-if="sourceTag" class="source-tag">{{ sourceTag }}</span>
-        <span class="song-artist">{{ track.artist }}<template v-if="track.album"> · {{ track.album }}</template></span>
+        <span class="song-artist">{{ track.artist }}</span>
       </p>
     </div>
     <div v-if="!selectable" class="row-actions" @click.stop>

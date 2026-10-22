@@ -40,10 +40,10 @@ function open(): void {
         @click.stop="togglePlay"
       >
         <span v-if="playerState.loading" class="loading-dots"><i /><i /><i /></span>
-        <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="25" />
+        <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="20" />
       </button>
       <button class="icon-action" aria-label="下一首" @click.stop="next">
-        <Icon name="next" :size="22" />
+        <Icon name="next" :size="19" />
       </button>
     </div>
   </transition>

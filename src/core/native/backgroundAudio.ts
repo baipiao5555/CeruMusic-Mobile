@@ -95,20 +95,44 @@ export function syncBackgroundLyrics(
   lines: BackgroundLyricLine[]
 ): void {
   if (!isNativePlatform) return
+  const ordered = lines
+    .filter((line) => String(line.text ?? '').trim())
+    .slice()
+    .sort((left, right) => left.startTimeMs - right.startTimeMs)
+  const prepared = ordered.map((line, index) => {
+    const start = Math.max(0, Math.round(line.startTimeMs))
+    const rawEnd = Number(line.endTimeMs)
+    const nextStart = index + 1 < ordered.length
+      ? Math.max(0, Math.round(ordered[index + 1].startTimeMs))
+      : 0
+    const end =
+      Number.isFinite(rawEnd) && rawEnd > start
+        ? Math.round(rawEnd)
+        : nextStart > start
+          ? nextStart
+          : start + 5000
+    return {
+      start,
+      end,
+      text: line.text,
+      translation: line.translation ?? ''
+    }
+  })
+  const duration =
+    track?.durationMs && track.durationMs > 0
+      ? track.durationMs
+      : prepared.length
+        ? prepared[prepared.length - 1].end
+        : 0
   const payload = JSON.stringify({
     id: track?.id ?? '',
     title: track?.title ?? '',
     artist: track?.artist ?? '',
     album: track?.album ?? '',
-    duration: track?.durationMs ?? 0,
+    duration,
     enabled: settingsState.systemLyrics,
     translation: settingsState.systemLyricsTranslation,
-    lines: lines.slice(0, 500).map((line) => ({
-      start: Math.max(0, Math.round(line.startTimeMs)),
-      end: Math.max(0, Math.round(line.endTimeMs ?? line.startTimeMs + 5000)),
-      text: line.text,
-      translation: line.translation ?? ''
-    }))
+    lines: prepared.slice(0, 500)
   })
   void BackgroundAudio.lyrics({ payload }).catch(() => undefined)
 }

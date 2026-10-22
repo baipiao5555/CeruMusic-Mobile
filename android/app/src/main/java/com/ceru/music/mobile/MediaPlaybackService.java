@@ -23,6 +23,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.util.Log;
 import android.util.LruCache;
 
 import io.github.proify.lyricon.lyric.model.RichLyricLine;
@@ -40,6 +41,7 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -439,17 +441,33 @@ public class MediaPlaybackService extends Service {
             if (nextDuration > 0) duration = nextDuration;
             JSONArray lines = data.optJSONArray("lines");
             if (lines != null) {
+                List<LyricLineData> parsed = new ArrayList<>(lines.length());
                 for (int index = 0; index < lines.length(); index++) {
                     JSONObject line = lines.optJSONObject(index);
                     if (line == null) continue;
-                    String text = line.optString("text", "");
+                    String text = line.optString("text", "").trim();
                     if (text.isEmpty()) continue;
                     long start = Math.max(0, line.optLong("start", 0));
-                    long end = line.optLong("end", start + 5000);
-                    if (end <= start) end = start + 5000;
+                    long end = line.optLong("end", 0);
                     String translation = lyricsTranslation ? line.optString("translation", "") : "";
-                    lyricLines.add(new LyricLineData(start, end, text, translation));
+                    parsed.add(new LyricLineData(start, end, text, translation));
                 }
+                Collections.sort(parsed, (left, right) -> Long.compare(left.start, right.start));
+                for (int index = 0; index < parsed.size(); index++) {
+                    LyricLineData line = parsed.get(index);
+                    long end = line.end;
+                    // Missing/overlapping end times make several lines active at
+                    // once; Lyricon then keeps showing one of them. Fall back to
+                    // the next line's start, then to a 5 second window.
+                    if (end <= line.start && index + 1 < parsed.size()) {
+                        end = parsed.get(index + 1).start;
+                    }
+                    if (end <= line.start) end = line.start + 5000;
+                    lyricLines.add(new LyricLineData(line.start, end, line.text, line.translation));
+                }
+                Log.d("CeruLyrics", "timeline " + lyricLines.size() + " lines, "
+                        + (lyricLines.isEmpty() ? 0 : lyricLines.get(0).start) + ".."
+                        + (lyricLines.isEmpty() ? 0 : lyricLines.get(lyricLines.size() - 1).end));
             }
         } catch (Exception ignored) {
         }

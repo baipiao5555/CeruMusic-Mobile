@@ -796,6 +796,65 @@ export function addToQueue(track: Track, playNext = false): void {
   persist()
 }
 
+/**
+ * Normalizes a plugin lyric document into a strict, sorted line timeline.
+ *
+ * Some plugins omit the line-level start time and only provide word-level
+ * timings. Falling back to 0 for every line makes all lines overlap at the
+ * beginning, which shows up as a single lyric line looping in the status bar.
+ */
+function normalizePluginLyrics(document: any): LyricLine[] {
+  const offset = Number(document?.offsetMs) || 0
+  const source = Array.isArray(document?.lines) ? document.lines : []
+  const parsed: LyricLine[] = source
+    .filter((line: any) => line && typeof line === 'object')
+    .map((line: any): LyricLine => {
+      const words = Array.isArray(line.words) ? line.words : []
+      const firstWordStart = words
+        .map((word: any) => Number(word?.startTimeMs))
+        .find((value: number) => Number.isFinite(value))
+      const rawStart = Number(line.startTimeMs)
+      const lineStart = Number.isFinite(rawStart) ? Math.max(0, rawStart) : 0
+      // A missing line start is common; a literal 0 on every line is also
+      // common in legacy plugins that only fill word-level timings.
+      const startTimeMs = Math.max(
+        0,
+        (lineStart > 0 || firstWordStart == null || firstWordStart <= 0
+          ? lineStart
+          : firstWordStart) + offset
+      )
+      const rawEnd = Number(line.endTimeMs)
+      const translation = String(line.translation ?? line.translations?.[0]?.text ?? '').trim()
+      return {
+        startTimeMs,
+        endTimeMs:
+          Number.isFinite(rawEnd) && rawEnd + offset > startTimeMs
+            ? Math.max(0, rawEnd + offset)
+            : undefined,
+        text: String(line.text ?? '').trim(),
+        translation: translation || undefined
+      }
+    })
+    .filter((line: LyricLine) => Boolean(line.text))
+    .sort((a: LyricLine, b: LyricLine) => a.startTimeMs - b.startTimeMs)
+
+  return parsed.map((line: LyricLine, index: number): LyricLine => {
+    const next = parsed[index + 1]
+    const endTimeMs =
+      line.endTimeMs && line.endTimeMs > line.startTimeMs
+        ? line.endTimeMs
+        : next && next.startTimeMs > line.startTimeMs
+          ? next.startTimeMs
+          : line.startTimeMs + 5000
+    return {
+      startTimeMs: line.startTimeMs,
+      endTimeMs,
+      text: line.text,
+      translation: line.translation
+    }
+  })
+}
+
 async function loadLyrics(track: Track): Promise<void> {
   const provider = providerForTrack(track)
   playerState.lyricsLoading = true
@@ -807,17 +866,16 @@ async function loadLyrics(track: Track): Promise<void> {
       try {
         const document = await invokeProvider(provider, 'tracks.lyrics', [track.ref])
         if (currentTrack()?.id !== track.id) return
-        const lines = (document?.lines ?? [])
-          .map((line: any) => ({
-            startTimeMs: Number(line.startTimeMs) || 0,
-            endTimeMs: line.endTimeMs,
-            text: String(line.text ?? ''),
-            translation: line.translation
-          }))
-          .filter((line: LyricLine) => line.text.trim())
+        const lines = normalizePluginLyrics(document)
         if (lines.length) {
           playerState.lyrics = lines
           playerState.lyricSource = 'plugin'
+          logEvent(
+            'info',
+            'LYRIC',
+            `歌词已加载：${lines.length} 行`,
+            `${lines[0].startTimeMs}ms → ${lines[lines.length - 1].endTimeMs ?? 0}ms`
+          )
           syncBackgroundLyrics(track, playerState.lyrics)
           updateActiveLyric()
           return

@@ -111,8 +111,13 @@ async function syncWakeLock(): Promise<void> {
 }
 
 document.addEventListener?.('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && playerState.playing) void syncWakeLock()
+  if (document.visibilityState === 'hidden') {
+    savePlaybackState()
+  } else if (playerState.playing) {
+    void syncWakeLock()
+  }
 })
+window.addEventListener?.('pagehide', savePlaybackState)
 
 const STORAGE_KEY = 'ceru.player.v1'
 
@@ -120,23 +125,38 @@ export function currentTrack(): Track | undefined {
   return playerState.queue[playerState.index]
 }
 
+function writePlayerState(): void {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        queue: playerState.queue,
+        index: playerState.index,
+        volume: playerState.volume,
+        mode: playerState.mode,
+        quality: playerState.quality,
+        currentTime: playerState.currentTime
+      })
+    )
+  } catch {}
+}
+
 function persist(): void {
   if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          queue: playerState.queue,
-          index: playerState.index,
-          volume: playerState.volume,
-          mode: playerState.mode,
-          quality: playerState.quality,
-          currentTime: playerState.currentTime
-        })
-      )
-    } catch {}
-  }, 300)
+  saveTimer = setTimeout(writePlayerState, 300)
+}
+
+/** Writes the current position immediately, e.g. before backgrounding or exiting. */
+export function savePlaybackState(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  // timeupdate can be throttled in the background; read the element directly.
+  if (audio && !startPending && audio.getAttribute('src') && Number.isFinite(audio.currentTime)) {
+    playerState.currentTime = audio.currentTime
+  }
+  writePlayerState()
 }
 
 export function restorePlayer(): void {
@@ -195,7 +215,7 @@ export function initPlayer(): void {
     updateActiveLyric()
     updatePositionState()
     const now = Date.now()
-    if (playerState.playing && now - lastProgressSync > 5000) {
+    if (playerState.playing && now - lastProgressSync > 3000) {
       lastProgressSync = now
       syncBackgroundProgress(playerState.currentTime * 1000, playerState.duration * 1000)
       // Remember the position so an app restart can resume near where it stopped.

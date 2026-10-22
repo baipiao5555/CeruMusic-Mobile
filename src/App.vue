@@ -13,7 +13,7 @@ import { handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
 import { registerDownloadHostHooks } from '@/core/downloadHost'
 import { checkForUpdate, updateState } from '@/core/updater'
-import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack, refreshBackgroundLyrics, applyPlaybackRate } from '@/core/playback/player'
+import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack, refreshBackgroundLyrics, applyPlaybackRate, savePlaybackState } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
@@ -47,7 +47,11 @@ function scheduleStatusBarSync(): void {
     .catch(() => undefined)
     .finally(() => window.setTimeout(() => void syncStatusBar(), 300))
   void NativeApp.addListener('appStateChange', ({ isActive }) => {
-    if (isActive) void syncStatusBar()
+    if (isActive) {
+      void syncStatusBar()
+    } else {
+      savePlaybackState()
+    }
   })
 }
 
@@ -105,8 +109,12 @@ function handleBackNavigation(): void {
     const shell = document.querySelector('.app-shell') as HTMLElement | null
     if (shell) {
       shell.classList.add('app-exiting')
-      window.setTimeout(() => void NativeApp.exitApp(), EXIT_ANIMATION_MS)
+      window.setTimeout(() => {
+        savePlaybackState()
+        void NativeApp.exitApp()
+      }, EXIT_ANIMATION_MS)
     } else {
+      savePlaybackState()
       void NativeApp.exitApp()
     }
     return

@@ -6,6 +6,7 @@ import { playerState, type Track } from '@/core/playback/player'
 import { isFavorite, toggleFavorite } from '@/core/library'
 import { downloadTrack, isDownloaded, isDownloading } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
+import { highestQuality, qualityLabel } from '@/core/quality'
 
 const props = withDefaults(
   defineProps<{
@@ -39,6 +40,10 @@ const active = computed(
 const favorite = computed(() => isFavorite(props.track))
 const downloaded = computed(() => isDownloaded(props.track))
 const downloading = computed(() => isDownloading(props.track))
+const bestQuality = computed(() => highestQuality(props.track.qualities))
+const sourceTag = computed(() =>
+  props.track.providerId && props.track.providerId !== 'local' ? props.track.providerId : ''
+)
 
 function play(): void {
   if (props.selectable) {
@@ -85,7 +90,11 @@ function formatDuration(ms: number): string {
     </div>
     <div class="info">
       <h3>{{ track.title }}</h3>
-      <p>{{ track.artist }}<template v-if="track.album"> · {{ track.album }}</template></p>
+      <p class="song-meta">
+        <span v-if="bestQuality" class="quality-tag">{{ qualityLabel(bestQuality) }}</span>
+        <span v-if="sourceTag" class="source-tag">{{ sourceTag }}</span>
+        <span class="song-artist">{{ track.artist }}<template v-if="track.album"> · {{ track.album }}</template></span>
+      </p>
     </div>
     <div v-if="!selectable" class="row-actions" @click.stop>
       <span v-if="showIndex" class="duration">{{ formatDuration(track.durationMs) }}</span>
@@ -159,5 +168,34 @@ function formatDuration(ms: number): string {
   color: var(--muted-2);
   margin-right: 2px;
   font-variant-numeric: tabular-nums;
+}
+.song-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.song-artist {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quality-tag,
+.source-tag {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.45;
+}
+.quality-tag {
+  color: #f0a23a;
+  background: rgba(240, 138, 36, 0.14);
+}
+.source-tag {
+  color: #38d6e6;
+  background: rgba(56, 214, 230, 0.12);
 }
 </style>

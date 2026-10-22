@@ -57,6 +57,10 @@ public class MediaPlaybackService extends Service {
 
     private static final String CHANNEL_ID = "ceru_music_playback";
     private static final int NOTIFICATION_ID = 2301;
+    /** Lyricon 位置刷新节拍，以及读取间隔。 */
+    private static final long LYRICON_TICK_MS = 500L;
+    /** 进度跳变超过这个值就当作主动 seek，避免中心服务平滑追进度造成滞后。 */
+    private static final long LYRICON_SEEK_JUMP_MS = 2000L;
     private static final int MAX_ARTWORK_BYTES = 16 * 1024 * 1024;
     private static final int MAX_ARTWORK_SIZE = 1024;
     private static final String ARTWORK_USER_AGENT =
@@ -108,6 +112,9 @@ public class MediaPlaybackService extends Service {
     private boolean lyricsTranslation = true;
     private LyriconProvider lyriconProvider;
     private long lyricGeneration = 0;
+    /** 上一次成功同步给 Lyricon 的播放状态与位置。 */
+    private Boolean lyriconPlaying;
+    private long lyriconPosition = -1;
     private final List<LyricLineData> lyricLines = new ArrayList<>();
     private Bitmap artwork;
     private String loadingArtworkUrl = "";
@@ -138,6 +145,19 @@ public class MediaPlaybackService extends Service {
             if (!playing) return;
             updatePlaybackState();
             mainHandler.postDelayed(this, 1000);
+        }
+    };
+
+    /**
+     * Lyricon 需要比通知栏更高频的位置更新。这里只写共享内存，
+     * 不走通知/MediaSession，成本很低。
+     */
+    private final Runnable lyricTicker = new Runnable() {
+        @Override
+        public void run() {
+            if (!playing || !lyricsEnabled || lyricLines.isEmpty()) return;
+            pushLyriconState(false);
+            mainHandler.postDelayed(this, LYRICON_TICK_MS);
         }
     };
 
@@ -279,7 +299,11 @@ public class MediaPlaybackService extends Service {
 
     private void updateTicker() {
         mainHandler.removeCallbacks(progressTicker);
-        if (playing) mainHandler.post(progressTicker);
+        mainHandler.removeCallbacks(lyricTicker);
+        if (playing) {
+            mainHandler.post(progressTicker);
+            if (lyricsEnabled && !lyricLines.isEmpty()) mainHandler.post(lyricTicker);
+        }
     }
 
     private PendingIntent contentIntent() {
@@ -502,13 +526,29 @@ public class MediaPlaybackService extends Service {
             player.setDisplayTranslation(lyricsTranslation);
             player.setDisplayRoma(false);
             player.setSong(song);
-            player.setPosition(currentPosition());
+            try {
+                player.setPositionUpdateInterval((int) LYRICON_TICK_MS);
+            } catch (Throwable ignored) {
+            }
+            // setSong 会重置中心服务的显示进度，必须紧接着把状态和位置补回去。
+            lyriconPlaying = null;
+            lyriconPosition = -1;
+            pushLyriconState(true);
+            mainHandler.removeCallbacks(lyricTicker);
+            if (playing) mainHandler.post(lyricTicker);
         } catch (Throwable ignored) {
         }
     }
 
     private void clearLyriconSong() {
+        lyriconPlaying = null;
+        lyriconPosition = -1;
+        mainHandler.removeCallbacks(lyricTicker);
         if (lyriconProvider == null) return;
+        try {
+            lyriconProvider.getPlayer().setPlaybackState(false);
+        } catch (Throwable ignored) {
+        }
         try {
             lyriconProvider.getPlayer().setSong(null);
         } catch (Throwable ignored) {
@@ -516,24 +556,57 @@ public class MediaPlaybackService extends Service {
     }
 
     private void updateLyriconPlayback() {
-        if (lyriconProvider == null) return;
+        pushLyriconState(false);
+    }
+
+    /**
+     * 同步歌词进度。顺序很关键：状态 → 带速度的 PlaybackState → 位置。
+     * 反过来写的话，中心服务处理播放状态时会重置进度，刚写进去的位置就丢了，
+     * 表现就是歌词一直卡在开头。
+     */
+    private void pushLyriconState(boolean force) {
+        if (lyriconProvider == null || lyricLines.isEmpty()) return;
         try {
-            long position = currentPosition();
             RemotePlayer player = lyriconProvider.getPlayer();
+            long position = currentPosition();
+            boolean stateChanged = force || lyriconPlaying == null || lyriconPlaying != playing;
+            if (stateChanged) {
+                lyriconPlaying = playing;
+                try {
+                    player.setPlaybackState(playing);
+                } catch (Throwable ignored) {
+                }
+            }
+            // 让中心服务在两次推送之间按速度自行外推，避免 500ms 一跳。
+            try {
+                player.setPlaybackState(new PlaybackState.Builder()
+                        .setState(
+                                playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
+                                position,
+                                playing ? 1.0f : 0.0f,
+                                SystemClock.elapsedRealtime()
+                        )
+                        .build());
+            } catch (Throwable ignored) {
+            }
+            // 位置必须是最后一个动作；跳变时先明确告诉中心服务这是一次 seek。
+            if (lyriconPosition >= 0
+                    && Math.abs(position - lyriconPosition) >= LYRICON_SEEK_JUMP_MS) {
+                try {
+                    player.seekTo(position);
+                } catch (Throwable ignored) {
+                }
+            }
             player.setPosition(position);
-            player.setPlaybackState(new PlaybackState.Builder()
-                    .setState(
-                            playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
-                            position,
-                            playing ? 1.0f : 0.0f,
-                            SystemClock.elapsedRealtime()
-                    )
-                    .build());
+            lyriconPosition = position;
         } catch (Throwable ignored) {
         }
     }
 
     private void destroyLyricon() {
+        lyriconPlaying = null;
+        lyriconPosition = -1;
+        mainHandler.removeCallbacks(lyricTicker);
         if (lyriconProvider == null) return;
         try {
             lyriconProvider.getPlayer().setSong(null);

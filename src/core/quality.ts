@@ -90,6 +90,21 @@ export function availableQualities(): string[] {
   })
 }
 
+/** The best quality a track advertises, used for the compact list badge. */
+export function highestQuality(qualities: string[] | null | undefined): string {
+  if (!qualities?.length) return ''
+  let best = qualities[0]
+  let bestRank = KNOWN_ORDER.indexOf(best)
+  for (const quality of qualities) {
+    const rank = KNOWN_ORDER.indexOf(quality)
+    if (rank > bestRank) {
+      best = quality
+      bestRank = rank
+    }
+  }
+  return best
+}
+
 /**
  * Resolve the quality sent to the plugin. An empty request means "highest
  * available"; otherwise pick the requested quality or the closest lower one.

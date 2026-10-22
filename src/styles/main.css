@@ -156,13 +156,15 @@ a {
   max-width: 620px;
   margin: 0 auto;
   overflow: hidden;
-  transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.24s ease, transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
   transform-origin: center center;
+  will-change: opacity, transform;
 }
 
 .app-shell.app-exiting {
   opacity: 0;
-  transform: scale(0.965);
+  transform: scale(0.9) translateY(12px);
+  pointer-events: none;
 }
 
 .app-bg {

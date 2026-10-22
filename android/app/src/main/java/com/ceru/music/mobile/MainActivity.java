@@ -16,8 +16,13 @@ public class MainActivity extends BridgeActivity {
     @SuppressWarnings("deprecation")
     @Override
     public void finish() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, R.anim.app_exit);
+            super.finish();
+            return;
+        }
         super.finish();
-        overridePendingTransition(0, android.R.anim.fade_out);
+        overridePendingTransition(0, R.anim.app_exit);
     }
 
     @Override

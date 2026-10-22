@@ -52,6 +52,7 @@ function scheduleStatusBarSync(): void {
 }
 
 const ROOT_PATHS = ['/', '/search', '/playlists', '/library']
+const EXIT_ANIMATION_MS = 260
 let tabSwipe: { x: number; y: number; time: number; path: string } | null = null
 let appExiting = false
 
@@ -104,7 +105,7 @@ function handleBackNavigation(): void {
     const shell = document.querySelector('.app-shell') as HTMLElement | null
     if (shell) {
       shell.classList.add('app-exiting')
-      window.setTimeout(() => void NativeApp.exitApp(), 190)
+      window.setTimeout(() => void NativeApp.exitApp(), EXIT_ANIMATION_MS)
     } else {
       void NativeApp.exitApp()
     }

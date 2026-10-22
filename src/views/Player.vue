@@ -300,64 +300,66 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="progress-block">
-        <input
-          class="progress"
-          type="range"
-          min="0"
-          :max="playerState.duration || (track.durationMs ? track.durationMs / 1000 : 0)"
-          step="0.1"
-          :value="displayTime"
-          :style="{ '--progress': progress + '%' }"
-          @input="onSeekInput"
-          @change="onSeekChange"
-        />
-        <div class="time-row">
-          <span>{{ formatTime(displayTime) }}</span>
-          <span>{{ formatTime(playerState.duration || (track.durationMs ?? 0) / 1000) }}</span>
+      <div class="player-dock">
+        <div class="progress-block">
+          <input
+            class="progress"
+            type="range"
+            min="0"
+            :max="playerState.duration || (track.durationMs ? track.durationMs / 1000 : 0)"
+            step="0.1"
+            :value="displayTime"
+            :style="{ '--progress': progress + '%' }"
+            @input="onSeekInput"
+            @change="onSeekChange"
+          />
+          <div class="time-row">
+            <span>{{ formatTime(displayTime) }}</span>
+            <span>{{ formatTime(playerState.duration || (track.durationMs ?? 0) / 1000) }}</span>
+          </div>
         </div>
-      </div>
 
-      <div class="controls">
-        <button class="control small" :aria-label="playerState.mode" @click="cycleMode">
-          <Icon :name="modeIcon" :size="22" />
-        </button>
-        <button class="control" aria-label="上一首" @click="previous">
-          <Icon name="prev" :size="29" />
-        </button>
-        <button class="control main" aria-label="播放或暂停" @click="togglePlay">
-          <span v-if="playerState.loading" class="loading-dots big"><i /><i /><i /></span>
-          <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="34" />
-        </button>
-        <button class="control" aria-label="下一首" @click="next">
-          <Icon name="next" :size="29" />
-        </button>
-        <button class="control small" aria-label="播放队列" @click="showQueue = true">
-          <Icon name="queue" :size="22" />
-        </button>
-      </div>
+        <div class="controls">
+          <button class="control small" :aria-label="playerState.mode" @click="cycleMode">
+            <Icon :name="modeIcon" :size="22" />
+          </button>
+          <button class="control" aria-label="上一首" @click="previous">
+            <Icon name="prev" :size="29" />
+          </button>
+          <button class="control main" aria-label="播放或暂停" @click="togglePlay">
+            <span v-if="playerState.loading" class="loading-dots big"><i /><i /><i /></span>
+            <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="34" />
+          </button>
+          <button class="control" aria-label="下一首" @click="next">
+            <Icon name="next" :size="29" />
+          </button>
+          <button class="control small" aria-label="播放队列" @click="showQueue = true">
+            <Icon name="queue" :size="22" />
+          </button>
+        </div>
 
-      <div v-if="track.qualities.length" class="quality-row">
-        <button
-          class="chip"
-          :class="{ active: playerState.quality === '' }"
-          @click="setQuality('')"
-        >
-          自动
-        </button>
-        <button
-          v-for="quality in track.qualities"
-          :key="quality"
-          class="chip"
-          :class="{
-            active:
-              playerState.quality === quality ||
-              (playerState.quality === '' && playerState.resolvedQuality === quality)
-          }"
-          @click="setQuality(quality)"
-        >
-          {{ qualityLabel(quality) }}
-        </button>
+        <div v-if="track.qualities.length" class="quality-row">
+          <button
+            class="chip"
+            :class="{ active: playerState.quality === '' }"
+            @click="setQuality('')"
+          >
+            自动
+          </button>
+          <button
+            v-for="quality in track.qualities"
+            :key="quality"
+            class="chip"
+            :class="{
+              active:
+                playerState.quality === quality ||
+                (playerState.quality === '' && playerState.resolvedQuality === quality)
+            }"
+            @click="setQuality(quality)"
+          >
+            {{ qualityLabel(quality) }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -602,22 +604,22 @@ onUnmounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 4px 24px calc(20px + var(--safe-bottom));
+  padding: 4px 18px calc(14px + var(--safe-bottom));
   overflow-y: auto;
   scrollbar-width: none;
 }
 .disc-wrap {
   display: flex;
   justify-content: center;
-  padding: 14px 0 20px;
+  padding: 8px 0 15px;
   flex: 0 0 auto;
 }
 .disc {
   position: relative;
-  width: min(58vw, 240px);
+  width: min(53vw, 208px);
   aspect-ratio: 1;
   border-radius: 50%;
-  padding: 10px;
+  padding: 9px;
   background:
     radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 40%),
     repeating-radial-gradient(circle, #1b2521 0 3px, #121a17 3px 5px);
@@ -695,8 +697,8 @@ onUnmounted(() => {
 .lyrics-box {
   flex: 1;
   min-height: 90px;
-  max-height: 26vh;
-  margin: 14px 0 4px;
+  max-height: 24vh;
+  margin: 12px 0 6px;
   overflow-y: auto;
   text-align: center;
   mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
@@ -706,6 +708,18 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.player-dock {
+  flex: 0 0 auto;
+  margin: 8px -4px 0;
+  padding: 9px 14px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(18px) saturate(140%);
 }
 .lyric-line {
   padding: 7px 4px;
@@ -759,7 +773,7 @@ onUnmounted(() => {
 }
 .progress-block {
   flex: 0 0 auto;
-  margin-top: 8px;
+  margin-top: 2px;
 }
 .progress {
   -webkit-appearance: none;
@@ -801,7 +815,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   flex: 0 0 auto;
-  padding: 8px 2px 4px;
+  padding: 5px 0 2px;
 }
 .control {
   display: grid;
@@ -835,13 +849,21 @@ onUnmounted(() => {
 }
 .quality-row {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 6px;
   flex: 0 0 auto;
-  padding: 6px 0 10px;
+  padding: 4px 1px 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.quality-row::-webkit-scrollbar {
+  display: none;
 }
 .quality-row .chip {
+  flex: 0 0 auto;
+  padding: 7px 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.62);
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.14);

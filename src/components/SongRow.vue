@@ -172,7 +172,7 @@ function formatDuration(ms: number): string {
 .song-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 .song-artist {
@@ -184,9 +184,9 @@ function formatDuration(ms: number): string {
 .quality-tag,
 .source-tag {
   flex: 0 0 auto;
-  padding: 1px 5px;
+  padding: 1px 4px;
   border-radius: 5px;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 650;
   line-height: 1.45;
 }

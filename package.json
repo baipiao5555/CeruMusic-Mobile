@@ -1,7 +1,7 @@
 {
   "name": "ceru-music-mobile",
   "private": true,
-  "version": "2.3.1-mobile.37",
+  "version": "2.3.1-mobile.38",
   "upstreamVersion": "2.3.1",
   "description": "澜音 CeruMusic 手机版",
   "type": "module",

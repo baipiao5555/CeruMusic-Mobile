@@ -127,7 +127,8 @@ function resetSettings(): void {
     showLyrics: true,
     cloudLyrics: true,
     keepScreenOn: true,
-    playOnHeadset: true
+    playOnHeadset: true,
+    autoSourceFallback: true
   })
 }
 </script>
@@ -315,7 +316,7 @@ function resetSettings(): void {
           @click="updateSettings({ keepScreenOn: !settingsState.keepScreenOn })"
         />
       </div>
-      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
+      <div class="list-item" style="padding-left: 0; padding-right: 0">
         <div class="info">
           <h3>耳机拔出时暂停</h3>
           <p>有线耳机或蓝牙音频断开时自动暂停</p>
@@ -325,6 +326,18 @@ function resetSettings(): void {
           :class="{ on: settingsState.playOnHeadset }"
           aria-label="耳机拔出时暂停"
           @click="updateSettings({ playOnHeadset: !settingsState.playOnHeadset })"
+        />
+      </div>
+      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
+        <div class="info">
+          <h3>播放失败自动切换音源</h3>
+          <p>当前音源播放失败时，自动用其他已启用音源搜索同一首歌</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.autoSourceFallback }"
+          aria-label="播放失败自动切换音源"
+          @click="updateSettings({ autoSourceFallback: !settingsState.autoSourceFallback })"
         />
       </div>
     </div>

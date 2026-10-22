@@ -33,6 +33,7 @@ export interface PluginDescriptor {
   homeSections: any[]
   commands: any[]
   playlistImporters: any[]
+  sourceUrl?: string
 }
 
 interface PluginRecord {
@@ -44,6 +45,7 @@ interface PluginRecord {
   grants: string[]
   denied: string[]
   installedAt: number
+  sourceUrl?: string
   loadError?: string
 }
 
@@ -173,7 +175,8 @@ function descriptorFor(record: PluginRecord, host?: PluginHost): PluginDescripto
     permissions: manifest.permissions ?? [],
     homeSections: manifest.contributes?.homeSections ?? [],
     commands: manifest.contributes?.commands ?? [],
-    playlistImporters: manifest.contributes?.playlistImporters ?? []
+    playlistImporters: manifest.contributes?.playlistImporters ?? [],
+    sourceUrl: record.sourceUrl
   }
 }
 
@@ -394,7 +397,7 @@ export async function initPlugins(): Promise<void> {
 
 export async function installPlugin(
   code: string,
-  options: { enable?: boolean; grantDeclared?: boolean } = {}
+  options: { enable?: boolean; grantDeclared?: boolean; sourceUrl?: string } = {}
 ): Promise<PluginDescriptor> {
   const parsed = readPluginArtifact(code)
   const manifest = parsed.header.manifest
@@ -415,12 +418,51 @@ export async function installPlugin(
     order: existing?.order ?? records.size,
     grants,
     denied: existing?.denied ?? [],
-    installedAt: existing?.installedAt ?? Date.now()
+    installedAt: existing?.installedAt ?? Date.now(),
+    sourceUrl: options.sourceUrl ?? existing?.sourceUrl
+  }
+  const oldHost = hosts.get(pluginId)
+  if (oldHost) {
+    hosts.delete(pluginId)
+    await oldHost.dispose()
   }
   await save(record)
   refresh()
   if (options.enable !== false) await enablePlugin(pluginId)
   return descriptorFor(record, hosts.get(pluginId))
+}
+
+function comparePluginVersions(a: string, b: string): number {
+  const left = String(a ?? '').match(/\d+/g)?.map(Number) ?? []
+  const right = String(b ?? '').match(/\d+/g)?.map(Number) ?? []
+  const length = Math.max(left.length, right.length)
+  for (let index = 0; index < length; index += 1) {
+    const diff = (left[index] ?? 0) - (right[index] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+/** Re-downloads a URL-installed plugin and replaces it when the manifest version is newer. */
+export async function checkPluginUpdate(
+  pluginId: string
+): Promise<{ updated: boolean; previousVersion: string; version: string }> {
+  const record = records.get(pluginId)
+  if (!record) throw new Error('插件不存在')
+  if (!record.sourceUrl) throw new Error('这个插件不是从链接安装的，无法自动检查更新')
+  const code = await fetchPluginCode(record.sourceUrl)
+  const manifest = inspectPlugin(code)
+  const previousVersion = String(record.manifest.version ?? '')
+  const version = String(manifest.version ?? '')
+  if (comparePluginVersions(version, previousVersion) <= 0) {
+    return { updated: false, previousVersion, version: previousVersion }
+  }
+  await installPlugin(code, {
+    enable: record.enabled,
+    grantDeclared: true,
+    sourceUrl: record.sourceUrl
+  })
+  return { updated: true, previousVersion, version }
 }
 
 function stableScope(value: any): string {

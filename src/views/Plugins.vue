@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import {
@@ -10,6 +10,7 @@ import {
   inspectPlugin,
   installDemoPlugin,
   installPlugin,
+  checkPluginUpdate,
   pluginState,
   removePlugin,
   savePluginConfig,
@@ -22,7 +23,7 @@ const busy = ref('')
 const error = ref('')
 const info = ref('')
 const fileInput = ref<HTMLInputElement>()
-const pending = ref<{ code: string; manifest: any } | null>(null)
+const pending = ref<{ code: string; manifest: any; sourceUrl?: string } | null>(null)
 const editing = ref<PluginDescriptor | null>(null)
 const configValues = ref<Record<string, any>>({})
 
@@ -62,7 +63,7 @@ async function prepareFromUrl(): Promise<void> {
   busy.value = 'url'
   try {
     const code = await fetchPluginCode(value)
-    pending.value = { code, manifest: inspectPlugin(code) }
+    pending.value = { code, manifest: inspectPlugin(code), sourceUrl: value }
   } catch (err: any) {
     error.value = err?.message ?? '获取插件失败'
   } finally {
@@ -96,7 +97,11 @@ async function confirmInstall(): Promise<void> {
   try {
     const manifest = pending.value.manifest
     const existing = installed.value.find((item) => item.manifestId === manifest.id)
-    await installPlugin(pending.value.code, { enable: true, grantDeclared: true })
+    await installPlugin(pending.value.code, {
+      enable: true,
+      grantDeclared: true,
+      sourceUrl: pending.value.sourceUrl
+    })
     info.value = existing
       ? `${manifest.name} 已更新到 ${manifest.version}`
       : `${manifest.name} ${manifest.version} 安装成功`
@@ -122,6 +127,40 @@ async function installDemo(): Promise<void> {
     busy.value = ''
   }
 }
+
+async function checkUpdate(plugin: PluginDescriptor): Promise<void> {
+  busy.value = plugin.pluginId
+  error.value = ''
+  info.value = ''
+  try {
+    const result = await checkPluginUpdate(plugin.pluginId)
+    info.value = result.updated
+      ? `${plugin.name} 已更新到 v${result.version}`
+      : `${plugin.name} 已是最新版本 v${result.version}`
+  } catch (err: any) {
+    error.value = err?.message ?? '检查更新失败'
+  } finally {
+    busy.value = ''
+  }
+}
+
+async function autoCheckUpdates(): Promise<void> {
+  if (sessionStorage.getItem('ceru.pluginAutoUpdateChecked') === '1') return
+  sessionStorage.setItem('ceru.pluginAutoUpdateChecked', '1')
+  const targets = installed.value.filter((plugin) => plugin.sourceUrl)
+  for (const plugin of targets) {
+    try {
+      const result = await checkPluginUpdate(plugin.pluginId)
+      if (result.updated) info.value = `${plugin.name} 已自动更新到 v${result.version}`
+    } catch {
+      // A failed update check must not block the plugin page.
+    }
+  }
+}
+
+onMounted(() => {
+  void autoCheckUpdates()
+})
 
 async function toggle(plugin: PluginDescriptor): Promise<void> {
   busy.value = plugin.pluginId
@@ -254,6 +293,14 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
 
         <div class="plugin-actions">
           <button
+            v-if="plugin.sourceUrl"
+            class="btn secondary small"
+            :disabled="busy === plugin.pluginId"
+            @click="checkUpdate(plugin)"
+          >
+            <Icon name="refresh" :size="15" /> 检查更新
+          </button>
+          <button
             v-if="Object.keys(plugin.configDefaults).length"
             class="btn secondary small"
             @click="openConfig(plugin)"
@@ -272,6 +319,7 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
       <p>
         手机版沿用澜音 v2 插件协议，插件在独立沙箱（iframe）中运行，只能通过受控桥接访问网络、存储和播放器。
         出于安全考虑，插件网络请求仅允许访问公网 HTTP(S) 地址，不能访问本机或局域网。
+        从链接安装的插件会记录更新地址，下次打开本页会自动检查新版本；从文件安装的插件需要重新从链接安装一次才能自动更新。
       </p>
     </section>
 

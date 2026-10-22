@@ -2,6 +2,7 @@ import { reactive } from 'vue'
 import {
   allProviders,
   invokeProvider,
+  notify,
   registerHostHooks,
   type ProviderHandle
 } from '../plugin/manager'
@@ -337,7 +338,65 @@ function releaseBlob(): void {
   }
 }
 
-async function startPlayback(track: Track, seekTo = 0): Promise<void> {
+function normalizeForMatch(value: string): string {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[\s\-_.·()[\]【】]/g, '')
+}
+
+/** Finds the same song on another enabled provider after a playback failure. */
+async function findFallbackTrack(track: Track): Promise<Track | null> {
+  if (!settingsState.autoSourceFallback) return null
+  const title = normalizeForMatch(track.title)
+  const artist = normalizeForMatch(track.artist)
+  if (!title) return null
+  const providers = allProviders().filter(
+    (provider) =>
+      provider.providerId !== track.providerId &&
+      provider.methods.includes('tracks.search')
+  )
+  for (const provider of providers) {
+    try {
+      const page = await invokeProvider(provider, 'tracks.search', [
+        {
+          query: `${track.title} ${track.artist}`.trim(),
+          kinds: ['track'],
+          filters: {},
+          limit: 10
+        }
+      ])
+      const matches = (page?.items ?? [])
+        .filter((item: any) => item.ref?.kind === 'track')
+        .map((item: any) => toTrack(item, provider))
+        .filter((candidate: Track) => {
+          const candidateTitle = normalizeForMatch(candidate.title)
+          const candidateArtist = normalizeForMatch(candidate.artist)
+          return (
+            (candidateTitle === title ||
+              candidateTitle.includes(title) ||
+              title.includes(candidateTitle)) &&
+            (!artist ||
+              candidateArtist.includes(artist) ||
+              artist.includes(candidateArtist))
+          )
+        })
+      if (matches.length) {
+        return (
+          matches.find((candidate: Track) => candidate.artist === track.artist) ?? matches[0]
+        )
+      }
+    } catch {
+      // Try the next provider.
+    }
+  }
+  return null
+}
+
+async function startPlayback(
+  track: Track,
+  seekTo = 0,
+  allowFallback = true
+): Promise<void> {
   if (!audio) initPlayer()
   const token = ++resolveToken
   startPending = true
@@ -408,6 +467,21 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
     releaseBlob()
     playerState.loading = false
     playerState.playing = false
+    if (allowFallback && settingsState.autoSourceFallback) {
+      playerState.loading = true
+      const fallback = await findFallbackTrack(track)
+      if (token === resolveToken && fallback) {
+        const index = playerState.queue.findIndex(
+          (item) => item.id === track.id && item.providerId === track.providerId
+        )
+        if (index >= 0) playerState.queue[index] = fallback
+        notify(`「${track.title}」播放失败，已切换到 ${fallback.providerName}`)
+        persist()
+        await startPlayback(fallback, seekTo, false)
+        return
+      }
+      playerState.loading = false
+    }
     playerState.error = error?.message ?? '播放失败'
     throw error
   }

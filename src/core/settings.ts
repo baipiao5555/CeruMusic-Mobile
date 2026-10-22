@@ -22,6 +22,8 @@ export interface AppSettings {
   keepScreenOn: boolean
   /** Pause when wired headphones or Bluetooth audio disconnect. */
   playOnHeadset: boolean
+  /** Try another enabled provider when the current one cannot play a track. */
+  autoSourceFallback: boolean
   /** Swipe left/right on the player page to change tracks. */
   swipePlayer: boolean
   /** Swipe left/right between the four main tabs. */
@@ -52,6 +54,7 @@ export const settingsState = reactive<AppSettings>({
   cloudLyrics: true,
   keepScreenOn: true,
   playOnHeadset: true,
+  autoSourceFallback: true,
   swipePlayer: true,
   swipeTabs: true,
   systemLyrics: true,
@@ -154,6 +157,9 @@ export function registerSettingsHostHooks(): void {
         if (typeof patch.cloudLyrics === 'boolean') allowed.cloudLyrics = patch.cloudLyrics
         if (typeof patch.keepScreenOn === 'boolean') allowed.keepScreenOn = patch.keepScreenOn
         if (typeof patch.playOnHeadset === 'boolean') allowed.playOnHeadset = patch.playOnHeadset
+        if (typeof patch.autoSourceFallback === 'boolean') {
+          allowed.autoSourceFallback = patch.autoSourceFallback
+        }
         if (typeof patch.systemLyrics === 'boolean') allowed.systemLyrics = patch.systemLyrics
         if (typeof patch.systemLyricsTranslation === 'boolean') {
           allowed.systemLyricsTranslation = patch.systemLyricsTranslation

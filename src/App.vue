@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
@@ -209,6 +209,17 @@ watch(
 watch(
   () => route.path,
   () => void syncStatusBar()
+)
+
+watch(
+  () => route.fullPath,
+  async (path) => {
+    if (!path.startsWith('/playlist/')) return
+    await nextTick()
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('.playlist-page')?.scrollTo({ top: 0 })
+    })
+  }
 )
 
 onUnmounted(() => {

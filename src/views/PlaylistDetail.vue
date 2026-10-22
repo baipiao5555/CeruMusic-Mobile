@@ -9,7 +9,7 @@ import {
   renamePlaylist,
   updatePlaylistTracks
 } from '@/core/library'
-import { addToQueue, playTracks, type Track } from '@/core/playback/player'
+import { addToQueue, playTracks } from '@/core/playback/player'
 import { downloadTracks } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
 
@@ -19,22 +19,18 @@ const playlist = computed(() => getPlaylist(String(route.params.id)))
 const showRename = ref(false)
 const renameValue = ref('')
 const selectionMode = ref(false)
-const selectedKeys = ref<Set<string>>(new Set())
+const selectedIndexes = ref<Set<number>>(new Set())
 
 const cover = computed(() => playlist.value?.tracks[0]?.artwork ?? '')
 const selectedTracks = computed(() => {
   if (!playlist.value) return []
-  return playlist.value.tracks.filter((track) => selectedKeys.value.has(keyFor(track)))
+  return playlist.value.tracks.filter((_, index) => selectedIndexes.value.has(index))
 })
 const allSelected = computed(
   () =>
     Boolean(playlist.value?.tracks.length) &&
     selectedTracks.value.length === playlist.value?.tracks.length
 )
-
-function keyFor(track: Track): string {
-  return `${track.providerId}\u0000${track.id}`
-}
 
 function openRename(): void {
   if (!playlist.value) return
@@ -77,29 +73,28 @@ function downloadAll(): void {
 
 function enterSelection(): void {
   if (!playlist.value?.tracks.length) return
-  selectedKeys.value = new Set()
+  selectedIndexes.value = new Set()
   selectionMode.value = true
 }
 
 function exitSelection(): void {
   selectionMode.value = false
-  selectedKeys.value = new Set()
+  selectedIndexes.value = new Set()
 }
 
-function toggleSelect(track: Track): void {
+function toggleSelect(index: number): void {
   if (!selectionMode.value) return
-  const next = new Set(selectedKeys.value)
-  const key = keyFor(track)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  selectedKeys.value = next
+  const next = new Set(selectedIndexes.value)
+  if (next.has(index)) next.delete(index)
+  else next.add(index)
+  selectedIndexes.value = next
 }
 
 function toggleSelectAll(): void {
   if (!playlist.value) return
-  selectedKeys.value = allSelected.value
+  selectedIndexes.value = allSelected.value
     ? new Set()
-    : new Set(playlist.value.tracks.map((track) => keyFor(track)))
+    : new Set(playlist.value.tracks.map((_, index) => index))
 }
 
 function batchDownload(): void {
@@ -122,10 +117,10 @@ function batchRemove(): void {
   if (!playlist.value || !selectedTracks.value.length) return
   const count = selectedTracks.value.length
   if (!window.confirm(`从「${playlist.value.name}」移除选中的 ${count} 首歌？`)) return
-  const keys = selectedKeys.value
+  const indexes = selectedIndexes.value
   updatePlaylistTracks(
     playlist.value.id,
-    playlist.value.tracks.filter((track) => !keys.has(keyFor(track)))
+    playlist.value.tracks.filter((_, index) => !indexes.has(index))
   )
   notify(`已从歌单移除 ${count} 首歌`)
   exitSelection()
@@ -167,11 +162,6 @@ onMounted(() => {
 
     <template v-if="playlist">
       <section class="playlist-hero">
-        <div
-          v-if="cover"
-          class="hero-backdrop"
-          :style="{ backgroundImage: `url(${cover})` }"
-        />
         <div class="hero-content">
           <div class="cover">
             <img v-if="cover" :src="cover" alt="" />
@@ -227,16 +217,16 @@ onMounted(() => {
         <div class="song-list">
           <SongRow
             v-for="(track, index) in playlist.tracks"
-            :key="keyFor(track)"
+            :key="`${track.providerId}:${track.id}:${index}`"
             :track="track"
             :index="index"
             :queue="playlist.tracks"
             :playlist-id="playlist.id"
             :selectable="selectionMode"
-            :selected="selectedKeys.has(keyFor(track))"
+            :selected="selectedIndexes.has(index)"
             show-index
             @play="play(index)"
-            @toggle-select="toggleSelect(track)"
+            @toggle-select="toggleSelect(index)"
           />
         </div>
       </template>
@@ -308,6 +298,7 @@ onMounted(() => {
 <style scoped>
 .playlist-page {
   padding-top: 0;
+  overflow-anchor: none;
 }
 .playlist-page.selection-active {
   padding-bottom: calc(var(--nav-height) + var(--mini-height) + 112px);
@@ -324,7 +315,6 @@ onMounted(() => {
   background: var(--surface-solid);
   border-bottom: 1px solid var(--line);
   box-shadow: 0 8px 24px rgba(16, 60, 45, 0.04);
-  backdrop-filter: blur(20px) saturate(150%);
 }
 .header-title {
   display: flex;
@@ -361,25 +351,10 @@ onMounted(() => {
   padding: 15px;
   border-radius: 24px;
   border: 1px solid var(--line);
-  background: var(--surface);
+  background:
+    radial-gradient(120% 160% at 0% 0%, var(--brand-soft), transparent 58%),
+    var(--surface);
   box-shadow: var(--shadow-soft);
-}
-.hero-backdrop {
-  position: absolute;
-  inset: -42px;
-  background-position: center;
-  background-size: cover;
-  filter: blur(28px) saturate(1.25);
-  opacity: 0.24;
-  transform: scale(1.2);
-  pointer-events: none;
-}
-.playlist-hero::after {
-  position: absolute;
-  inset: 0;
-  content: '';
-  background: linear-gradient(135deg, var(--surface-soft), transparent 62%);
-  pointer-events: none;
 }
 .hero-content,
 .hero-actions {

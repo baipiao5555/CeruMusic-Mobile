@@ -53,6 +53,9 @@ export const playerState = reactive({
 
 let audio: HTMLAudioElement | null = null
 let resolveToken = 0
+let startPending = false
+let pendingStartSeek = 0
+let reloadRequired = false
 let blobUrl: string | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let wakeLock: any = null
@@ -66,12 +69,26 @@ function clearLoadTimer(): void {
   }
 }
 
-/** Cancels an in-flight start when the user presses pause before the URL resolves. */
-function cancelPendingStart(): void {
+/** Cancels an in-flight start when the user presses pause before it begins. */
+function cancelPendingStart(): boolean {
+  if (!startPending) return false
+  startPending = false
   resolveToken += 1
   clearLoadTimer()
   playerState.loading = false
   playerState.playing = false
+  // Drop the previous track's source as well: otherwise pressing play again
+  // would resume the old song while the UI already shows the new one.
+  if (audio) {
+    audio.pause()
+    audio.removeAttribute('src')
+    audio.load()
+  }
+  releaseBlob()
+  playerState.currentTime = pendingStartSeek
+  const track = currentTrack()
+  playerState.duration = track?.durationMs ? track.durationMs / 1000 : 0
+  return true
 }
 
 async function syncWakeLock(): Promise<void> {
@@ -125,6 +142,9 @@ export function restorePlayer(): void {
     const saved = JSON.parse(raw)
     if (Array.isArray(saved.queue)) playerState.queue = saved.queue
     if (Number.isInteger(saved.index)) playerState.index = saved.index
+    playerState.index = playerState.queue.length
+      ? Math.max(0, Math.min(playerState.index, playerState.queue.length - 1))
+      : -1
     if (Number.isFinite(saved.volume)) playerState.volume = saved.volume
     if (saved.mode) playerState.mode = saved.mode
     playerState.quality = settingsState.quality
@@ -159,12 +179,14 @@ export function initPlayer(): void {
   })
   audio.addEventListener('pause', () => {
     playerState.playing = false
+    persist()
     void syncWakeLock()
     const track = currentTrack()
     if (track) syncBackgroundAudio(track, false, playerState.currentTime * 1000, playerState.duration * 1000)
   })
   audio.addEventListener('timeupdate', () => {
-    if (!audio) return
+    // Ignore progress from the previous track while a new source is loading.
+    if (!audio || startPending || !audio.getAttribute('src')) return
     playerState.currentTime = audio.currentTime
     updateActiveLyric()
     updatePositionState()
@@ -172,6 +194,8 @@ export function initPlayer(): void {
     if (playerState.playing && now - lastProgressSync > 5000) {
       lastProgressSync = now
       syncBackgroundProgress(playerState.currentTime * 1000, playerState.duration * 1000)
+      // Remember the position so an app restart can resume near where it stopped.
+      persist()
     }
   })
   audio.addEventListener('durationchange', () => {
@@ -292,12 +316,22 @@ function releaseBlob(): void {
 async function startPlayback(track: Track, seekTo = 0): Promise<void> {
   if (!audio) initPlayer()
   const token = ++resolveToken
+  startPending = true
+  pendingStartSeek = seekTo
+  reloadRequired = false
   playerState.loading = true
   playerState.error = ''
   playerState.currentTime = seekTo
   clearLoadTimer()
   loadTimer = setTimeout(() => {
     if (token !== resolveToken || !playerState.loading) return
+    startPending = false
+    if (audio) {
+      audio.pause()
+      audio.removeAttribute('src')
+      audio.load()
+    }
+    releaseBlob()
     playerState.loading = false
     playerState.playing = false
     playerState.error = '加载超时，请重试或切换音源'
@@ -315,6 +349,7 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
     releaseBlob()
     if (url.startsWith('blob:')) blobUrl = url
     audio!.src = url
+    const sourceUrl = audio!.src
     if (seekTo > 0) {
       audio!.addEventListener(
         'loadedmetadata',
@@ -328,11 +363,13 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
     }
     await audio!.play()
     if (token !== resolveToken) {
-      // Pause was pressed while the source was resolving.
-      audio!.pause()
+      // Pause was pressed while the source was resolving. Don't touch a
+      // source that a newer start has already taken over.
+      if (audio!.src === sourceUrl) audio!.pause()
       return
     }
     clearLoadTimer()
+    startPending = false
     playerState.playing = true
     playerState.loading = false
     startBackgroundAudio(
@@ -346,6 +383,13 @@ async function startPlayback(track: Track, seekTo = 0): Promise<void> {
   } catch (error: any) {
     if (token !== resolveToken) return
     clearLoadTimer()
+    startPending = false
+    if (audio) {
+      audio.pause()
+      audio.removeAttribute('src')
+      audio.load()
+    }
+    releaseBlob()
     playerState.loading = false
     playerState.playing = false
     playerState.error = error?.message ?? '播放失败'
@@ -384,11 +428,16 @@ export async function playTrack(track: Track, queue?: Track[]): Promise<void> {
 export async function togglePlay(): Promise<void> {
   const track = currentTrack()
   if (!audio || !track) return
-  // While a track is resolving, the button means "cancel this start".
-  if (playerState.loading) {
+  // While a start is being prepared, the button means "cancel this start".
+  if (startPending) {
     cancelPendingStart()
-    audio.pause()
     updatePositionState()
+    return
+  }
+  // A quality change while paused invalidates the loaded source.
+  if (reloadRequired) {
+    reloadRequired = false
+    await startPlayback(track, playerState.currentTime || 0)
     return
   }
   // After an app restart the restored queue has no audio source. Start the
@@ -411,7 +460,15 @@ export async function togglePlay(): Promise<void> {
 
 export async function resume(): Promise<void> {
   const track = currentTrack()
-  if (audio && track && !audio.getAttribute('src')) {
+  if (!audio || !track) return
+  // A start is already in flight; don't fall back to the previous source.
+  if (startPending) return
+  if (reloadRequired) {
+    reloadRequired = false
+    await startPlayback(track, playerState.currentTime || 0)
+    return
+  }
+  if (!audio.getAttribute('src')) {
     await startPlayback(track, playerState.currentTime || 0)
     return
   }
@@ -499,11 +556,19 @@ export function cycleMode(): void {
 }
 
 export function setQuality(quality: string): void {
+  const changed = playerState.quality !== quality
   playerState.quality = quality
   updateSettings({ quality })
   persist()
+  if (!changed) return
   const track = currentTrack()
-  if (track && playerState.playing) void startPlayback(track, playerState.currentTime)
+  if (!track) return
+  if (playerState.playing || startPending || playerState.loading) {
+    void startPlayback(track, startPending ? pendingStartSeek : playerState.currentTime)
+  } else if (audio?.getAttribute('src')) {
+    // Keep the current position, but reload when playback resumes.
+    reloadRequired = true
+  }
 }
 
 function randomIndex(total: number): number {
@@ -575,12 +640,16 @@ export function removeFromQueue(index: number): void {
   if (index < playerState.index) playerState.index -= 1
   if (wasCurrent) {
     if (!playerState.queue.length) {
+      cancelPendingStart()
+      reloadRequired = false
       playerState.index = -1
       audio?.pause()
       if (audio) {
         audio.removeAttribute('src')
         audio.load()
       }
+      playerState.loading = false
+      playerState.error = ''
       playerState.playing = false
       playerState.currentTime = 0
       playerState.duration = 0
@@ -595,6 +664,8 @@ export function removeFromQueue(index: number): void {
 }
 
 export function clearQueue(): void {
+  cancelPendingStart()
+  reloadRequired = false
   playerState.queue = []
   playerState.index = -1
   audio?.pause()
@@ -602,6 +673,8 @@ export function clearQueue(): void {
     audio.removeAttribute('src')
     audio.load()
   }
+  playerState.loading = false
+  playerState.error = ''
   playerState.playing = false
   playerState.currentTime = 0
   playerState.duration = 0

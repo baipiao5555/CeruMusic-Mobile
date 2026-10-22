@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
@@ -13,7 +13,7 @@ import { handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
 import { registerDownloadHostHooks } from '@/core/downloadHost'
 import { checkForUpdate, updateState } from '@/core/updater'
-import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, currentTrack, refreshBackgroundLyrics, applyPlaybackRate, savePlaybackState } from '@/core/playback/player'
+import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, refreshBackgroundLyrics, applyPlaybackRate, savePlaybackState } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
@@ -22,7 +22,6 @@ import { applyTheme, registerSettingsHostHooks, restoreSettings, settingsState }
 const router = useRouter()
 const route = useRoute()
 const showNav = computed(() => route.path !== '/player')
-const showMini = computed(() => Boolean(currentTrack()) && route.path !== '/player')
 const nativePlatform = Capacitor.isNativePlatform()
 
 async function syncStatusBar(): Promise<void> {
@@ -211,17 +210,6 @@ watch(
   () => void syncStatusBar()
 )
 
-watch(
-  () => route.fullPath,
-  async (path) => {
-    if (!path.startsWith('/playlist/')) return
-    await nextTick()
-    requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>('.playlist-page')?.scrollTo({ top: 0 })
-    })
-  }
-)
-
 onUnmounted(() => {
   window.removeEventListener('touchstart', onTabTouchStart)
   window.removeEventListener('touchend', onTabTouchEnd)
@@ -240,7 +228,7 @@ watch(navigationRequest, (request) => {
 
 <template>
   <ion-app>
-    <div class="app-shell" :class="{ 'has-mini': showMini }">
+    <div class="app-shell">
     <div class="app-bg" />
     <div class="status-scrim" />
     <router-view v-slot="{ Component }">
@@ -248,7 +236,6 @@ watch(navigationRequest, (request) => {
         <component :is="Component" />
       </transition>
     </router-view>
-    <div v-if="showNav || showMini" class="bottom-scrim" />
     <MiniPlayer />
     <BottomNav v-if="showNav" />
 

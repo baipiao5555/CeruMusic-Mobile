@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
-import {
-  deletePlaylist,
-  getPlaylist,
-  renamePlaylist,
-  updatePlaylistTracks
-} from '@/core/library'
+import { deletePlaylist, getPlaylist, renamePlaylist, updatePlaylistTracks } from '@/core/library'
 import { addToQueue, playTracks } from '@/core/playback/player'
 import { downloadTracks } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
@@ -21,7 +16,6 @@ const renameValue = ref('')
 const selectionMode = ref(false)
 const selectedIndexes = ref<Set<number>>(new Set())
 
-const cover = computed(() => playlist.value?.tracks[0]?.artwork ?? '')
 const selectedTracks = computed(() => {
   if (!playlist.value) return []
   return playlist.value.tracks.filter((_, index) => selectedIndexes.value.has(index))
@@ -126,30 +120,20 @@ function batchRemove(): void {
   exitSelection()
 }
 
-watch(
-  () => playlist.value?.id,
-  () => exitSelection()
-)
-
 onMounted(() => {
   // The routed view can reuse the previous page's scroll container.
   requestAnimationFrame(() => {
-    const page = document.querySelector<HTMLElement>('.playlist-page')
-    if (page) page.scrollTop = 0
+    document.querySelector<HTMLElement>('.playlist-page')?.scrollTo({ top: 0 })
   })
 })
 </script>
 
 <template>
   <div class="page playlist-page" :class="{ 'selection-active': selectionMode }">
-    <header class="page-header playlist-header">
+    <header class="page-header">
       <button class="icon-btn" aria-label="返回" @click="router.back()">
         <Icon name="back" :size="20" />
       </button>
-      <div class="header-title">
-        <span>PLAYLIST</span>
-        <strong>{{ playlist?.name || '歌单' }}</strong>
-      </div>
       <div class="header-actions">
         <button class="icon-btn" aria-label="重命名歌单" @click="openRename">
           <Icon name="edit" :size="19" />
@@ -161,76 +145,65 @@ onMounted(() => {
     </header>
 
     <template v-if="playlist">
-      <section class="playlist-hero">
-        <div class="hero-content">
-          <div class="cover">
-            <img v-if="cover" :src="cover" alt="" />
-            <Icon v-else name="music" :size="36" />
-          </div>
-          <div class="meta">
-            <span class="eyebrow">MY PLAYLIST</span>
-            <h1>{{ playlist.name }}</h1>
-            <p>
-              {{ playlist.tracks.length }} 首歌曲<template v-if="playlist.cloudId">
-                · 来自云端</template
-              >
-            </p>
-          </div>
+      <section class="playlist-hero card">
+        <div class="cover">
+          <img v-if="playlist.tracks[0]" :src="playlist.tracks[0].artwork" alt="" />
+          <Icon v-else name="music" :size="34" />
         </div>
-        <div class="hero-actions">
-          <button class="btn" :disabled="!playlist.tracks.length" @click="playAll">
-            <Icon name="play" :size="17" /> 播放全部
-          </button>
-          <button
-            class="btn secondary"
-            :disabled="!playlist.tracks.length"
-            @click="downloadAll"
-          >
-            <Icon name="download" :size="17" /> 下载
-          </button>
-          <button
-            v-if="!selectionMode"
-            class="btn ghost"
-            :disabled="!playlist.tracks.length"
-            @click="enterSelection"
-          >
-            <Icon name="select" :size="17" /> 选择
-          </button>
-          <button v-else class="btn ghost" @click="exitSelection">完成</button>
+        <div class="meta">
+          <h1>{{ playlist.name }}</h1>
+          <p>
+            {{ playlist.tracks.length }} 首歌曲<template v-if="playlist.cloudId"> · 来自云端</template>
+          </p>
+          <div class="hero-actions">
+            <button class="btn" :disabled="!playlist.tracks.length" @click="playAll">
+              <Icon name="play" :size="17" /> 播放全部
+            </button>
+            <button
+              class="btn secondary"
+              :disabled="!playlist.tracks.length"
+              @click="downloadAll"
+            >
+              <Icon name="download" :size="17" /> 下载全部
+            </button>
+            <button
+              v-if="!selectionMode"
+              class="btn ghost"
+              :disabled="!playlist.tracks.length"
+              @click="enterSelection"
+            >
+              <Icon name="select" :size="17" /> 选择
+            </button>
+            <button v-else class="btn ghost" @click="exitSelection">完成</button>
+          </div>
         </div>
       </section>
 
-      <template v-if="playlist.tracks.length">
-        <div class="song-list-head">
-          <div class="song-list-title">
-            <h2>歌曲</h2>
-            <span>{{ playlist.tracks.length }}</span>
-          </div>
-          <button v-if="!selectionMode" class="text-action" @click="enterSelection">
-            <Icon name="select" :size="16" /> 批量选择
-          </button>
-          <button v-else class="text-action" @click="toggleSelectAll">
-            {{ allSelected ? '取消全选' : '全选' }}
-          </button>
-        </div>
+      <div v-if="playlist.tracks.length" class="song-list-toolbar">
+        <span>歌曲 {{ playlist.tracks.length }}</span>
+        <button v-if="!selectionMode" class="toolbar-action" @click="enterSelection">
+          <Icon name="select" :size="15" /> 批量选择
+        </button>
+        <button v-else class="toolbar-action" @click="toggleSelectAll">
+          {{ allSelected ? '取消全选' : '全选' }}
+        </button>
+      </div>
 
-        <div class="song-list">
-          <SongRow
-            v-for="(track, index) in playlist.tracks"
-            :key="`${track.providerId}:${track.id}:${index}`"
-            :track="track"
-            :index="index"
-            :queue="playlist.tracks"
-            :playlist-id="playlist.id"
-            :selectable="selectionMode"
-            :selected="selectedIndexes.has(index)"
-            show-index
-            @play="play(index)"
-            @toggle-select="toggleSelect(index)"
-          />
-        </div>
-      </template>
-
+      <div v-if="playlist.tracks.length" class="song-list">
+        <SongRow
+          v-for="(track, index) in playlist.tracks"
+          :key="`${track.providerId}:${track.id}:${index}`"
+          :track="track"
+          :index="index"
+          :queue="playlist.tracks"
+          :playlist-id="playlist.id"
+          :selectable="selectionMode"
+          :selected="selectedIndexes.has(index)"
+          show-index
+          @play="play(index)"
+          @toggle-select="toggleSelect(index)"
+        />
+      </div>
       <div v-else class="empty">
         <div class="emoji">🎵</div>
         <h3>歌单还是空的</h3>
@@ -245,33 +218,27 @@ onMounted(() => {
       <button class="btn secondary" @click="router.replace('/library')">返回我的</button>
     </div>
 
-    <transition name="selection-rise">
-      <div v-if="selectionMode" class="selection-bar">
-        <button class="selection-cancel" @click="exitSelection">取消</button>
-        <div class="selection-count">
-          <strong>{{ selectedTracks.length }}</strong>
-          <span>已选</span>
-        </div>
-        <div class="selection-actions">
-          <button :disabled="!selectedTracks.length" @click="batchDownload">
-            <Icon name="download" :size="18" />
-            <span>下载</span>
-          </button>
-          <button :disabled="!selectedTracks.length" @click="batchQueue">
-            <Icon name="queue" :size="18" />
-            <span>队列</span>
-          </button>
-          <button
-            class="danger"
-            :disabled="!selectedTracks.length"
-            @click="batchRemove"
-          >
-            <Icon name="trash" :size="18" />
-            <span>移出</span>
-          </button>
-        </div>
+    <div v-if="selectionMode" class="selection-bar">
+      <button class="selection-cancel" @click="exitSelection">取消</button>
+      <div class="selection-count">
+        <strong>{{ selectedTracks.length }}</strong>
+        <span>已选</span>
       </div>
-    </transition>
+      <div class="selection-actions">
+        <button :disabled="!selectedTracks.length" @click="batchDownload">
+          <Icon name="download" :size="18" />
+          <span>下载</span>
+        </button>
+        <button :disabled="!selectedTracks.length" @click="batchQueue">
+          <Icon name="queue" :size="18" />
+          <span>队列</span>
+        </button>
+        <button class="danger" :disabled="!selectedTracks.length" @click="batchRemove">
+          <Icon name="trash" :size="18" />
+          <span>移出</span>
+        </button>
+      </div>
+    </div>
 
     <div v-if="showRename" class="sheet-mask" @click.self="showRename = false">
       <div class="sheet">
@@ -296,116 +263,46 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.playlist-page {
-  padding-top: calc(63px + var(--safe-top));
-  overflow-anchor: none;
-}
-.playlist-page.selection-active {
-  padding-bottom: calc(var(--nav-height) + var(--mini-height) + 112px);
-}
-.playlist-header {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 30;
-  display: grid;
-  grid-template-columns: 42px 1fr 90px;
-  align-items: center;
-  width: 100%;
-  max-width: 620px;
-  margin: 0 auto;
-  padding: calc(10px + var(--safe-top)) 18px 10px;
-  background: var(--surface-solid);
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 8px 24px rgba(16, 60, 45, 0.04);
-}
-.header-title {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-  color: var(--muted-2);
-  line-height: 1.1;
-}
-.header-title span {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.8px;
-}
-.header-title strong {
-  max-width: 190px;
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 650;
-  color: var(--text);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .header-actions {
   display: flex;
-  justify-content: flex-end;
   gap: 6px;
 }
 .playlist-hero {
-  position: relative;
-  overflow: hidden;
-  margin-top: 8px;
-  padding: 15px;
-  border-radius: 24px;
-  border: 1px solid var(--line);
-  background:
-    radial-gradient(120% 160% at 0% 0%, var(--brand-soft), transparent 58%),
-    var(--surface);
-  box-shadow: var(--shadow-soft);
-}
-.hero-content,
-.hero-actions {
-  position: relative;
-  z-index: 1;
-}
-.hero-content {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  gap: 16px;
+  padding: 16px;
 }
-.cover {
+.playlist-hero .cover {
   display: grid;
   place-items: center;
-  width: 100px;
-  height: 100px;
-  flex: 0 0 auto;
-  overflow: hidden;
+  width: 112px;
+  height: 112px;
   border-radius: 20px;
+  overflow: hidden;
   color: var(--brand);
   background: var(--brand-soft);
-  box-shadow: 0 14px 32px rgba(16, 60, 45, 0.18);
+  flex: 0 0 auto;
 }
-.cover img {
+.playlist-hero .cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.meta {
+.playlist-hero .meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   min-width: 0;
 }
-.eyebrow {
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 1.6px;
-  color: var(--muted-2);
-}
-.meta h1 {
-  margin-top: 5px;
-  font-size: 20px;
+.playlist-hero h1 {
+  font-size: 21px;
   line-height: 1.25;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.meta p {
+.playlist-hero p {
   margin-top: 6px;
   font-size: 12px;
   color: var(--muted);
@@ -414,35 +311,17 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 13px;
+  margin-top: 14px;
 }
-.hero-actions .btn {
-  padding: 10px 13px;
-  font-size: 13px;
-}
-.hero-actions .btn:first-child {
-  flex: 1 1 125px;
-}
-.song-list-head {
+.song-list-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin: 20px 4px 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
-.song-list-title {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.song-list-title h2 {
-  font-size: 17px;
-}
-.song-list-title span {
-  font-size: 11px;
-  color: var(--muted-2);
-  font-variant-numeric: tabular-nums;
-}
-.text-action {
+.toolbar-action {
   display: inline-flex;
   align-items: center;
   gap: 3px;
@@ -453,9 +332,12 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 650;
 }
+.playlist-page.selection-active {
+  padding-bottom: calc(var(--nav-height) + var(--mini-height) + 110px);
+}
 .selection-bar {
   position: fixed;
-  bottom: calc(var(--nav-height) + 10px);
+  bottom: calc(var(--nav-height) + var(--mini-height) + 10px);
   left: 50%;
   z-index: 40;
   display: flex;
@@ -476,7 +358,6 @@ onMounted(() => {
   padding: 9px 10px;
   color: var(--muted);
   font-size: 12px;
-  white-space: nowrap;
 }
 .selection-count {
   display: flex;
@@ -485,7 +366,6 @@ onMounted(() => {
   margin-right: auto;
   color: var(--muted);
   font-size: 11px;
-  white-space: nowrap;
 }
 .selection-count strong {
   color: var(--text);
@@ -506,39 +386,11 @@ onMounted(() => {
   border-radius: 12px;
   color: var(--muted);
   font-size: 10px;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.selection-actions button:active {
-  background: var(--brand-softer);
 }
 .selection-actions button.danger {
   color: var(--danger);
 }
 .selection-actions button:disabled {
   opacity: 0.35;
-}
-.selection-rise-enter-active,
-.selection-rise-leave-active {
-  transition: opacity 0.18s ease, transform 0.2s ease;
-}
-.selection-rise-enter-from,
-.selection-rise-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 10px);
-}
-@media (max-width: 360px) {
-  .cover {
-    width: 88px;
-    height: 88px;
-  }
-  .meta h1 {
-    font-size: 19px;
-  }
-  .hero-actions .btn {
-    padding: 10px 12px;
-  }
-  .selection-actions button {
-    width: 46px;
-  }
 }
 </style>

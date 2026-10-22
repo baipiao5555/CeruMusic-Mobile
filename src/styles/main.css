@@ -195,13 +195,9 @@ a {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: calc(18px + var(--safe-top)) 18px calc(var(--nav-height) + 24px);
+  padding: calc(18px + var(--safe-top)) 18px calc(var(--nav-height) + var(--mini-height) + 24px);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-}
-
-.app-shell.has-mini .page {
-  padding-bottom: calc(var(--nav-height) + var(--mini-height) + 24px);
 }
 
 .page.full {
@@ -771,21 +767,6 @@ input[type='search']::-webkit-search-results-decoration {
 
 .mini-player .loading-dots i {
   background: currentColor;
-}
-
-.bottom-scrim {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 22;
-  height: calc(var(--nav-height) + 10px);
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent, var(--bg) 78%);
-}
-
-.app-shell.has-mini .bottom-scrim {
-  height: calc(var(--nav-height) + var(--mini-height) + 10px);
 }
 
 .bottom-nav {

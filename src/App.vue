@@ -18,11 +18,17 @@ import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudi
 import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
 import { applyTheme, registerSettingsHostHooks, restoreSettings, settingsState } from '@/core/settings'
+import { logEvent } from '@/core/logs'
 
 const router = useRouter()
 const route = useRoute()
 const showNav = computed(() => route.path !== '/player')
 const nativePlatform = Capacitor.isNativePlatform()
+
+function openToastAction(toast: { id: number; actionTo?: string }): void {
+  pluginToasts.value = pluginToasts.value.filter((item) => item.id !== toast.id)
+  if (toast.actionTo) void router.push(toast.actionTo)
+}
 
 async function syncStatusBar(): Promise<void> {
   if (!nativePlatform) return
@@ -137,6 +143,7 @@ async function handleDeepLink(url: string): Promise<void> {
 }
 
 onMounted(async () => {
+  logEvent('info', 'APP', '应用启动', `${__APP_VERSION__} · ${Capacitor.getPlatform()}`)
   restoreSettings()
   initSystemInsets()
   window.addEventListener('touchstart', onTabTouchStart, { passive: true })
@@ -246,7 +253,14 @@ watch(navigationRequest, (request) => {
         class="toast"
         :class="toast.level"
       >
-        {{ toast.message }}
+        <span class="toast-message">{{ toast.message }}</span>
+        <button
+          v-if="toast.actionLabel"
+          class="toast-action"
+          @click.stop="openToastAction(toast)"
+        >
+          {{ toast.actionLabel }}
+        </button>
       </div>
     </div>
 

@@ -172,7 +172,7 @@ onMounted(() => {
               :disabled="!playlist.tracks.length"
               @click="enterSelection"
             >
-              <Icon name="select" :size="17" /> 选择
+              选择
             </button>
             <button v-else class="btn ghost" @click="exitSelection">完成</button>
           </div>
@@ -182,7 +182,7 @@ onMounted(() => {
       <div v-if="playlist.tracks.length" class="song-list-toolbar">
         <span>歌曲 {{ playlist.tracks.length }}</span>
         <button v-if="!selectionMode" class="toolbar-action" @click="enterSelection">
-          <Icon name="select" :size="15" /> 批量选择
+          批量选择
         </button>
         <button v-else class="toolbar-action" @click="toggleSelectAll">
           {{ allSelected ? '取消全选' : '全选' }}

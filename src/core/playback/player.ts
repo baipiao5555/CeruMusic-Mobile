@@ -18,6 +18,7 @@ import { toTrack, type Track } from '../track'
 import { matchCloudLyrics } from '../lyrics/cloud'
 import { playableUrl, providerForTrack } from './source'
 import { localUrlFor } from '../downloads'
+import { logEvent } from '../logs'
 
 export type { Track } from '../track'
 export { toTrack }
@@ -260,6 +261,12 @@ export function initPlayer(): void {
     if (!audio?.src) return
     playerState.error = '音频加载失败，请尝试切换音质或音源'
     playerState.playing = false
+    logEvent(
+      'error',
+      'PLAYER',
+      playerState.error,
+      audio?.error ? `MediaError code=${audio.error.code} ${audio.error.message || ''}` : ''
+    )
   })
   if ('mediaSession' in navigator) {
     navigator.mediaSession.setActionHandler('play', () => void resume())
@@ -414,6 +421,7 @@ async function startPlayback(
     playerState.loading = false
     playerState.playing = false
     playerState.error = '加载超时，请重试或切换音源'
+    logEvent('error', 'PLAYER', playerState.error, `歌曲：${track.title} / ${track.artist}`)
   }, 25_000)
   playerState.duration = track.durationMs ? track.durationMs / 1000 : 0
   playerState.lyrics = []
@@ -475,6 +483,12 @@ async function startPlayback(
           (item) => item.id === track.id && item.providerId === track.providerId
         )
         if (index >= 0) playerState.queue[index] = fallback
+        logEvent(
+          'warn',
+          'PLAYER',
+          `「${track.title}」播放失败，已切换到 ${fallback.providerName}`,
+          `原音源：${track.providerName} → ${fallback.providerName}`
+        )
         notify(`「${track.title}」播放失败，已切换到 ${fallback.providerName}`)
         persist()
         await startPlayback(fallback, seekTo, false)
@@ -483,6 +497,12 @@ async function startPlayback(
       playerState.loading = false
     }
     playerState.error = error?.message ?? '播放失败'
+    logEvent(
+      'error',
+      'PLAYER',
+      `播放失败：${track.title} / ${track.artist}`,
+      `音源：${track.providerName}\n${error?.stack || error?.message || error}`
+    )
     throw error
   }
 }
@@ -541,6 +561,7 @@ export async function togglePlay(): Promise<void> {
       await audio.play()
     } catch (error: any) {
       playerState.error = error?.message ?? '播放失败'
+      logEvent('error', 'PLAYER', '继续播放失败', error?.stack || error?.message || error)
     }
   } else {
     audio.pause()

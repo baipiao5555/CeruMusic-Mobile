@@ -852,6 +852,9 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 .toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 11px 16px;
   border-radius: 14px;
   font-size: 13px;
@@ -860,6 +863,22 @@ input[type='search']::-webkit-search-results-decoration {
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
   animation: toast-in 0.24s ease;
+}
+
+.toast-message {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-action {
+  flex: 0 0 auto;
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--brand-strong, var(--brand));
+  font-size: 12px;
+  font-weight: 650;
+  pointer-events: auto;
 }
 
 .toast.warning {

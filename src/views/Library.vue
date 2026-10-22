@@ -12,6 +12,7 @@ import {
 } from '@/core/library'
 import { getHistory, playTracks } from '@/core/playback/player'
 import { allImporters, pluginState } from '@/core/plugin/manager'
+import { logState } from '@/core/logs'
 
 const router = useRouter()
 const tab = ref<'favorites' | 'playlists' | 'recent'>('favorites')
@@ -26,6 +27,7 @@ const playlists = computed(() => libraryState.playlists)
 const history = computed(() => getHistory())
 const runningPlugins = computed(() => pluginState.plugins.filter((plugin) => plugin.running).length)
 const importers = computed(() => allImporters())
+const logErrors = computed(() => logState.entries.filter((entry) => entry.level === 'error').length)
 
 function coverOf(playlist: LocalPlaylist): string | undefined {
   return playlist.tracks[0]?.artwork
@@ -69,9 +71,15 @@ function openImport(): void {
         <div class="brand-name" style="font-size: 23px">我的</div>
         <div class="brand-sub">Library</div>
       </div>
-      <button class="icon-btn" aria-label="设置" @click="router.push('/settings')">
-        <Icon name="settings" :size="21" />
-      </button>
+      <div class="header-actions">
+        <button class="icon-btn log-entry" aria-label="运行日志" @click="router.push('/logs')">
+          <Icon name="scroll-text" :size="20" />
+          <span v-if="logErrors" class="log-dot" />
+        </button>
+        <button class="icon-btn" aria-label="设置" @click="router.push('/settings')">
+          <Icon name="settings" :size="21" />
+        </button>
+      </div>
     </header>
 
     <section class="profile-card card">
@@ -369,5 +377,23 @@ function openImport(): void {
   color: var(--brand);
   background: var(--brand-soft);
   flex: 0 0 auto;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.log-entry {
+  position: relative;
+}
+.log-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e45a44;
+  border: 1.5px solid var(--surface-solid);
 }
 </style>

@@ -4,6 +4,7 @@ import { PluginHost, type PluginHostHooks, type PluginNotice } from './host'
 import { requestRemote } from './network'
 import { idb, sha256Hex } from '../storage/idb'
 import { toTrack, type Track } from '../track'
+import { logEvent } from '../logs'
 
 interface PluginProviderInfo {
   id: string
@@ -57,7 +58,9 @@ export const pluginState = reactive({
   selectedSourcePlugin: {} as Record<string, string>
 })
 
-export const pluginToasts = ref<Array<{ id: number; message: string; level: string }>>([])
+export const pluginToasts = ref<
+  Array<{ id: number; message: string; level: string; actionLabel?: string; actionTo?: string }>
+>([])
 export const permissionRequest = ref<{
   pluginName: string
   name: string
@@ -73,11 +76,25 @@ const hostHooks: Partial<PluginHostHooks> = {}
 
 function showToast(message: string, level = 'info'): void {
   if (!message) return
+  if (level === 'error') logEvent('error', 'UI', message)
+  else if (level === 'warning' || level === 'warn') logEvent('warn', 'UI', message)
   const id = ++toastId
-  pluginToasts.value.push({ id, message, level })
-  setTimeout(() => {
-    pluginToasts.value = pluginToasts.value.filter((item) => item.id !== id)
-  }, 3200)
+  const toast: { id: number; message: string; level: string; actionLabel?: string; actionTo?: string } = {
+    id,
+    message,
+    level
+  }
+  if (level === 'error') {
+    toast.actionLabel = '查看日志'
+    toast.actionTo = '/logs?level=error'
+  }
+  pluginToasts.value.push(toast)
+  setTimeout(
+    () => {
+      pluginToasts.value = pluginToasts.value.filter((item) => item.id !== id)
+    },
+    toast.actionLabel ? 6000 : 3200
+  )
 }
 
 /** General-purpose toast, reusing the plugin toast stack. */

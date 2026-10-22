@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
-import { currentTrack, playerState, togglePlay, next } from '@/core/playback/player'
+import { currentTrack, playerState, togglePlay, next, previous } from '@/core/playback/player'
 
 const router = useRouter()
 const route = useRoute()
@@ -34,6 +34,9 @@ function open(): void {
         <h3>{{ track!.title }}</h3>
         <p>{{ track!.artist }}</p>
       </div>
+      <button class="icon-action" aria-label="上一首" @click.stop="previous">
+        <Icon name="prev" :size="19" />
+      </button>
       <button
         class="icon-action primary"
         aria-label="播放或暂停"

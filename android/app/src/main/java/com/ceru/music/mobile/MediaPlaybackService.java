@@ -260,14 +260,19 @@ public class MediaPlaybackService extends Service {
             }
             if (intent != null) {
                 long next = intent.getLongExtra("position", position);
+                long nativePos = currentPosition();
                 // WebView timers can be throttled in the background and report
                 // an older position after the native ticker already advanced.
                 // Accepting it rewinds the shared lyric timeline to the first
-                // lines. Only a deliberate seek (ACTION_SEEK) may go backwards.
-                if (!playing || next >= currentPosition()) {
+                // lines, so small gaps are clamped forward and only a large
+                // one is treated as noise; real seeks go through ACTION_SEEK.
+                if (!playing || next >= nativePos) {
                     setPosition(next);
+                } else if (next > nativePos - LYRICON_SEEK_JUMP_MS) {
+                    recordDiagnostic("progress", "clamp stale progress " + next + " -> " + nativePos);
+                    setPosition(nativePos);
                 } else {
-                    String message = "ignore stale progress " + next + " < " + currentPosition();
+                    String message = "ignore stale progress " + next + " < " + nativePos;
                     Log.d("CeruLyrics", message);
                     recordDiagnostic("progress", message);
                 }
@@ -311,12 +316,18 @@ public class MediaPlaybackService extends Service {
             pauseOnNoisy = intent.getBooleanExtra("pauseOnNoisy", pauseOnNoisy);
             playing = intent.getBooleanExtra("playing", playing);
             long next = intent.getLongExtra("position", currentPosition());
-            // Start/pause and explicit seeks may set any position; ordinary
-            // updates must not rewind a playing timeline.
-            if (ACTION_START.equals(action) || !playing || next >= currentPosition()) {
+            long nativePos = currentPosition();
+            // Start/pause and explicit seeks may set any position. A plain
+            // update that falls behind the native estimate means the WebView
+            // timer was throttled; clamping forward keeps the shared lyric
+            // timeline moving instead of replaying the first lines.
+            if (ACTION_START.equals(action) || !playing || next >= nativePos) {
                 setPosition(next);
+            } else if (next > nativePos - LYRICON_SEEK_JUMP_MS) {
+                recordDiagnostic("progress", "clamp stale update " + next + " -> " + nativePos);
+                setPosition(nativePos);
             } else {
-                String message = "ignore stale update " + next + " < " + currentPosition();
+                String message = "ignore stale update " + next + " < " + nativePos;
                 Log.d("CeruLyrics", message);
                 recordDiagnostic("progress", message);
             }

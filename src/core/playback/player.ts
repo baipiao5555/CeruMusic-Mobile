@@ -882,11 +882,12 @@ async function loadLyrics(track: Track): Promise<void> {
         if (lines.length) {
           playerState.lyrics = lines
           playerState.lyricSource = 'plugin'
+          const lastLine = lines[lines.length - 1]
           logEvent(
             'info',
             'LYRIC',
             `歌词已加载：${lines.length} 行`,
-            `${lines[0].startTimeMs}ms → ${lines[lines.length - 1].endTimeMs ?? 0}ms`
+            `${lines[0].startTimeMs}ms → ${lastLine.endTimeMs ?? lastLine.startTimeMs}ms；source=plugin`
           )
           syncBackgroundLyrics(track, playerState.lyrics)
           updateActiveLyric()
@@ -903,6 +904,13 @@ async function loadLyrics(track: Track): Promise<void> {
       if (cloud?.lines.length) {
         playerState.lyrics = cloud.lines
         playerState.lyricSource = cloud.source
+        const cloudLast = cloud.lines[cloud.lines.length - 1]
+        logEvent(
+          'info',
+          'LYRIC',
+          `歌词已加载：${cloud.lines.length} 行`,
+          `${cloud.lines[0].startTimeMs}ms → ${cloudLast.endTimeMs ?? cloudLast.startTimeMs}ms；source=${cloud.source}`
+        )
         syncBackgroundLyrics(track, playerState.lyrics)
         updateActiveLyric()
       }

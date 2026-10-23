@@ -187,6 +187,7 @@ export function installLogCapture(): void {
   // Debug builds keep an info-level breadcrumb of every console call so the
   // exported report shows plugin/player chatter that is normally silent.
   if (__DEBUG_LOGS__) {
+    logEvent('info', 'DEBUG', '调试日志已启用：console.log/info/debug 会写入运行日志')
     const originalLog = console.log.bind(console)
     const originalInfo = console.info.bind(console)
     const originalDebug = console.debug.bind(console)

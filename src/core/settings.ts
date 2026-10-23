@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 import { registerHostHooks } from './plugin/manager'
-import { setVerboseConsoleCapture } from './logs'
+import { setLoggingEnabled, setVerboseConsoleCapture } from './logs'
 
 export type AccentColor = 'green' | 'blue' | 'purple' | 'orange'
 
@@ -33,7 +33,9 @@ export interface AppSettings {
   systemLyrics: boolean
   /** Include translations in the shared lyrics. */
   systemLyricsTranslation: boolean
-  /** Debug builds only: capture console.log/info/debug into the run log. */
+  /** Master switch for the in-app run log. */
+  logsEnabled: boolean
+  /** Capture console.log/info/debug into the run log. */
   verboseLogs: boolean
   /** Empty means follow the playback quality. */
   downloadQuality: string
@@ -62,6 +64,7 @@ export const settingsState = reactive<AppSettings>({
   swipeTabs: true,
   systemLyrics: true,
   systemLyricsTranslation: true,
+  logsEnabled: true,
   verboseLogs: false,
   downloadQuality: '',
   downloadConcurrency: 2,
@@ -82,6 +85,7 @@ export function restoreSettings(): void {
     }
   } catch {}
   applyTheme()
+  applyLoggingEnabled()
   applyVerboseLogs()
   persist()
 }
@@ -95,10 +99,17 @@ function persist(): void {
 export function updateSettings(patch: Partial<AppSettings>): void {
   const verboseChanged =
     patch.verboseLogs !== undefined && patch.verboseLogs !== settingsState.verboseLogs
+  const logsChanged =
+    patch.logsEnabled !== undefined && patch.logsEnabled !== settingsState.logsEnabled
   Object.assign(settingsState, patch)
   persist()
   if (patch.theme || patch.accent || patch.lyricScale !== undefined) applyTheme()
+  if (logsChanged) applyLoggingEnabled()
   if (verboseChanged) applyVerboseLogs()
+}
+
+export function applyLoggingEnabled(): void {
+  setLoggingEnabled(settingsState.logsEnabled)
 }
 
 /**

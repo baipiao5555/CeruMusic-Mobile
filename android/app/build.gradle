@@ -13,7 +13,7 @@ android {
         applicationId "com.ceru.music.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 23147
+        versionCode 23999
         versionName "2.3.1-mobile.47"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

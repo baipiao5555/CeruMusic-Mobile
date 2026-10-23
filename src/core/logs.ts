@@ -91,12 +91,23 @@ function trim(): void {
   }
 }
 
+let loggingEnabled = true
+
+/** Master switch for the run log; settings restores it on startup. */
+export function setLoggingEnabled(enabled: boolean): void {
+  if (loggingEnabled === enabled) return
+  if (!enabled) logEvent('info', 'DEBUG', '运行日志已关闭')
+  loggingEnabled = enabled
+  if (enabled) logEvent('info', 'DEBUG', '运行日志已开启')
+}
+
 export function logEvent(
   level: LogLevel,
   module: string,
   message: string,
   detail?: unknown
 ): void {
+  if (!loggingEnabled) return
   try {
     const text = String(message ?? '').trim()
     if (!text) return

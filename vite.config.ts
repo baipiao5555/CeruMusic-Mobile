@@ -8,8 +8,7 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 export default defineConfig({
   plugins: [vue()],
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
-    __DEBUG_LOGS__: JSON.stringify(process.env.VITE_DEBUG_LOGS === '1')
+    __APP_VERSION__: JSON.stringify(pkg.version)
   },
   resolve: {
     alias: {

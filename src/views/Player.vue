@@ -29,6 +29,31 @@ const router = useRouter()
 const track = computed(() => currentTrack())
 const lyricsBox = ref<HTMLElement>()
 const showQueue = ref(false)
+const activeLineCharCount = computed(() => {
+  const index = playerState.activeLyric
+  const line = index >= 0 ? playerState.lyrics[index] : undefined
+  if (!line) return 0
+  const total = lyricChars(line.text).length
+  if (!total) return 0
+  const start = Number(line.startTimeMs) || 0
+  const next = playerState.lyrics[index + 1]
+  let end = Number(line.endTimeMs) || 0
+  if (next && next.startTimeMs > start) {
+    end = end > start ? Math.min(end, next.startTimeMs) : next.startTimeMs
+  }
+  if (end <= start) end = start + 5000
+  // A missing end can otherwise stretch across the whole song; cap the fill
+  // animation so the line still finishes in a reasonable time.
+  end = Math.min(end, start + 15000)
+  const now = playerState.currentTime * 1000
+  if (now <= start) return 0
+  if (now >= end) return total
+  return Math.min(total, Math.floor(((now - start) / (end - start)) * total))
+})
+
+function lyricChars(text: string): string[] {
+  return Array.from(text || '♪')
+}
 const showSettings = ref(false)
 const dragging = ref(false)
 const dragValue = ref(0)
@@ -281,7 +306,15 @@ onUnmounted(() => {
             :class="{ active: index === playerState.activeLyric, passed: index < playerState.activeLyric }"
             @click="lyricSeek(line)"
           >
-            {{ line.text || '♪' }}
+            <template v-if="index === playerState.activeLyric">
+              <span
+                v-for="(char, charIndex) in lyricChars(line.text)"
+                :key="charIndex"
+                class="lyric-char"
+                :class="{ sung: charIndex < activeLineCharCount }"
+              >{{ char }}</span>
+            </template>
+            <template v-else>{{ line.text || '♪' }}</template>
             <span
               v-if="line.translation && settingsState.showLyricTranslation"
               class="translation"
@@ -720,6 +753,14 @@ onUnmounted(() => {
   font-weight: 650;
   transform: scale(1.02);
   text-shadow: 0 0 22px rgba(45, 212, 160, 0.45);
+}
+.lyric-char {
+  color: rgba(255, 255, 255, 0.92);
+  transition: color 0.16s linear, text-shadow 0.16s linear;
+}
+.lyric-char.sung {
+  color: var(--brand);
+  text-shadow: 0 0 12px rgba(45, 212, 160, 0.55);
 }
 .lyric-line .translation {
   display: block;

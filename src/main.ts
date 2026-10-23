@@ -20,8 +20,9 @@ import * as cloud from './core/cloud'
 import * as updater from './core/updater'
 import * as lyrics from './core/lyrics/cloud'
 import { installLogCapture } from './core/logs'
-import { applyVerboseLogs } from './core/settings'
+import { applyVerboseLogs, restoreSettings } from './core/settings'
 
+restoreSettings()
 installLogCapture()
 applyVerboseLogs()
 

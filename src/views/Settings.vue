@@ -15,7 +15,6 @@ import type { AccentColor } from '@/core/settings'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
-const debugLogsEnabled = __DEBUG_LOGS__
 
 const downloads = computed(() => downloadSummary())
 const cloudCount = computed(
@@ -508,14 +507,26 @@ function resetSettings(): void {
         </div>
         <Icon name="chevron" :size="18" class="chev" />
       </button>
-      <div v-if="debugLogsEnabled" class="list-item" style="pointer-events: auto">
+      <div class="list-item" style="pointer-events: auto">
         <div class="info">
-          <h3>详细日志</h3>
-          <p>把 console.log / info / debug 也写入运行日志，排查问题时开启</p>
+          <h3>运行日志</h3>
+          <p>记录错误、播放、插件和歌词共享信息，出问题时方便导出</p>
         </div>
         <button
           class="switch"
-          :class="{ on: settingsState.verboseLogs }"
+          :class="{ on: settingsState.logsEnabled }"
+          aria-label="运行日志"
+          @click="updateSettings({ logsEnabled: !settingsState.logsEnabled })"
+        />
+      </div>
+      <div class="list-item" style="pointer-events: auto">
+        <div class="info">
+          <h3>详细日志</h3>
+          <p>额外记录 console.log / info / debug，排查问题时开启</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.verboseLogs, off: !settingsState.logsEnabled }"
           aria-label="详细日志"
           @click="updateSettings({ verboseLogs: !settingsState.verboseLogs })"
         />

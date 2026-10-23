@@ -1091,30 +1091,42 @@ input[type='search']::-webkit-search-results-decoration {
 .page-forward-leave-active,
 .page-back-enter-active,
 .page-back-leave-active {
-  transition:
-    opacity 0.22s ease,
-    transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+  transform-origin: center center;
   will-change: opacity, transform;
+}
+
+.page-forward-enter-active,
+.page-back-enter-active {
+  transition:
+    opacity 0.24s ease,
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.page-forward-leave-active,
+.page-back-leave-active {
+  transition:
+    opacity 0.16s ease,
+    transform 0.2s cubic-bezier(0.4, 0, 1, 1);
 }
 
 .page-forward-enter-from {
   opacity: 0;
-  transform: translateX(28px);
+  transform: translateX(34px) scale(0.985);
 }
 
 .page-forward-leave-to {
   opacity: 0;
-  transform: translateX(-18px);
+  transform: translateX(-22px) scale(0.99);
 }
 
 .page-back-enter-from {
   opacity: 0;
-  transform: translateX(-28px);
+  transform: translateX(-34px) scale(0.985);
 }
 
 .page-back-leave-to {
   opacity: 0;
-  transform: translateX(18px);
+  transform: translateX(22px) scale(0.99);
 }
 
 @media (prefers-reduced-motion: reduce) {

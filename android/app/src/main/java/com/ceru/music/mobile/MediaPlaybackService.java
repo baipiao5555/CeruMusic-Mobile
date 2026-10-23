@@ -310,7 +310,16 @@ public class MediaPlaybackService extends Service {
             if (intent.hasExtra("artwork")) updateArtwork(intent.getStringExtra("artwork"));
             pauseOnNoisy = intent.getBooleanExtra("pauseOnNoisy", pauseOnNoisy);
             playing = intent.getBooleanExtra("playing", playing);
-            setPosition(intent.getLongExtra("position", currentPosition()));
+            long next = intent.getLongExtra("position", currentPosition());
+            // Start/pause and explicit seeks may set any position; ordinary
+            // updates must not rewind a playing timeline.
+            if (ACTION_START.equals(action) || !playing || next >= currentPosition()) {
+                setPosition(next);
+            } else {
+                String message = "ignore stale update " + next + " < " + currentPosition();
+                Log.d("CeruLyrics", message);
+                recordDiagnostic("progress", message);
+            }
         }
 
         if (ACTION_TOGGLE.equals(action)) {

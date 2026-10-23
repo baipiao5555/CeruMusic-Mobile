@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { registerHostHooks } from './plugin/manager'
+import { setVerboseConsoleCapture } from './logs'
 
 export type AccentColor = 'green' | 'blue' | 'purple' | 'orange'
 
@@ -32,6 +33,8 @@ export interface AppSettings {
   systemLyrics: boolean
   /** Include translations in the shared lyrics. */
   systemLyricsTranslation: boolean
+  /** Debug builds only: capture console.log/info/debug into the run log. */
+  verboseLogs: boolean
   /** Empty means follow the playback quality. */
   downloadQuality: string
   /** How many downloads run at the same time (1-3). */
@@ -59,6 +62,7 @@ export const settingsState = reactive<AppSettings>({
   swipeTabs: true,
   systemLyrics: true,
   systemLyricsTranslation: true,
+  verboseLogs: false,
   downloadQuality: '',
   downloadConcurrency: 2,
   version: 2
@@ -78,6 +82,7 @@ export function restoreSettings(): void {
     }
   } catch {}
   applyTheme()
+  applyVerboseLogs()
   persist()
 }
 
@@ -88,9 +93,20 @@ function persist(): void {
 }
 
 export function updateSettings(patch: Partial<AppSettings>): void {
+  const verboseChanged =
+    patch.verboseLogs !== undefined && patch.verboseLogs !== settingsState.verboseLogs
   Object.assign(settingsState, patch)
   persist()
   if (patch.theme || patch.accent || patch.lyricScale !== undefined) applyTheme()
+  if (verboseChanged) applyVerboseLogs()
+}
+
+/**
+ * Re-applies the verbose console capture. Debug builds wire this at startup
+ * so the switch can be flipped without reinstalling a separate APK.
+ */
+export function applyVerboseLogs(): void {
+  setVerboseConsoleCapture(settingsState.verboseLogs)
 }
 
 const ACCENTS: Record<AccentColor, { brand: string; strong: string; soft: string; softer: string }> = {

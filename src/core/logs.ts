@@ -158,6 +158,46 @@ export function buildLogReport(meta: Record<string, string | number>): string {
   return lines.join('\n')
 }
 
+let verboseOriginals: {
+  log: (...args: unknown[]) => void
+  info: (...args: unknown[]) => void
+  debug: (...args: unknown[]) => void
+} | null = null
+
+/**
+ * Toggles the info-level breadcrumb of every console.log/info/debug call.
+ * Debug builds can flip this at runtime from the settings page; ordinary
+ * builds keep the switch disabled.
+ */
+export function setVerboseConsoleCapture(enabled: boolean): void {
+  if (enabled && !verboseOriginals) {
+    verboseOriginals = {
+      log: console.log.bind(console),
+      info: console.info.bind(console),
+      debug: console.debug.bind(console)
+    }
+    const capture = (level: 'log' | 'info' | 'debug', original: (...args: unknown[]) => void) =>
+      (...args: unknown[]) => {
+        try {
+          logEvent('info', 'CONSOLE', args.map(safeString).join(' '), `console.${level}`)
+        } catch {}
+        original(...args)
+      }
+    console.log = capture('log', verboseOriginals.log)
+    console.info = capture('info', verboseOriginals.info)
+    console.debug = capture('debug', verboseOriginals.debug)
+    logEvent('info', 'DEBUG', '详细日志已开启：console.log/info/debug 会写入运行日志')
+    return
+  }
+  if (!enabled && verboseOriginals) {
+    console.log = verboseOriginals.log
+    console.info = verboseOriginals.info
+    console.debug = verboseOriginals.debug
+    verboseOriginals = null
+    logEvent('info', 'DEBUG', '详细日志已关闭')
+  }
+}
+
 /**
  * Installs global capture once. Console output from plugins and the player is
  * already routed through console.error/warn, so this is enough to keep a
@@ -182,25 +222,6 @@ export function installLogCapture(): void {
       logEvent('warn', 'CONSOLE', args.map(safeString).join(' '))
     } catch {}
     originalWarn(...args)
-  }
-
-  // Debug builds keep an info-level breadcrumb of every console call so the
-  // exported report shows plugin/player chatter that is normally silent.
-  if (__DEBUG_LOGS__) {
-    logEvent('info', 'DEBUG', '调试日志已启用：console.log/info/debug 会写入运行日志')
-    const originalLog = console.log.bind(console)
-    const originalInfo = console.info.bind(console)
-    const originalDebug = console.debug.bind(console)
-    const capture = (level: 'log' | 'info' | 'debug', original: (...args: unknown[]) => void) =>
-      (...args: unknown[]) => {
-        try {
-          logEvent('info', 'CONSOLE', args.map(safeString).join(' '), `console.${level}`)
-        } catch {}
-        original(...args)
-      }
-    console.log = capture('log', originalLog)
-    console.info = capture('info', originalInfo)
-    console.debug = capture('debug', originalDebug)
   }
 
   window.addEventListener('error', (event) => {

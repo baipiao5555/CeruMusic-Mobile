@@ -20,8 +20,10 @@ import * as cloud from './core/cloud'
 import * as updater from './core/updater'
 import * as lyrics from './core/lyrics/cloud'
 import { installLogCapture } from './core/logs'
+import { applyVerboseLogs } from './core/settings'
 
 installLogCapture()
+applyVerboseLogs()
 
 if (import.meta.env.DEV) {
   ;(window as any).__ceruDebug = {

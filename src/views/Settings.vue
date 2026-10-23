@@ -15,6 +15,7 @@ import type { AccentColor } from '@/core/settings'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
+const debugLogsEnabled = __DEBUG_LOGS__
 
 const downloads = computed(() => downloadSummary())
 const cloudCount = computed(
@@ -507,6 +508,18 @@ function resetSettings(): void {
         </div>
         <Icon name="chevron" :size="18" class="chev" />
       </button>
+      <div v-if="debugLogsEnabled" class="list-item" style="pointer-events: auto">
+        <div class="info">
+          <h3>详细日志</h3>
+          <p>把 console.log / info / debug 也写入运行日志，排查问题时开启</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.verboseLogs }"
+          aria-label="详细日志"
+          @click="updateSettings({ verboseLogs: !settingsState.verboseLogs })"
+        />
+      </div>
       <button class="list-item" @click="router.push('/update')">
         <span class="entry-icon"><Icon name="refresh" :size="19" /></span>
         <div class="info">

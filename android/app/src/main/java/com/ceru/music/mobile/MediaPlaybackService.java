@@ -40,8 +40,11 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -51,6 +54,7 @@ public class MediaPlaybackService extends Service {
     public static final String ACTION_START = "com.ceru.music.mobile.action.START";
     public static final String ACTION_UPDATE = "com.ceru.music.mobile.action.UPDATE";
     public static final String ACTION_PROGRESS = "com.ceru.music.mobile.action.PROGRESS";
+    public static final String ACTION_SEEK = "com.ceru.music.mobile.action.SEEK";
     public static final String ACTION_LYRICS = "com.ceru.music.mobile.action.LYRICS";
     public static final String ACTION_STOP = "com.ceru.music.mobile.action.STOP";
     public static final String ACTION_TOGGLE = "com.ceru.music.mobile.action.TOGGLE";
@@ -98,6 +102,27 @@ public class MediaPlaybackService extends Service {
     /** Lyrics can arrive before the foreground service starts; apply them then. */
     private static String pendingLyrics;
 
+    /** Small native breadcrumb buffer exposed through the BackgroundAudio plugin. */
+    private static final int MAX_DIAGNOSTICS = 300;
+    private static final ArrayDeque<String> DIAGNOSTICS = new ArrayDeque<>();
+    private static final Object DIAGNOSTICS_LOCK = new Object();
+    private static final SimpleDateFormat DIAGNOSTICS_TIME =
+            new SimpleDateFormat("HH:mm:ss.SSS", Locale.US);
+
+    private static void recordDiagnostic(String area, String message) {
+        synchronized (DIAGNOSTICS_LOCK) {
+            DIAGNOSTICS.addLast(DIAGNOSTICS_TIME.format(new Date()) + " | " + area + " | " + message);
+            while (DIAGNOSTICS.size() > MAX_DIAGNOSTICS) DIAGNOSTICS.removeFirst();
+        }
+    }
+
+    /** Snapshot of native lyric/playback diagnostics, oldest first. */
+    public static String[] diagnosticsSnapshot() {
+        synchronized (DIAGNOSTICS_LOCK) {
+            return DIAGNOSTICS.toArray(new String[0]);
+        }
+    }
+
     public static void setActionListener(ActionListener listener) {
         actionListener = listener;
     }
@@ -117,6 +142,7 @@ public class MediaPlaybackService extends Service {
     /** 上一次成功同步给 Lyricon 的播放状态与位置。 */
     private Boolean lyriconPlaying;
     private long lyriconPosition = -1;
+    private long lastLyriconDiagnosticAt = 0;
     private final List<LyricLineData> lyricLines = new ArrayList<>();
     private Bitmap artwork;
     private String loadingArtworkUrl = "";
@@ -233,10 +259,36 @@ public class MediaPlaybackService extends Service {
                 return START_NOT_STICKY;
             }
             if (intent != null) {
-                if (intent.hasExtra("position")) setPosition(intent.getLongExtra("position", position));
+                long next = intent.getLongExtra("position", position);
+                // WebView timers can be throttled in the background and report
+                // an older position after the native ticker already advanced.
+                // Accepting it rewinds the shared lyric timeline to the first
+                // lines. Only a deliberate seek (ACTION_SEEK) may go backwards.
+                if (!playing || next >= currentPosition()) {
+                    setPosition(next);
+                } else {
+                    String message = "ignore stale progress " + next + " < " + currentPosition();
+                    Log.d("CeruLyrics", message);
+                    recordDiagnostic("progress", message);
+                }
                 if (intent.hasExtra("duration")) duration = intent.getLongExtra("duration", duration);
             }
             updatePlaybackState();
+            return START_STICKY;
+        }
+
+        if (ACTION_SEEK.equals(action)) {
+            if (!foregroundStarted) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            if (intent != null) {
+                if (intent.hasExtra("position")) setPosition(intent.getLongExtra("position", position));
+                if (intent.hasExtra("duration")) duration = intent.getLongExtra("duration", duration);
+            }
+            recordDiagnostic("seek", "position=" + position + " duration=" + duration);
+            updatePlaybackState();
+            updateTicker();
             return START_STICKY;
         }
 
@@ -468,6 +520,11 @@ public class MediaPlaybackService extends Service {
                 Log.d("CeruLyrics", "timeline " + lyricLines.size() + " lines, "
                         + (lyricLines.isEmpty() ? 0 : lyricLines.get(0).start) + ".."
                         + (lyricLines.isEmpty() ? 0 : lyricLines.get(lyricLines.size() - 1).end));
+                recordDiagnostic("lyrics", "song=" + mediaId
+                        + " lines=" + lyricLines.size()
+                        + " first=" + (lyricLines.isEmpty() ? 0 : lyricLines.get(0).start)
+                        + " last=" + (lyricLines.isEmpty() ? 0 : lyricLines.get(lyricLines.size() - 1).end)
+                        + " enabled=" + lyricsEnabled);
             }
         } catch (Exception ignored) {
         }
@@ -544,6 +601,8 @@ public class MediaPlaybackService extends Service {
             player.setDisplayTranslation(lyricsTranslation);
             player.setDisplayRoma(false);
             player.setSong(song);
+            recordDiagnostic("lyricon", "setSong lines=" + lines.size()
+                    + " id=" + song.getId() + " duration=" + song.getDuration());
             try {
                 player.setPositionUpdateInterval((int) LYRICON_TICK_MS);
             } catch (Throwable ignored) {
@@ -561,6 +620,8 @@ public class MediaPlaybackService extends Service {
     private void clearLyriconSong() {
         lyriconPlaying = null;
         lyriconPosition = -1;
+        lastLyriconDiagnosticAt = 0;
+        recordDiagnostic("lyricon", "clear song");
         mainHandler.removeCallbacks(lyricTicker);
         if (lyriconProvider == null) return;
         try {
@@ -587,25 +648,21 @@ public class MediaPlaybackService extends Service {
         try {
             RemotePlayer player = lyriconProvider.getPlayer();
             long position = currentPosition();
+            long now = SystemClock.elapsedRealtime();
+            if (force || now - lastLyriconDiagnosticAt >= 5000) {
+                lastLyriconDiagnosticAt = now;
+                recordDiagnostic("position", "pos=" + position + " playing=" + playing
+                        + " lines=" + lyricLines.size());
+            }
             boolean stateChanged = force || lyriconPlaying == null || lyriconPlaying != playing;
             if (stateChanged) {
                 lyriconPlaying = playing;
                 try {
+                    // 手动位置模式：中心服务按 setPositionUpdateInterval 读取
+                    // 下面写入的共享内存位置，不再根据 PlaybackState 自行外推。
                     player.setPlaybackState(playing);
                 } catch (Throwable ignored) {
                 }
-            }
-            // 让中心服务在两次推送之间按速度自行外推，避免 500ms 一跳。
-            try {
-                player.setPlaybackState(new PlaybackState.Builder()
-                        .setState(
-                                playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
-                                position,
-                                playing ? 1.0f : 0.0f,
-                                SystemClock.elapsedRealtime()
-                        )
-                        .build());
-            } catch (Throwable ignored) {
             }
             // 位置必须是最后一个动作；跳变时先明确告诉中心服务这是一次 seek。
             if (lyriconPosition >= 0

@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { routeDirection } from './transition'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -21,6 +22,13 @@ const router = createRouter({
   scrollBehavior() {
     return { top: 0 }
   }
+})
+
+let lastHistoryPosition = Number(window.history.state?.position) || 0
+router.afterEach(() => {
+  const position = Number(window.history.state?.position) || 0
+  routeDirection.value = position < lastHistoryPosition ? 'back' : 'forward'
+  lastHistoryPosition = position
 })
 
 export default router

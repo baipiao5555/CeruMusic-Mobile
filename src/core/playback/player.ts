@@ -8,6 +8,7 @@ import {
 } from '../plugin/manager'
 import { settingsState, updateSettings } from '../settings'
 import {
+  seekBackgroundAudio,
   startBackgroundAudio,
   stopBackgroundAudio,
   syncBackgroundAudio,
@@ -201,14 +202,20 @@ export function initPlayer(): void {
     playerState.playing = true
     void syncWakeLock()
     const track = currentTrack()
-    if (track) syncBackgroundAudio(track, true, playerState.currentTime * 1000, playerState.duration * 1000)
+    if (track) {
+      const position = Number.isFinite(audio!.currentTime) ? audio!.currentTime : playerState.currentTime
+      syncBackgroundAudio(track, true, position * 1000, playerState.duration * 1000)
+    }
   })
   audio.addEventListener('pause', () => {
     playerState.playing = false
     persist()
     void syncWakeLock()
     const track = currentTrack()
-    if (track) syncBackgroundAudio(track, false, playerState.currentTime * 1000, playerState.duration * 1000)
+    if (track) {
+      const position = Number.isFinite(audio!.currentTime) ? audio!.currentTime : playerState.currentTime
+      syncBackgroundAudio(track, false, position * 1000, playerState.duration * 1000)
+    }
   })
   audio.addEventListener('timeupdate', () => {
     // Ignore progress from the previous track while a new source is loading.
@@ -604,9 +611,8 @@ export function seek(time: number): void {
     playerState.currentTime = value
     updateActiveLyric()
     updatePositionState()
-    const track = currentTrack()
-    if (track) {
-      syncBackgroundAudio(track, playerState.playing, value * 1000, (duration || 0) * 1000)
+    if (currentTrack()) {
+      seekBackgroundAudio(value * 1000, (duration || 0) * 1000)
     }
   } catch {}
 }
@@ -825,13 +831,19 @@ function normalizePluginLyrics(document: any): LyricLine[] {
       )
       const rawEnd = Number(line.endTimeMs)
       const translation = String(line.translation ?? line.translations?.[0]?.text ?? '').trim()
+      // Some plugins only fill the word list and leave the line text empty;
+      // dropping those lines makes Lyricon fall back to the first few lines.
+      const wordText = words
+        .map((word: any) => String(word?.text ?? ''))
+        .join('')
+        .trim()
       return {
         startTimeMs,
         endTimeMs:
           Number.isFinite(rawEnd) && rawEnd + offset > startTimeMs
             ? Math.max(0, rawEnd + offset)
             : undefined,
-        text: String(line.text ?? '').trim(),
+        text: String(line.text ?? '').trim() || wordText,
         translation: translation || undefined
       }
     })

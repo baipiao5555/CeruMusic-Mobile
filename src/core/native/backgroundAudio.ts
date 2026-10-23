@@ -16,6 +16,8 @@ interface BackgroundAudioPlugin {
   start(options: BackgroundAudioOptions): Promise<void>
   update(options: BackgroundAudioOptions): Promise<void>
   progress(options: { position: number; duration: number }): Promise<void>
+  seek(options: { position: number; duration: number }): Promise<void>
+  diagnostics(): Promise<{ entries: string[] }>
   lyrics(options: { payload: string }): Promise<void>
   stop(): Promise<void>
   addListener(
@@ -76,6 +78,26 @@ export function syncBackgroundProgress(positionMs: number, durationMs: number): 
     position: Math.max(0, Math.round(positionMs)),
     duration: Math.max(0, Math.round(durationMs))
   }).catch(() => undefined)
+}
+
+/** Explicit seek: tells the native service a backwards position is intentional. */
+export function seekBackgroundAudio(positionMs: number, durationMs: number): void {
+  if (!isNativePlatform) return
+  void BackgroundAudio.seek({
+    position: Math.max(0, Math.round(positionMs)),
+    duration: Math.max(0, Math.round(durationMs))
+  }).catch(() => undefined)
+}
+
+/** Native lyric/playback breadcrumbs for the in-app log report. */
+export async function readNativeDiagnostics(): Promise<string[]> {
+  if (!isNativePlatform) return []
+  try {
+    const result = await BackgroundAudio.diagnostics()
+    return Array.isArray(result?.entries) ? result.entries.map(String) : []
+  } catch {
+    return []
+  }
 }
 
 export interface BackgroundLyricLine {

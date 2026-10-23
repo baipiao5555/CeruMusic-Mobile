@@ -184,6 +184,24 @@ export function installLogCapture(): void {
     originalWarn(...args)
   }
 
+  // Debug builds keep an info-level breadcrumb of every console call so the
+  // exported report shows plugin/player chatter that is normally silent.
+  if (__DEBUG_LOGS__) {
+    const originalLog = console.log.bind(console)
+    const originalInfo = console.info.bind(console)
+    const originalDebug = console.debug.bind(console)
+    const capture = (level: 'log' | 'info' | 'debug', original: (...args: unknown[]) => void) =>
+      (...args: unknown[]) => {
+        try {
+          logEvent('info', 'CONSOLE', args.map(safeString).join(' '), `console.${level}`)
+        } catch {}
+        original(...args)
+      }
+    console.log = capture('log', originalLog)
+    console.info = capture('info', originalInfo)
+    console.debug = capture('debug', originalDebug)
+  }
+
   window.addEventListener('error', (event) => {
     logEvent(
       'error',

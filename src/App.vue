@@ -19,6 +19,7 @@ import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
 import { applyTheme, registerSettingsHostHooks, restoreSettings, settingsState } from '@/core/settings'
 import { logEvent } from '@/core/logs'
+import { routeDirection } from '@/router/transition'
 
 const router = useRouter()
 const route = useRoute()
@@ -239,7 +240,7 @@ watch(navigationRequest, (request) => {
     <div class="app-bg" />
     <div class="status-scrim" />
     <router-view v-slot="{ Component }">
-      <transition name="fade" mode="out-in">
+      <transition :name="routeDirection === 'back' ? 'page-back' : 'page-forward'" mode="out-in">
         <component :is="Component" />
       </transition>
     </router-view>

@@ -5,6 +5,7 @@ import android.content.Intent;
 
 import androidx.core.content.ContextCompat;
 
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -51,6 +52,28 @@ public class BackgroundAudioPlugin extends Plugin {
         intent.putExtra("duration", call.getLong("duration", 0L));
         context.startService(intent);
         call.resolve();
+    }
+
+    @PluginMethod
+    public void seek(PluginCall call) {
+        Context context = getContext();
+        Intent intent = new Intent(context, MediaPlaybackService.class)
+                .setAction(MediaPlaybackService.ACTION_SEEK);
+        intent.putExtra("position", call.getLong("position", 0L));
+        intent.putExtra("duration", call.getLong("duration", 0L));
+        context.startService(intent);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void diagnostics(PluginCall call) {
+        JSArray entries = new JSArray();
+        for (String entry : MediaPlaybackService.diagnosticsSnapshot()) {
+            entries.put(entry);
+        }
+        JSObject result = new JSObject();
+        result.put("entries", entries);
+        call.resolve(result);
     }
 
     @PluginMethod

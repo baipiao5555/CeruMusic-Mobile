@@ -1086,3 +1086,48 @@ input[type='search']::-webkit-search-results-decoration {
 .fade-leave-to {
   opacity: 0;
 }
+
+.page-forward-enter-active,
+.page-forward-leave-active,
+.page-back-enter-active,
+.page-back-leave-active {
+  transition:
+    opacity 0.22s ease,
+    transform 0.26s cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: opacity, transform;
+}
+
+.page-forward-enter-from {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+.page-forward-leave-to {
+  opacity: 0;
+  transform: translateX(-18px);
+}
+
+.page-back-enter-from {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.page-back-leave-to {
+  opacity: 0;
+  transform: translateX(18px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-forward-enter-active,
+  .page-forward-leave-active,
+  .page-back-enter-active,
+  .page-back-leave-active {
+    transition: opacity 0.12s ease;
+  }
+  .page-forward-enter-from,
+  .page-forward-leave-to,
+  .page-back-enter-from,
+  .page-back-leave-to {
+    transform: none;
+  }
+}

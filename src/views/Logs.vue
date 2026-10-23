@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import Icon from '@/components/Icon.vue'
@@ -7,6 +7,7 @@ import { buildLogReport, clearLogs, logCounts, logState, type LogLevel } from '@
 import { notify } from '@/core/plugin/manager'
 import { pluginState } from '@/core/plugin/manager'
 import { authState } from '@/core/auth'
+import { readNativeDiagnostics } from '@/core/native/backgroundAudio'
 
 const router = useRouter()
 const route = useRoute()
@@ -20,6 +21,11 @@ const platformName =
     : Capacitor.getPlatform()
 const initialLevel = route.query.level === 'error' ? 'error' : 'all'
 const filter = ref<'all' | LogLevel>(initialLevel)
+const nativeEntries = ref<string[]>([])
+
+onMounted(async () => {
+  nativeEntries.value = await readNativeDiagnostics()
+})
 
 const counts = computed(() => logCounts())
 const entries = computed(() =>
@@ -63,7 +69,12 @@ function reportMeta(): Record<string, string> {
 }
 
 function makeReport(): string {
-  return buildLogReport(reportMeta())
+  let report = buildLogReport(reportMeta())
+  if (nativeEntries.value.length) {
+    report += `\n\n原生歌词 / 播放日志: ${nativeEntries.value.length} 条\n${'-'.repeat(42)}\n`
+    report += nativeEntries.value.join('\n')
+  }
+  return report
 }
 
 async function copyText(text: string): Promise<void> {
@@ -130,7 +141,7 @@ function clearAll(): void {
       <div class="summary-icon"><Icon name="smartphone" :size="24" /></div>
       <div class="summary-info">
         <h2>{{ appVersion }} · {{ platformName }}</h2>
-        <p>{{ counts.total }} 条日志<template v-if="counts.errors"> · {{ counts.errors }} 条错误</template><template v-if="counts.warns"> · {{ counts.warns }} 条警告</template></p>
+        <p>{{ counts.total }} 条日志<template v-if="counts.errors"> · {{ counts.errors }} 条错误</template><template v-if="counts.warns"> · {{ counts.warns }} 条警告</template><template v-if="nativeEntries.length"> · 原生 {{ nativeEntries.length }} 条</template></p>
       </div>
       <span v-if="counts.errors" class="error-badge">{{ counts.errors }} 错误</span>
     </section>
@@ -166,13 +177,19 @@ function clearAll(): void {
       <p>出问题时日志会自动记录在这里，可以直接复制或分享给开发者。</p>
     </div>
 
+    <section v-if="nativeEntries.length" class="native-card card">
+      <h3>原生歌词 / 播放日志</h3>
+      <p>来自 Android 播放服务，记录歌词行数、播放位置刷新和跳转，导出时会附在报告末尾。</p>
+      <pre v-for="(entry, index) in nativeEntries" :key="index">{{ entry }}</pre>
+    </section>
+
     <p class="footnote">日志只保存在本机，最多保留 1000 条；不记录账号密码、Cookie 和完整请求参数。</p>
 
     <div class="log-actions">
-      <button class="btn secondary" :disabled="!counts.total" @click="copyAll">
+      <button class="btn secondary" :disabled="!counts.total && !nativeEntries.length" @click="copyAll">
         <Icon name="copy" :size="17" /> 复制全部
       </button>
-      <button class="btn" :disabled="!counts.total" @click="shareLogs">
+      <button class="btn" :disabled="!counts.total && !nativeEntries.length" @click="shareLogs">
         <Icon name="share" :size="17" /> 导出并分享
       </button>
     </div>
@@ -318,6 +335,31 @@ function clearAll(): void {
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.native-card {
+  margin-top: 14px;
+  padding: 12px 13px;
+}
+.native-card h3 {
+  font-size: 13px;
+}
+.native-card p {
+  margin: 4px 0 8px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+.native-card pre {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 9.5px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.native-card pre:last-child {
+  margin-bottom: 0;
 }
 .footnote {
   margin: 14px 4px 0;

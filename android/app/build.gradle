@@ -13,8 +13,8 @@ android {
         applicationId "com.ceru.music.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 23145
-        versionName "2.3.1-mobile.45"
+        versionCode 23146
+        versionName "2.3.1-mobile.46"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

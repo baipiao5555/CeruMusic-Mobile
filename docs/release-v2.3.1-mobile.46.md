@@ -55,8 +55,8 @@
 同一 Release 下另附一个 debug 日志版，使用相同 release 签名，可以直接覆盖安装：
 
 - 文件：`CeruMusic-Mobile-v2.3.1-mobile.46-debug.apk`
-- 大小：<!-- DEBUG_SIZE --> 字节
-- SHA-256：`<!-- DEBUG_SHA256 -->`
+- 大小：5684818 字节
+- SHA-256：`3ed112c1abca55d292e4754a9814dc04399ab56c65244db3a4562a65f78e4178`
 - 额外捕获 `console.log/info/debug`，安装后打开「我的 → 运行日志」即可看到完整日志
 - 功能与正式版一致，只是日志更多；复现问题后建议用这个包导出日志
 

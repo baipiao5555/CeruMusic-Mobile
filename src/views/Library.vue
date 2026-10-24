@@ -15,6 +15,7 @@ import { allImporters, pluginState } from '@/core/plugin/manager'
 import { logState } from '@/core/logs'
 
 const router = useRouter()
+const appVersion = __APP_VERSION__
 const tab = ref<'favorites' | 'playlists' | 'recent'>('favorites')
 const showCreate = ref(false)
 const playlistName = ref('')
@@ -200,7 +201,7 @@ function openImport(): void {
         <span class="entry-icon"><Icon name="info" :size="19" /></span>
         <div class="info">
           <h3>关于澜音</h3>
-          <p>CeruMusic 手机版 · 2.3.1-mobile.5</p>
+          <p>CeruMusic 手机版 · {{ appVersion }}</p>
         </div>
         <Icon name="chevron" :size="18" class="chev" />
       </button>
@@ -228,7 +229,7 @@ function openImport(): void {
           基于 CeruMusic v2.3.1 移植的 Android 移动端。沿用澜音 v2 插件协议，
           由插件提供音乐信息与播放地址，应用本身不存储任何音乐文件。
         </p>
-        <p class="sub">版本 2.3.1-mobile.2 · 插件协议 2.0</p>
+        <p class="sub">版本 {{ appVersion }} · 插件协议 2.0</p>
         <div class="sheet-actions">
           <button class="btn" @click="showAbout = false">知道了</button>
         </div>

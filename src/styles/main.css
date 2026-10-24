@@ -25,6 +25,17 @@
   --danger: #e5484d;
   --nav-bg: rgba(255, 255, 255, 0.94);
   --nav-shadow: 0 -8px 28px rgba(16, 60, 45, 0.05);
+  /* Miuix navigation programmatic settle: baked critically-damped spring
+     (response .8, damping .95) played over a 500ms tween. */
+  --nav-ease: linear(
+    0, 0.0081, 0.03, 0.0621, 0.1017, 0.1465, 0.1946, 0.2446, 0.2952, 0.3455,
+    0.3948, 0.4426, 0.4884, 0.5319, 0.5731, 0.6117, 0.6478, 0.6813, 0.7123,
+    0.7408, 0.7671, 0.7911, 0.813, 0.833, 0.8511, 0.8674, 0.8822, 0.8956,
+    0.9075, 0.9183, 0.9279, 0.9365, 0.9442, 0.951, 0.9571, 0.9625, 0.9672,
+    0.9715, 0.9752, 0.9784, 0.9813, 0.9839, 0.9861, 0.988, 0.9897, 0.9912,
+    0.9925, 0.9936, 0.9945, 0.9954, 0.9961, 0.9967, 0.9973, 0.9977, 0.9981,
+    0.9984, 0.9987, 0.999, 0.9992, 1
+  );
 
   --ion-font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', Roboto, sans-serif;
@@ -1087,6 +1098,9 @@ input[type='search']::-webkit-search-results-decoration {
   opacity: 0;
 }
 
+/* Miuix / MeiloX navigation: the top page slides a full width from the
+   trailing edge with its leading corners clipped, while the page below
+   parallaxes a quarter width, dims and keeps a slight transparency. */
 .page-forward-enter-active,
 .page-forward-leave-active,
 .page-back-enter-active,
@@ -1095,26 +1109,24 @@ input[type='search']::-webkit-search-results-decoration {
   inset: 0;
   background: var(--bg);
   backface-visibility: hidden;
-  will-change: transform;
-  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform, opacity, filter;
 }
 
-/* Native-style push: the incoming page covers the old one, while the old
-   page drifts a little for depth. Pages stay fully opaque, so no ghosting. */
-.page-forward-enter-active {
-  z-index: 2;
-}
-
-.page-forward-leave-active {
-  z-index: 1;
-}
-
-.page-back-enter-active {
-  z-index: 1;
-}
-
+.page-forward-enter-active,
 .page-back-leave-active {
   z-index: 2;
+  overflow: hidden;
+  border-radius: 24px 0 0 24px;
+  transition: transform 0.5s var(--nav-ease);
+}
+
+.page-forward-leave-active,
+.page-back-enter-active {
+  z-index: 1;
+  transition:
+    transform 0.5s var(--nav-ease),
+    opacity 0.5s var(--nav-ease),
+    filter 0.5s var(--nav-ease);
 }
 
 .page-forward-enter-from {
@@ -1122,11 +1134,15 @@ input[type='search']::-webkit-search-results-decoration {
 }
 
 .page-forward-leave-to {
-  transform: translate3d(-26%, 0, 0);
+  transform: translate3d(-25%, 0, 0);
+  opacity: 0.9;
+  filter: brightness(0.55);
 }
 
 .page-back-enter-from {
-  transform: translate3d(-26%, 0, 0);
+  transform: translate3d(-25%, 0, 0);
+  opacity: 0.9;
+  filter: brightness(0.55);
 }
 
 .page-back-leave-to {
@@ -1138,6 +1154,7 @@ input[type='search']::-webkit-search-results-decoration {
   .page-forward-leave-active,
   .page-back-enter-active,
   .page-back-leave-active {
+    border-radius: 0;
     transition: opacity 0.12s ease;
   }
   .page-forward-enter-from,
@@ -1145,5 +1162,7 @@ input[type='search']::-webkit-search-results-decoration {
   .page-back-enter-from,
   .page-back-leave-to {
     transform: none;
+    filter: none;
+    opacity: 0;
   }
 }

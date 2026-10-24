@@ -161,11 +161,17 @@ function applyLyricScale(): void {
   document.documentElement.style.setProperty('--lyric-scale', String(scale))
 }
 
+/** Android reports night mode through the SystemBars plugin; WebView media queries lag. */
+let nativeDarkOverride: boolean | null = null
+
+export function setNativeDarkOverride(dark: boolean | null): void {
+  nativeDarkOverride = dark
+}
+
 export function applyTheme(): void {
-  const dark =
-    settingsState.theme === 'dark' ||
-    (settingsState.theme === 'system' &&
-      window.matchMedia?.('(prefers-color-scheme: dark)').matches)
+  const systemDark =
+    nativeDarkOverride ?? window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  const dark = settingsState.theme === 'dark' || (settingsState.theme === 'system' && systemDark)
   document.documentElement.dataset.theme = dark ? 'dark' : 'light'
   document.documentElement.classList.toggle('dark', dark)
   applyAccent()

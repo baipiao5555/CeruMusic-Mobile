@@ -15,9 +15,21 @@ import { registerDownloadHostHooks } from '@/core/downloadHost'
 import { checkForUpdate, updateState } from '@/core/updater'
 import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, refreshBackgroundLyrics, applyPlaybackRate, savePlaybackState } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
-import { applyNavigationBar, applySystemInsets, initSystemInsets } from '@/core/native/systemBars'
+import {
+  applyNavigationBar,
+  applySystemInsets,
+  getNativeTheme,
+  initSystemInsets,
+  onNativeThemeChange
+} from '@/core/native/systemBars'
 import { registerLibraryHostHooks, restoreLibrary } from '@/core/library'
-import { applyTheme, registerSettingsHostHooks, restoreSettings, settingsState } from '@/core/settings'
+import {
+  applyTheme,
+  registerSettingsHostHooks,
+  restoreSettings,
+  setNativeDarkOverride,
+  settingsState
+} from '@/core/settings'
 import { logEvent } from '@/core/logs'
 import { routeDirection } from '@/router/transition'
 
@@ -57,6 +69,25 @@ function scheduleStatusBarSync(): void {
       void syncStatusBar()
     } else {
       savePlaybackState()
+    }
+  })
+}
+
+function initNativeTheme(): void {
+  if (!nativePlatform) return
+  void getNativeTheme().then((dark) => {
+    if (dark === null) return
+    setNativeDarkOverride(dark)
+    if (settingsState.theme === 'system') {
+      applyTheme()
+      void syncStatusBar()
+    }
+  })
+  onNativeThemeChange((dark) => {
+    setNativeDarkOverride(dark)
+    if (settingsState.theme === 'system') {
+      applyTheme()
+      void syncStatusBar()
     }
   })
 }
@@ -147,6 +178,7 @@ onMounted(async () => {
   logEvent('info', 'APP', '应用启动', `${__APP_VERSION__} · ${Capacitor.getPlatform()}`)
   restoreSettings()
   initSystemInsets()
+  initNativeTheme()
   window.addEventListener('touchstart', onTabTouchStart, { passive: true })
   window.addEventListener('touchend', onTabTouchEnd, { passive: true })
   void initAuth()
@@ -240,7 +272,7 @@ watch(navigationRequest, (request) => {
     <div class="app-bg" />
     <div class="status-scrim" />
     <router-view v-slot="{ Component }">
-      <transition :name="routeDirection === 'back' ? 'page-back' : 'page-forward'" mode="out-in">
+      <transition :name="routeDirection === 'back' ? 'page-back' : 'page-forward'">
         <component :is="Component" />
       </transition>
     </router-view>

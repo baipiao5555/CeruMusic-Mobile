@@ -1,5 +1,7 @@
 package com.ceru.music.mobile;
 
+import android.content.ComponentCallbacks;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
 import android.view.View;
@@ -16,6 +18,52 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 
 @CapacitorPlugin(name = "SystemBars")
 public class SystemBarsPlugin extends Plugin {
+    private ComponentCallbacks themeCallbacks;
+    private Boolean lastDarkMode;
+
+    @Override
+    public void load() {
+        themeCallbacks = new ComponentCallbacks() {
+            @Override
+            public void onConfigurationChanged(Configuration newConfig) {
+                boolean dark = isDark(newConfig);
+                if (lastDarkMode != null && lastDarkMode == dark) return;
+                lastDarkMode = dark;
+                JSObject payload = new JSObject();
+                payload.put("dark", dark);
+                notifyListeners("themeChanged", payload);
+            }
+
+            @Override
+            public void onLowMemory() {
+            }
+        };
+        lastDarkMode = isDark(getContext().getResources().getConfiguration());
+        getContext().getApplicationContext().registerComponentCallbacks(themeCallbacks);
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        if (themeCallbacks != null) {
+            getContext().getApplicationContext().unregisterComponentCallbacks(themeCallbacks);
+            themeCallbacks = null;
+        }
+        super.handleOnDestroy();
+    }
+
+    /** Current system night-mode flag; CSS prefers-color-scheme is unreliable in WebView. */
+    @PluginMethod
+    public void getTheme(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("dark", isDark(getContext().getResources().getConfiguration()));
+        call.resolve(result);
+    }
+
+    private static boolean isDark(Configuration configuration) {
+        return (configuration.uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
+    }
+
     /**
      * 返回 WebView 实际被系统栏遮挡的高度（CSS px）。
      * 只计算 WebView 真正延伸到状态栏/导航栏下方的那一部分，避免重复留白。

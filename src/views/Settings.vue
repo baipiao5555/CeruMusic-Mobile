@@ -531,20 +531,6 @@ function resetSettings(): void {
           @click="updateSettings({ verboseLogs: !settingsState.verboseLogs })"
         />
       </div>
-      <button class="list-item" @click="router.push('/update')">
-        <span class="entry-icon"><Icon name="refresh" :size="19" /></span>
-        <div class="info">
-          <h3>检查更新</h3>
-          <p>
-            当前 {{ appVersion
-            }}<template v-if="updateState.hasUpdate">
-              · <span class="update-badge">发现 {{ updateState.latest?.tag }}</span></template
-            >
-          </p>
-        </div>
-        <span v-if="updateState.hasUpdate" class="dot" />
-        <Icon name="chevron" :size="18" class="chev" />
-      </button>
       <button class="list-item" @click="clearPlaybackData">
         <span class="entry-icon"><Icon name="trash" :size="19" /></span>
         <div class="info">
@@ -564,16 +550,32 @@ function resetSettings(): void {
     </div>
 
     <div class="section-title settings-section">
-      <h2>关于</h2>
-      <span>版本信息</span>
+      <h2>关于澜音</h2>
+      <span>版本与更新</span>
     </div>
     <div class="card about-card">
       <img src="/logo.png" alt="" />
       <div>
         <h3>澜音 · CeruMusic 手机版</h3>
-        <p>版本 {{ appVersion }}</p>
+        <p>当前版本 {{ appVersion }}</p>
         <p>插件协议 v2.0 · Android</p>
       </div>
+    </div>
+    <div class="list-group about-actions">
+      <button class="list-item" @click="router.push('/update')">
+        <span class="entry-icon"><Icon name="refresh" :size="19" /></span>
+        <div class="info">
+          <h3>检查更新</h3>
+          <p>
+            <template v-if="updateState.hasUpdate">
+              <span class="update-badge">发现新版本 {{ updateState.latest?.tag }}</span>
+            </template>
+            <template v-else>已安装 {{ appVersion }}，点击检查新版本</template>
+          </p>
+        </div>
+        <span v-if="updateState.hasUpdate" class="dot" />
+        <Icon name="chevron" :size="18" class="chev" />
+      </button>
     </div>
     <p class="footer">
       本应用仅提供插件运行框架与播放功能，不存储、不提供任何音乐源文件。音乐信息由你自行安装的合规插件提供。
@@ -790,6 +792,9 @@ function resetSettings(): void {
   align-items: center;
   gap: 14px;
   padding: 16px;
+}
+.about-actions {
+  margin-top: 10px;
 }
 .about-card img {
   width: 54px;

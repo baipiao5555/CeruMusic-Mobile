@@ -3,6 +3,11 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 interface SystemBarsPlugin {
   getInsets(): Promise<{ top: number; bottom: number }>
   setNavigationBar(options: { color: string; darkIcons: boolean }): Promise<void>
+  getTheme(): Promise<{ dark: boolean }>
+  addListener(
+    eventName: 'themeChanged',
+    listener: (data: { dark: boolean }) => void
+  ): Promise<{ remove: () => Promise<void> }>
 }
 
 const SystemBars = registerPlugin<SystemBarsPlugin>('SystemBars')
@@ -29,6 +34,24 @@ export async function applyNavigationBar(darkTheme: boolean): Promise<void> {
   } catch {
     // 旧机型不支持浅色导航栏图标时忽略
   }
+}
+
+/** Native night-mode state. Android WebView does not reliably update prefers-color-scheme. */
+export async function getNativeTheme(): Promise<boolean | null> {
+  if (!Capacitor.isNativePlatform()) return null
+  try {
+    const result = await SystemBars.getTheme()
+    return Boolean(result?.dark)
+  } catch {
+    return null
+  }
+}
+
+export function onNativeThemeChange(handler: (dark: boolean) => void): void {
+  if (!Capacitor.isNativePlatform()) return
+  void SystemBars.addListener('themeChanged', (data) => handler(Boolean(data?.dark))).catch(
+    () => undefined
+  )
 }
 
 /** 启动时立即测量一次，并在旋转、软键盘弹出等尺寸变化后重新测量。 */

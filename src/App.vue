@@ -272,7 +272,15 @@ watch(navigationRequest, (request) => {
     <div class="app-bg" />
     <div class="status-scrim" />
     <router-view v-slot="{ Component }">
-      <transition :name="routeDirection === 'back' ? 'page-back' : 'page-forward'">
+      <transition
+        :name="
+          routeDirection === 'tab'
+            ? 'tab-fade'
+            : routeDirection === 'back'
+              ? 'page-back'
+              : 'page-forward'
+        "
+      >
         <component :is="Component" />
       </transition>
     </router-view>

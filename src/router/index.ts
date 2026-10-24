@@ -50,4 +50,13 @@ router.go = ((delta: number) => {
   return goRoute(delta)
 }) as typeof router.go
 
+// Top-level tabs stay on the same level; Miuix/MeiloX fades between them
+// instead of running the push/pop slide.
+const TAB_ROUTES = new Set(['/', '/search', '/playlists', '/library'])
+router.afterEach((to, from) => {
+  if (TAB_ROUTES.has(to.path) && TAB_ROUTES.has(from.path)) {
+    routeDirection.value = 'tab'
+  }
+})
+
 export default router

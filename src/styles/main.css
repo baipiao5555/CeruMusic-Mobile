@@ -1098,6 +1098,28 @@ input[type='search']::-webkit-search-results-decoration {
   opacity: 0;
 }
 
+/* Top-level tab switches are a same-level change: fade the new tab in over
+   the old one instead of using the push/pop slide. */
+.tab-fade-enter-active,
+.tab-fade-leave-active {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+
+.tab-fade-enter-active {
+  z-index: 2;
+  transition: opacity 0.26s ease;
+}
+
+.tab-fade-leave-active {
+  z-index: 1;
+}
+
+.tab-fade-enter-from {
+  opacity: 0;
+}
+
 /* Miuix / MeiloX navigation: the top page slides a full width from the
    trailing edge with its leading corners clipped, while the page below
    parallaxes a quarter width, dims and keeps a slight transparency. */

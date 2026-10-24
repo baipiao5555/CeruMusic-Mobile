@@ -1091,50 +1091,46 @@ input[type='search']::-webkit-search-results-decoration {
 .page-forward-leave-active,
 .page-back-enter-active,
 .page-back-leave-active {
-  transform-origin: center center;
-  will-change: opacity, transform;
-}
-
-/* Let the outgoing page slide underneath while the incoming page moves in.
-   Keeping both mounted makes the motion continuous instead of a blank gap. */
-.page-forward-leave-active,
-.page-back-leave-active {
   position: absolute;
   inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  transition:
-    opacity 0.24s ease,
-    transform 0.34s cubic-bezier(0.33, 0, 0.2, 1);
+  background: var(--bg);
+  backface-visibility: hidden;
+  will-change: transform;
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-.page-forward-enter-active,
-.page-back-enter-active {
-  position: relative;
+/* Native-style push: the incoming page covers the old one, while the old
+   page drifts a little for depth. Pages stay fully opaque, so no ghosting. */
+.page-forward-enter-active {
   z-index: 2;
-  transition:
-    opacity 0.28s ease,
-    transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.page-forward-leave-active {
+  z-index: 1;
+}
+
+.page-back-enter-active {
+  z-index: 1;
+}
+
+.page-back-leave-active {
+  z-index: 2;
 }
 
 .page-forward-enter-from {
-  opacity: 0.72;
-  transform: translateX(48px) scale(0.99);
+  transform: translate3d(100%, 0, 0);
 }
 
 .page-forward-leave-to {
-  opacity: 0.55;
-  transform: translateX(-32px) scale(0.995);
+  transform: translate3d(-26%, 0, 0);
 }
 
 .page-back-enter-from {
-  opacity: 0.72;
-  transform: translateX(-48px) scale(0.99);
+  transform: translate3d(-26%, 0, 0);
 }
 
 .page-back-leave-to {
-  opacity: 0.55;
-  transform: translateX(32px) scale(0.995);
+  transform: translate3d(100%, 0, 0);
 }
 
 @media (prefers-reduced-motion: reduce) {

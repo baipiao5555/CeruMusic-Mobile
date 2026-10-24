@@ -24,11 +24,30 @@ const router = createRouter({
   }
 })
 
-let lastHistoryPosition = Number(window.history.state?.position) || 0
-router.afterEach(() => {
-  const position = Number(window.history.state?.position) || 0
-  routeDirection.value = position < lastHistoryPosition ? 'back' : 'forward'
-  lastHistoryPosition = position
-})
+// Vue Router's hash history replaces state on every navigation, so
+// history.state.position cannot tell back from forward. Track the intent at
+// the call site instead; every in-app back button and Android back gesture
+// goes through router.back().
+const pushRoute = router.push.bind(router)
+const replaceRoute = router.replace.bind(router)
+const backRoute = router.back.bind(router)
+const goRoute = router.go.bind(router)
+
+router.push = ((...args: any[]) => {
+  routeDirection.value = 'forward'
+  return (pushRoute as any)(...args)
+}) as typeof router.push
+router.replace = ((...args: any[]) => {
+  routeDirection.value = 'forward'
+  return (replaceRoute as any)(...args)
+}) as typeof router.replace
+router.back = (() => {
+  routeDirection.value = 'back'
+  return backRoute()
+}) as typeof router.back
+router.go = ((delta: number) => {
+  routeDirection.value = delta < 0 ? 'back' : 'forward'
+  return goRoute(delta)
+}) as typeof router.go
 
 export default router

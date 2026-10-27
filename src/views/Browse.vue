@@ -5,6 +5,7 @@ import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
 import { allProviders, invokeProvider } from '@/core/plugin/manager'
 import { playTracks, toTrack, type Track } from '@/core/playback/player'
+import { rememberTracks } from '@/core/search'
 
 const route = useRoute()
 const router = useRouter()
@@ -63,6 +64,8 @@ async function load(more = false): Promise<void> {
     cursor.value = page?.nextCursor
     ended.value = !cursor.value
     if (!tracks.value.length) error.value = '没有找到歌曲'
+    // 榜单/歌单里的歌进本地索引，搜索页的即时联想才有词可用。
+    rememberTracks(items)
   } catch (err: any) {
     error.value = err?.message ?? '加载失败'
   } finally {

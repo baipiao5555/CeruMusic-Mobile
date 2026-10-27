@@ -7,6 +7,7 @@ import { isFavorite, toggleFavorite } from '@/core/library'
 import { downloadTrack, isDownloaded, isDownloading } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
 import { highestQuality, qualityLabel } from '@/core/quality'
+import { highlightParts } from '@/core/search'
 
 const props = withDefaults(
   defineProps<{
@@ -20,8 +21,10 @@ const props = withDefaults(
     selected?: boolean
     /** When set, the action sheet offers "remove from this playlist". */
     playlistId?: string
+    /** Search keyword: matched fragments in title/artist get highlighted. */
+    query?: string
   }>(),
-  { index: 0, showIndex: false, showCover: true, selectable: false, selected: false }
+  { index: 0, showIndex: false, showCover: true, selectable: false, selected: false, query: '' }
 )
 
 const showActions = ref(false)
@@ -43,6 +46,12 @@ const downloading = computed(() => isDownloading(props.track))
 const bestQuality = computed(() => highestQuality(props.track.qualities))
 const sourceTag = computed(() =>
   props.track.providerId && props.track.providerId !== 'local' ? props.track.providerId : ''
+)
+const titleParts = computed(() =>
+  props.query ? highlightParts(props.track.title, props.query) : [{ text: props.track.title, hit: false }]
+)
+const artistParts = computed(() =>
+  props.query ? highlightParts(props.track.artist, props.query) : [{ text: props.track.artist, hit: false }]
 )
 
 function play(): void {
@@ -89,11 +98,21 @@ function formatDuration(ms: number): string {
       <img :src="track.artwork" alt="" loading="lazy" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
     </div>
     <div class="info">
-      <h3>{{ track.title }}</h3>
+      <h3>
+        <template v-for="(part, partIndex) in titleParts" :key="partIndex">
+          <mark v-if="part.hit" class="hl">{{ part.text }}</mark>
+          <template v-else>{{ part.text }}</template>
+        </template>
+      </h3>
       <p class="song-meta">
         <span v-if="bestQuality" class="quality-tag">{{ qualityLabel(bestQuality) }}</span>
         <span v-if="sourceTag" class="source-tag">{{ sourceTag }}</span>
-        <span class="song-artist">{{ track.artist }}</span>
+        <span class="song-artist">
+          <template v-for="(part, partIndex) in artistParts" :key="partIndex">
+            <mark v-if="part.hit" class="hl">{{ part.text }}</mark>
+            <template v-else>{{ part.text }}</template>
+          </template>
+        </span>
       </p>
     </div>
     <div v-if="!selectable" class="row-actions" @click.stop>
@@ -131,6 +150,12 @@ function formatDuration(ms: number): string {
 </template>
 
 <style scoped>
+.hl {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: 3px;
+  font-weight: 700;
+}
 .song-index {
   width: 22px;
   text-align: center;

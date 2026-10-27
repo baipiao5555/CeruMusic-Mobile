@@ -562,6 +562,19 @@ function resetSettings(): void {
       </div>
     </div>
     <div class="list-group about-actions">
+      <div class="list-item" style="pointer-events: auto">
+        <span class="entry-icon"><Icon name="music" :size="19" /></span>
+        <div class="info">
+          <h3>插件自动更新</h3>
+          <p>链接安装的插件有新版本自动替换</p>
+        </div>
+        <button
+          class="switch"
+          :class="{ on: settingsState.pluginAutoUpdate }"
+          aria-label="插件自动更新"
+          @click="updateSettings({ pluginAutoUpdate: !settingsState.pluginAutoUpdate })"
+        />
+      </div>
       <button class="list-item" @click="router.push('/update')">
         <span class="entry-icon"><Icon name="refresh" :size="19" /></span>
         <div class="info">

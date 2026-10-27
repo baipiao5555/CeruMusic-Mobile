@@ -11,6 +11,7 @@ import {
   installDemoPlugin,
   installPlugin,
   checkPluginUpdate,
+  checkAllPluginUpdates,
   pluginState,
   removePlugin,
   savePluginConfig,
@@ -147,14 +148,39 @@ async function checkUpdate(plugin: PluginDescriptor): Promise<void> {
 async function autoCheckUpdates(): Promise<void> {
   if (sessionStorage.getItem('ceru.pluginAutoUpdateChecked') === '1') return
   sessionStorage.setItem('ceru.pluginAutoUpdateChecked', '1')
-  const targets = installed.value.filter((plugin) => plugin.sourceUrl)
-  for (const plugin of targets) {
-    try {
-      const result = await checkPluginUpdate(plugin.pluginId)
-      if (result.updated) info.value = `${plugin.name} 已自动更新到 v${result.version}`
-    } catch {
-      // A failed update check must not block the plugin page.
+  const results = await checkAllPluginUpdates({ quiet: true })
+  const updated = results.filter((item) => item.updated)
+  if (updated.length) {
+    info.value = `已自动更新 ${updated.map((item) => `${item.name} v${item.version}`).join('、')}`
+  }
+}
+
+const checkingAll = ref(false)
+
+/** 手动检查全部：无视 6 小时节流，结果汇总在页面顶部。 */
+async function checkAll(): Promise<void> {
+  if (checkingAll.value) return
+  checkingAll.value = true
+  error.value = ''
+  info.value = ''
+  try {
+    const results = await checkAllPluginUpdates({ force: true, quiet: true })
+    if (!results.length) {
+      info.value = '没有可自动更新的插件（只有从链接安装的插件才记录更新地址）'
+    } else {
+      const updated = results.filter((item) => item.updated)
+      const failed = results.filter((item) => item.error)
+      if (updated.length) {
+        info.value = `已更新 ${updated
+          .map((item) => `${item.name} v${item.previousVersion} → v${item.version}`)
+          .join('、')}`
+      } else {
+        info.value = `全部已是最新版本（${results.length} 个插件）`
+      }
+      if (failed.length) error.value = `${failed.length} 个插件检查失败：${failed[0].error}`
     }
+  } finally {
+    checkingAll.value = false
   }
 }
 
@@ -256,7 +282,9 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
 
     <div class="section-title">
       <h2>已安装</h2>
-      <span>{{ installed.length }} 个</span>
+      <button class="check-all" :disabled="checkingAll" @click="checkAll">
+        <Icon name="refresh" :size="14" /> {{ checkingAll ? '检查中…' : '检查全部更新' }}
+      </button>
     </div>
 
     <div v-if="!installed.length" class="empty">
@@ -319,7 +347,8 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
       <p>
         手机版沿用澜音 v2 插件协议，插件在独立沙箱（iframe）中运行，只能通过受控桥接访问网络、存储和播放器。
         出于安全考虑，插件网络请求仅允许访问公网 HTTP(S) 地址，不能访问本机或局域网。
-        从链接安装的插件会记录更新地址，下次打开本页会自动检查新版本；从文件安装的插件需要重新从链接安装一次才能自动更新。
+        从链接安装的插件会记录更新地址，应用启动时自动检查新版本（6 小时内只查一次，可在设置里关掉），
+        也可以在这里点「检查全部更新」立刻检查。从文件安装的插件没有更新地址，需要重新从链接安装一次才能自动更新。
       </p>
     </section>
 
@@ -517,6 +546,20 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
 .btn.small {
   padding: 9px 13px;
   font-size: 12px;
+}
+.check-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+.check-all:disabled {
+  opacity: 0.6;
 }
 .help-card {
   margin-top: 18px;

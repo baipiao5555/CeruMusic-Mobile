@@ -8,7 +8,7 @@ import { StatusBar, Style } from '@capacitor/status-bar'
 import { IonApp } from '@ionic/vue'
 import BottomNav from '@/components/BottomNav.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
-import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, navigationRequest, notify } from '@/core/plugin/manager'
+import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, checkAllPluginUpdates, navigationRequest, notify } from '@/core/plugin/manager'
 import { handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
 import { registerDownloadHostHooks } from '@/core/downloadHost'
@@ -218,6 +218,8 @@ onMounted(async () => {
     }
   }
   if (pluginState.selectedProvider) selectProvider(pluginState.selectedProvider)
+  // 从链接安装的音源插件：启动后静默检查一次新版本（6 小时内不重复）。
+  if (settingsState.pluginAutoUpdate) void checkAllPluginUpdates()
   if (updateState.autoCheck) void checkForUpdate({ silent: false })
   window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
     if (settingsState.theme === 'system') {

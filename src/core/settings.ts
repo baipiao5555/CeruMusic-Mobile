@@ -37,6 +37,8 @@ export interface AppSettings {
   logsEnabled: boolean
   /** Capture console.log/info/debug into the run log. */
   verboseLogs: boolean
+  /** Re-download URL-installed plugins when a newer version is published. */
+  pluginAutoUpdate: boolean
   /** Empty means follow the playback quality. */
   downloadQuality: string
   /** How many downloads run at the same time (1-3). */
@@ -66,6 +68,7 @@ export const settingsState = reactive<AppSettings>({
   systemLyricsTranslation: true,
   logsEnabled: true,
   verboseLogs: false,
+  pluginAutoUpdate: true,
   downloadQuality: '',
   downloadConcurrency: 2,
   version: 2

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
@@ -23,8 +23,7 @@ import {
   suggestTracks
 } from '@/core/search'
 
-/** 边打边搜的静默时间：太短会打爆音源，太长会显得卡。 */
-const DEBOUNCE_MS = 260
+/** 一次搜索最多取多少条。 */
 const RESULT_LIMIT = 30
 const SUGGEST_LIMIT = 6
 
@@ -46,10 +45,8 @@ const inputRef = ref<HTMLInputElement>()
 
 const focused = ref(false)
 const suggestOpen = ref(false)
-const composing = ref(false)
 
-let timer: number | undefined
-/** 输入太快时旧请求会后到，用序号丢弃过期响应。 */
+/** 输入太慢/太快都可能有旧请求后到，用序号丢弃过期响应。 */
 let requestSeq = 0
 
 const libraryTracks = computed(() => [
@@ -57,12 +54,11 @@ const libraryTracks = computed(() => [
   ...libraryState.playlists.flatMap((playlist) => playlist.tracks)
 ])
 
-const suggestions = computed(() =>
-  suggestTracks(query.value, libraryTracks.value, SUGGEST_LIMIT)
-)
+const suggestions = computed(() => suggestTracks(query.value, libraryTracks.value, SUGGEST_LIMIT))
 
+/** 输入时只做本地联想（不联网、不自动搜索），点「搜索」或回车才真正搜。 */
 const showSuggest = computed(
-  () => suggestOpen.value && focused.value && Boolean(query.value.trim()) && suggestions.value.length > 0
+  () => suggestOpen.value && focused.value && Boolean(query.value.trim())
 )
 
 const historyVisible = computed(() => !query.value.trim() && searchHistory.items.length > 0)
@@ -73,25 +69,9 @@ const localMatches = computed(() => {
   return suggestTracks(query.value, libraryTracks.value, 12)
 })
 
-function clearTimer(): void {
-  if (timer) {
-    clearTimeout(timer)
-    timer = undefined
-  }
-}
-
-function scheduleSearch(delay = DEBOUNCE_MS): void {
-  clearTimer()
-  timer = window.setTimeout(() => {
-    timer = undefined
-    void runSearch('auto')
-  }, delay)
-}
-
 function onInput(): void {
+  // 只更新本地联想，不自动联网搜索：搜不搜由用户按「搜索」/回车决定。
   suggestOpen.value = true
-  if (composing.value) return
-  scheduleSearch()
 }
 
 function onFocus(): void {
@@ -102,15 +82,6 @@ function onFocus(): void {
 function onBlur(): void {
   focused.value = false
   suggestOpen.value = false
-}
-
-function onCompositionEnd(): void {
-  composing.value = false
-  // v-model 在部分输入法上会晚一拍，直接读 DOM 值再搜索。
-  const value = inputRef.value?.value
-  if (typeof value === 'string') query.value = value
-  suggestOpen.value = true
-  scheduleSearch(0)
 }
 
 async function fetchTracks(provider: ProviderHandle, text: string): Promise<Track[]> {
@@ -143,10 +114,10 @@ function fallbackQueries(text: string): string[] {
     .slice(0, 2)
 }
 
-async function runSearch(kind: 'auto' | 'submit' = 'submit'): Promise<void> {
+async function runSearch(): Promise<void> {
   const provider = selected.value
   const text = query.value.trim()
-  clearTimer()
+  suggestOpen.value = false
   if (!provider) {
     error.value = '请先安装并启用音源插件'
     results.value = []
@@ -169,12 +140,10 @@ async function runSearch(kind: 'auto' | 'submit' = 'submit'): Promise<void> {
   searched.value = true
   error.value = ''
   relaxedQuery.value = ''
-  // 明确提交时收起联想面板；边打边搜不动它，免得正在看建议时被抽走。
-  if (kind === 'submit') suggestOpen.value = false
   try {
     let tracks = await fetchTracks(provider, text)
     let used = text
-    if (!tracks.length && kind === 'submit') {
+    if (!tracks.length) {
       for (const candidate of fallbackQueries(text)) {
         if (seq !== requestSeq) return
         const relaxed = await fetchTracks(provider, candidate)
@@ -191,31 +160,28 @@ async function runSearch(kind: 'auto' | 'submit' = 'submit'): Promise<void> {
     relaxedQuery.value = used === text ? '' : used
     rememberTracks(tracks)
     if (tracks.length) {
-      if (kind === 'submit') rememberSearch(text)
+      rememberSearch(text)
       error.value = ''
     } else {
       error.value = '没有找到相关歌曲'
     }
-    // 音源已经给出答案，联想面板就该让位给结果（它只在等结果时提供即时反馈）。
-    suggestOpen.value = false
   } catch (err: any) {
     if (seq !== requestSeq) return
     error.value = err?.message ?? '搜索失败'
     results.value = []
-    suggestOpen.value = false
   } finally {
     if (seq === requestSeq) loading.value = false
   }
 }
 
 function submitSearch(): void {
-  void runSearch('submit')
+  void runSearch()
 }
 
 function useKeyword(text: string): void {
   query.value = text
   suggestOpen.value = false
-  void runSearch('submit')
+  void runSearch()
 }
 
 function pickSuggestion(track: Track): void {
@@ -224,11 +190,10 @@ function pickSuggestion(track: Track): void {
   suggestOpen.value = false
   rememberSearch(text)
   inputRef.value?.blur()
-  void runSearch('submit')
+  void runSearch()
 }
 
 function reset(): void {
-  clearTimer()
   requestSeq += 1
   query.value = ''
   results.value = []
@@ -243,7 +208,7 @@ function reset(): void {
 
 function choose(providerId: string): void {
   selectProvider(providerId)
-  if (query.value.trim()) void runSearch('submit')
+  if (query.value.trim()) void runSearch()
 }
 
 function play(index: number): void {
@@ -268,16 +233,14 @@ watch(
     if (!text || text === query.value) return
     query.value = text
     suggestOpen.value = false
-    void runSearch('submit')
+    void runSearch()
   }
 )
 
 onMounted(() => {
-  if (query.value.trim()) void runSearch('submit')
+  if (query.value.trim()) void runSearch()
   else nextTick(() => inputRef.value?.focus())
 })
-
-onBeforeUnmount(clearTimer)
 </script>
 
 <template>
@@ -300,13 +263,11 @@ onBeforeUnmount(clearTimer)
           v-model="query"
           type="search"
           enterkeyhint="search"
-          placeholder="搜索歌名、歌手"
+          placeholder="输入歌名或歌手，点搜索"
           autocomplete="off"
           @input="onInput"
           @focus="onFocus"
           @blur="onBlur"
-          @compositionstart="composing = true"
-          @compositionend="onCompositionEnd"
         />
         <button v-if="query" type="button" class="clear" aria-label="清空" @mousedown.prevent="reset">
           <Icon name="close" :size="17" />
@@ -433,7 +394,7 @@ onBeforeUnmount(clearTimer)
     <div v-else-if="!searched && !query.trim() && !historyVisible" class="empty">
       <div class="emoji">🎧</div>
       <h3>想听点什么？</h3>
-      <p>输入歌名、歌手或专辑，打一个字就会边搜边显示相关歌曲。</p>
+      <p>输入歌名或歌手，点「搜索」或按回车；输入时会先提示你收藏和歌单里的同名歌。</p>
     </div>
   </div>
 </template>

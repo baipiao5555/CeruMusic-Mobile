@@ -482,6 +482,72 @@ export async function checkPluginUpdate(
   return { updated: true, previousVersion, version }
 }
 
+const PLUGIN_UPDATE_CLOCK_KEY = 'ceru.pluginUpdate.lastChecked'
+const PLUGIN_UPDATE_INTERVAL = 6 * 60 * 60 * 1000
+
+export interface PluginUpdateSummary {
+  pluginId: string
+  name: string
+  updated: boolean
+  version: string
+  previousVersion: string
+  error?: string
+}
+
+function readUpdateClock(): number {
+  try {
+    return Number(localStorage.getItem(PLUGIN_UPDATE_CLOCK_KEY)) || 0
+  } catch {
+    return 0
+  }
+}
+
+function markUpdateChecked(): void {
+  try {
+    localStorage.setItem(PLUGIN_UPDATE_CLOCK_KEY, String(Date.now()))
+  } catch {}
+}
+
+/**
+ * 自动检查「从链接安装」的插件：有新版本就替换并提示。
+ * 默认 6 小时内只跑一次，force 可以无视节流；单个插件失败不影响其它插件。
+ */
+export async function checkAllPluginUpdates(
+  options: { force?: boolean; quiet?: boolean } = {}
+): Promise<PluginUpdateSummary[]> {
+  if (!options.force && Date.now() - readUpdateClock() < PLUGIN_UPDATE_INTERVAL) return []
+  const targets = [...records.values()].filter((record) => record.sourceUrl && record.enabled)
+  const results: PluginUpdateSummary[] = []
+  for (const record of targets) {
+    const name = String(record.manifest?.name ?? record.pluginId)
+    const previousVersion = String(record.manifest?.version ?? '')
+    try {
+      const result = await checkPluginUpdate(record.pluginId)
+      results.push({
+        pluginId: record.pluginId,
+        name,
+        updated: result.updated,
+        version: result.version,
+        previousVersion
+      })
+      if (result.updated && !options.quiet) {
+        showToast(`${name} 已更新到 v${result.version}`, 'success')
+      }
+    } catch (error: any) {
+      results.push({
+        pluginId: record.pluginId,
+        name,
+        updated: false,
+        version: previousVersion,
+        previousVersion,
+        error: error?.message ?? String(error)
+      })
+    }
+  }
+  markUpdateChecked()
+  return results
+}
+
 function stableScope(value: any): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return '[' + value.map(stableScope).join(',') + ']'

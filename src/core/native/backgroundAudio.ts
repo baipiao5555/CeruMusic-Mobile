@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { Track } from '../playback/player'
 import { settingsState } from '../settings'
+import { toNativeLyricLines, type TimedLyricWord } from '../lyrics/timeline'
 
 interface BackgroundAudioOptions {
   title: string
@@ -105,6 +106,8 @@ export interface BackgroundLyricLine {
   endTimeMs?: number
   text: string
   translation?: string
+  /** 逐字时间（绝对毫秒），没有就只能是整行进度。 */
+  words?: TimedLyricWord[]
 }
 
 /**
@@ -117,29 +120,7 @@ export function syncBackgroundLyrics(
   lines: BackgroundLyricLine[]
 ): void {
   if (!isNativePlatform) return
-  const ordered = lines
-    .filter((line) => String(line.text ?? '').trim())
-    .slice()
-    .sort((left, right) => left.startTimeMs - right.startTimeMs)
-  const prepared = ordered.map((line, index) => {
-    const start = Math.max(0, Math.round(line.startTimeMs))
-    const rawEnd = Number(line.endTimeMs)
-    const nextStart = index + 1 < ordered.length
-      ? Math.max(0, Math.round(ordered[index + 1].startTimeMs))
-      : 0
-    const end =
-      Number.isFinite(rawEnd) && rawEnd > start
-        ? Math.round(rawEnd)
-        : nextStart > start
-          ? nextStart
-          : start + 5000
-    return {
-      start,
-      end,
-      text: line.text,
-      translation: line.translation ?? ''
-    }
-  })
+  const prepared = toNativeLyricLines(lines, Number(settingsState.lyricOffsetMs) || 0)
   const duration =
     track?.durationMs && track.durationMs > 0
       ? track.durationMs

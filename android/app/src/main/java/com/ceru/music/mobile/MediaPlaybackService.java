@@ -26,8 +26,10 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.util.LruCache;
 
+import io.github.proify.lyricon.lyric.model.LyricWord;
 import io.github.proify.lyricon.lyric.model.RichLyricLine;
 import io.github.proify.lyricon.lyric.model.Song;
+import io.github.proify.lyricon.lyric.model.extensions.ExtensionsKt;
 import io.github.proify.lyricon.provider.LyriconFactory;
 import io.github.proify.lyricon.provider.LyriconProvider;
 import io.github.proify.lyricon.provider.ProviderInfo;
@@ -63,8 +65,12 @@ public class MediaPlaybackService extends Service {
 
     private static final String CHANNEL_ID = "ceru_music_playback";
     private static final int NOTIFICATION_ID = 2301;
-    /** Lyricon 位置刷新节拍，以及读取间隔。 */
-    private static final long LYRICON_TICK_MS = 500L;
+    /**
+     * Lyricon 位置刷新节拍，以及读取间隔。
+     * 必须跟 ProviderConstants.DEFAULT_POSITION_UPDATE_INTERVAL（41ms）对齐：
+     * 中心服务靠这个间隔读位置来推进逐字变色和滚动动画，500ms 会让歌词一格一格跳。
+     */
+    private static final long LYRICON_TICK_MS = 41L;
     /** 进度跳变超过这个值就当作主动 seek，避免中心服务平滑追进度造成滞后。 */
     private static final long LYRICON_SEEK_JUMP_MS = 2000L;
     private static final int MAX_ARTWORK_BYTES = 16 * 1024 * 1024;
@@ -89,12 +95,19 @@ public class MediaPlaybackService extends Service {
         final long end;
         final String text;
         final String translation;
+        /** 逐字时间；为空表示只有整行时间（无法逐字变色）。 */
+        final List<LyricWord> words;
 
         LyricLineData(long start, long end, String text, String translation) {
+            this(start, end, text, translation, null);
+        }
+
+        LyricLineData(long start, long end, String text, String translation, List<LyricWord> words) {
             this.start = start;
             this.end = end;
             this.text = text;
             this.translation = translation;
+            this.words = words == null ? Collections.emptyList() : words;
         }
     }
 
@@ -522,7 +535,13 @@ public class MediaPlaybackService extends Service {
                     long start = Math.max(0, line.optLong("start", 0));
                     long end = line.optLong("end", 0);
                     String translation = lyricsTranslation ? line.optString("translation", "") : "";
-                    parsed.add(new LyricLineData(start, end, text, translation));
+                    parsed.add(new LyricLineData(
+                            start,
+                            end,
+                            text,
+                            translation,
+                            parseWords(line.optJSONArray("words"), start)
+                    ));
                 }
                 Collections.sort(parsed, (left, right) -> Long.compare(left.start, right.start));
                 for (int index = 0; index < parsed.size(); index++) {
@@ -535,13 +554,14 @@ public class MediaPlaybackService extends Service {
                         end = parsed.get(index + 1).start;
                     }
                     if (end <= line.start) end = line.start + 5000;
-                    lyricLines.add(new LyricLineData(line.start, end, line.text, line.translation));
+                    lyricLines.add(new LyricLineData(line.start, end, line.text, line.translation, line.words));
                 }
                 Log.d("CeruLyrics", "timeline " + lyricLines.size() + " lines, "
                         + (lyricLines.isEmpty() ? 0 : lyricLines.get(0).start) + ".."
                         + (lyricLines.isEmpty() ? 0 : lyricLines.get(lyricLines.size() - 1).end));
                 recordDiagnostic("lyrics", "song=" + mediaId
                         + " lines=" + lyricLines.size()
+                        + " words=" + countWords()
                         + " first=" + (lyricLines.isEmpty() ? 0 : lyricLines.get(0).start)
                         + " last=" + (lyricLines.isEmpty() ? 0 : lyricLines.get(lyricLines.size() - 1).end)
                         + " enabled=" + lyricsEnabled);
@@ -584,6 +604,49 @@ public class MediaPlaybackService extends Service {
         }
     }
 
+    /**
+     * 逐字时间：WebView 已经归一化过（绝对毫秒、按行裁剪），这里只做兜底，
+     * 少于两个字就当作没有逐字数据，交给整行进度。
+     */
+    private static List<LyricWord> parseWords(JSONArray array, long lineStart) {
+        if (array == null || array.length() == 0) return null;
+        List<LyricWord> words = new ArrayList<>(array.length());
+        for (int index = 0; index < array.length(); index++) {
+            JSONObject item = array.optJSONObject(index);
+            if (item == null) continue;
+            String text = item.optString("text", "");
+            if (text.isEmpty()) continue;
+            long begin = Math.max(lineStart, item.optLong("start", lineStart));
+            long end = item.optLong("end", 0);
+            words.add(new LyricWord(
+                    begin,
+                    end > begin ? end : begin,
+                    end > begin ? end - begin : 0,
+                    text,
+                    null
+            ));
+        }
+        if (words.size() < 2) return null;
+        Collections.sort(words, (left, right) -> Long.compare(left.getBegin(), right.getBegin()));
+        for (int index = 0; index < words.size(); index++) {
+            LyricWord word = words.get(index);
+            if (word.getEnd() > word.getBegin()) continue;
+            LyricWord next = index + 1 < words.size() ? words.get(index + 1) : null;
+            long end = next != null && next.getBegin() > word.getBegin()
+                    ? next.getBegin()
+                    : word.getBegin() + 500;
+            word.setEnd(end);
+            word.setDuration(Math.max(0, end - word.getBegin()));
+        }
+        return words;
+    }
+
+    private int countWords() {
+        int total = 0;
+        for (LyricLineData line : lyricLines) total += line.words.size();
+        return total;
+    }
+
     private void publishLyriconSong() {
         if (!lyricsEnabled || lyricLines.isEmpty()) {
             clearLyriconSong();
@@ -601,7 +664,7 @@ public class MediaPlaybackService extends Service {
                         false,
                         null,
                         line.text,
-                        null,
+                        line.words.isEmpty() ? null : line.words,
                         null,
                         null,
                         line.translation.isEmpty() ? null : line.translation,
@@ -615,13 +678,14 @@ public class MediaPlaybackService extends Service {
                     artist,
                     duration,
                     null,
-                    lines
+                    ExtensionsKt.normalize(lines)
             );
             RemotePlayer player = lyriconProvider.getPlayer();
             player.setDisplayTranslation(lyricsTranslation);
             player.setDisplayRoma(false);
             player.setSong(song);
             recordDiagnostic("lyricon", "setSong lines=" + lines.size()
+                    + " words=" + countWords()
                     + " id=" + song.getId() + " duration=" + song.getDuration());
             try {
                 player.setPositionUpdateInterval((int) LYRICON_TICK_MS);

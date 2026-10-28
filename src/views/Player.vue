@@ -17,7 +17,8 @@ import {
   cancelSleepTimer,
   setSleepTimer,
   sleepAfterCurrentTrack,
-  updateActiveLyric
+  updateActiveLyric,
+  refreshBackgroundLyrics
 } from '@/core/playback/player'
 import { isFavorite, toggleFavorite } from '@/core/library'
 import { settingsState, updateSettings } from '@/core/settings'
@@ -139,6 +140,8 @@ function offsetLabel(value: number): string {
 function chooseOffset(value: number): void {
   updateSettings({ lyricOffsetMs: value })
   updateActiveLyric()
+  // 共享出去的系统歌词/灵动岛歌词也要跟着平移，否则会和播放页对不上。
+  refreshBackgroundLyrics()
 }
 
 const progress = computed(() => {

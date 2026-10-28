@@ -17,6 +17,7 @@ import {
 } from '../native/backgroundAudio'
 import { toTrack, type Track } from '../track'
 import { matchCloudLyrics } from '../lyrics/cloud'
+import { normalizeTimedWords, type TimedLyricWord } from '../lyrics/timeline'
 import { playableUrl, providerForTrack } from './source'
 import { localUrlFor } from '../downloads'
 import { logEvent } from '../logs'
@@ -31,6 +32,8 @@ export interface LyricLine {
   endTimeMs?: number
   text: string
   translation?: string
+  /** 逐字时间：有它歌词才能按字变色，没有就只能整行切换。 */
+  words?: TimedLyricWord[]
 }
 
 export const playerState = reactive({
@@ -844,7 +847,8 @@ function normalizePluginLyrics(document: any): LyricLine[] {
             ? Math.max(0, rawEnd + offset)
             : undefined,
         text: String(line.text ?? '').trim() || wordText,
-        translation: translation || undefined
+        translation: translation || undefined,
+        words: Array.isArray(words) && words.length ? words : undefined
       }
     })
     .filter((line: LyricLine) => Boolean(line.text))
@@ -862,7 +866,8 @@ function normalizePluginLyrics(document: any): LyricLine[] {
       startTimeMs: line.startTimeMs,
       endTimeMs,
       text: line.text,
-      translation: line.translation
+      translation: line.translation,
+      words: normalizeTimedWords(line.words, line.startTimeMs, endTimeMs, line.text)
     }
   })
 }

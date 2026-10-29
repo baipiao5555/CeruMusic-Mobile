@@ -127,3 +127,69 @@ export function toNativeLyricLines(lines: TimedLyricLine[], offsetMs = 0): Nativ
     }
   })
 }
+
+/** 单个词在本行文字里占的字符区间（下标按 Array.from 计算）。 */
+export interface WordCharRange {
+  start: number
+  end: number
+  startTimeMs: number
+  endTimeMs: number
+}
+
+/**
+ * 把逐字时间映射到「第几个字」。行内空白不参与计数，
+ * 逐字文字与整行文字的一致性已经在 normalizeTimedWords 校验过。
+ */
+export function wordCharRanges(line: TimedLyricLine): WordCharRange[] {
+  const words = line.words ?? []
+  if (!words.length) return []
+  const chars = Array.from(String(line.text ?? ''))
+  const ranges: WordCharRange[] = []
+  let cursor = 0
+  for (const word of words) {
+    while (cursor < chars.length && /\s/.test(chars[cursor])) cursor += 1
+    const start = cursor
+    let remaining = Array.from(word.text).filter((char) => !/\s/.test(char)).length
+    while (cursor < chars.length && remaining > 0) {
+      if (!/\s/.test(chars[cursor])) remaining -= 1
+      cursor += 1
+    }
+    ranges.push({
+      start,
+      end: cursor,
+      startTimeMs: word.startTimeMs,
+      endTimeMs: word.endTimeMs
+    })
+  }
+  return ranges
+}
+
+/**
+ * 当前应该变色的字数。
+ * 有逐字时间就按词推进（每个词内部再按比例补间），没有就按整行线性推进。
+ * 行的有效结束时间最长按 15 秒计算，避免缺失行尾时一行拖完整首歌。
+ */
+export function sungCharCount(line: TimedLyricLine, nowMs: number): number {
+  const total = Array.from(String(line.text ?? '')).length
+  if (!total) return 0
+  const ranges = wordCharRanges(line)
+  if (ranges.length) {
+    for (const range of ranges) {
+      if (nowMs < range.startTimeMs) return range.start
+      if (nowMs < range.endTimeMs) {
+        const span = Math.max(1, range.endTimeMs - range.startTimeMs)
+        const width = Math.max(0, range.end - range.start)
+        const filled = Math.floor(((nowMs - range.startTimeMs) / span) * width)
+        return Math.min(range.end, range.start + Math.max(0, filled))
+      }
+    }
+    return total
+  }
+  const start = line.startTimeMs
+  const rawEnd = Number(line.endTimeMs)
+  let end = Number.isFinite(rawEnd) && rawEnd > start ? rawEnd : start + 5000
+  end = Math.min(end, start + 15000)
+  if (nowMs <= start) return 0
+  if (nowMs >= end) return total
+  return Math.min(total, Math.floor(((nowMs - start) / (end - start)) * total))
+}

@@ -11,7 +11,8 @@ await build({
   outfile,
   logLevel: 'silent'
 })
-const { normalizeTimedWords, shiftTimedLyrics, toNativeLyricLines } = await import('file://' + outfile)
+const { normalizeTimedWords, shiftTimedLyrics, toNativeLyricLines, sungCharCount, wordCharRanges } =
+  await import('file://' + outfile)
 
 const checks = []
 function check(name, ok, detail = '') {
@@ -106,6 +107,52 @@ check(
   nativeLines[0].end === 3000 && nativeLines[1].start === 3000,
   JSON.stringify(nativeLines.map((line) => [line.start, line.end]))
 )
+
+// 8) 逐字变色进度：按词推进，词内按比例补间
+const wordLine = {
+  startTimeMs: 0,
+  endTimeMs: 2000,
+  text: '晴天忽然下雨',
+  words: [
+    { startTimeMs: 0, endTimeMs: 600, text: '晴天' },
+    { startTimeMs: 600, endTimeMs: 1200, text: '忽然' },
+    { startTimeMs: 1200, endTimeMs: 2000, text: '下雨' }
+  ]
+}
+const wordSteps = [0, 300, 600, 900, 1200, 1600, 2000, 2600].map((time) =>
+  sungCharCount(wordLine, time)
+)
+check(
+  '逐字变色按词推进',
+  JSON.stringify(wordSteps) === JSON.stringify([0, 1, 2, 3, 4, 5, 6, 6]),
+  JSON.stringify(wordSteps)
+)
+
+// 9) 没有逐字时间时按整行线性推进（「晴天忽然下雨」共 6 个字）
+const plainLine = { startTimeMs: 1000, endTimeMs: 5000, text: '晴天忽然下雨' }
+const plainSteps = [500, 1000, 3000, 5000].map((time) => sungCharCount(plainLine, time))
+check('无逐字时线性推进', JSON.stringify(plainSteps) === JSON.stringify([0, 0, 3, 6]), JSON.stringify(plainSteps))
+
+// 10) 行文字里的空格不占字数
+const spaced = {
+  startTimeMs: 0,
+  endTimeMs: 1000,
+  text: '晴 天 忽 然',
+  words: [
+    { startTimeMs: 0, endTimeMs: 500, text: '晴天' },
+    { startTimeMs: 500, endTimeMs: 1000, text: '忽然' }
+  ]
+}
+const spacedRanges = wordCharRanges(spaced)
+check(
+  '空格不参与逐字计数',
+  spacedRanges.length === 2 && spacedRanges[1].start === 4 && sungCharCount(spaced, 600) === 4,
+  JSON.stringify(spacedRanges) + ' sung=' + sungCharCount(spaced, 600)
+)
+
+// 11) 行尾缺失也不会把变色拖过 15 秒
+const runaway = { startTimeMs: 0, text: '很长的行' }
+check('缺失行尾时变色有余量上限', sungCharCount(runaway, 16000) === 4, String(sungCharCount(runaway, 16000)))
 
 rmSync(outfile, { force: true })
 const passed = checks.filter((item) => item.ok).length

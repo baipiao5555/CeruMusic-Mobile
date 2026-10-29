@@ -21,6 +21,7 @@ import {
   refreshBackgroundLyrics
 } from '@/core/playback/player'
 import { isFavorite, toggleFavorite } from '@/core/library'
+import { sungCharCount } from '@/core/lyrics/timeline'
 import { settingsState, updateSettings } from '@/core/settings'
 import { qualityLabel } from '@/core/quality'
 import { downloadTrack, isDownloaded } from '@/core/downloads'
@@ -34,22 +35,9 @@ const activeLineCharCount = computed(() => {
   const index = playerState.activeLyric
   const line = index >= 0 ? playerState.lyrics[index] : undefined
   if (!line) return 0
-  const total = lyricChars(line.text).length
-  if (!total) return 0
-  const start = Number(line.startTimeMs) || 0
-  const next = playerState.lyrics[index + 1]
-  let end = Number(line.endTimeMs) || 0
-  if (next && next.startTimeMs > start) {
-    end = end > start ? Math.min(end, next.startTimeMs) : next.startTimeMs
-  }
-  if (end <= start) end = start + 5000
-  // A missing end can otherwise stretch across the whole song; cap the fill
-  // animation so the line still finishes in a reasonable time.
-  end = Math.min(end, start + 15000)
-  const now = playerState.currentTime * 1000
-  if (now <= start) return 0
-  if (now >= end) return total
-  return Math.min(total, Math.floor(((now - start) / (end - start)) * total))
+  // 逐字时间可用时按词推进，否则按整行线性补间；偏移与 updateActiveLyric 保持一致。
+  const now = playerState.currentTime * 1000 - (Number(settingsState.lyricOffsetMs) || 0)
+  return sungCharCount(line, now)
 })
 
 function lyricChars(text: string): string[] {
@@ -70,7 +58,8 @@ const lyricScales = [
   { value: 1.12, label: '大' },
   { value: 1.25, label: '特大' }
 ]
-const offsets = [-500, -200, 0, 200, 500]
+// 正负两秒可选：音源歌词和音频版本不一致时经常差到一两秒，±500ms 不够用。
+const offsets = [-2000, -1000, -500, 0, 500, 1000, 2000]
 
 const sleepLabel = computed(() => {
   if (playerState.sleepAtTrackEnd) return '播完当前歌曲后停止'

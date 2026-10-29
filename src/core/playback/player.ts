@@ -120,6 +120,8 @@ document.addEventListener?.('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
     savePlaybackState()
   } else if (playerState.playing) {
+    // 后台时 rAF 停摆，回到前台重新校准时基再把歌词接上。
+    startClock()
     void syncWakeLock()
   }
 })
@@ -195,6 +197,53 @@ export function restorePlayer(): void {
   } catch {}
 }
 
+let clockRaf: number | null = null
+let clockMedia = -1
+let clockAt = 0
+
+/**
+ * 逐帧推进歌词时钟。
+ *
+ * `timeupdate` 只有约 4Hz，直接拿它画逐字变色会一格一格跳、最多落后 250ms；
+ * 这里改成每帧读 audio.currentTime，并在两次变化之间按 playbackRate 补间
+ * （部分 WebView 把 currentTime 也按 250ms 步进）。
+ */
+function tickClock(): void {
+  clockRaf = null
+  if (!audio || !playerState.playing) return
+  const now = performance.now()
+  const media = Number.isFinite(audio.currentTime) ? audio.currentTime : playerState.currentTime
+  if (media !== clockMedia) {
+    clockMedia = media
+    clockAt = now
+    playerState.currentTime = media
+  } else if (clockAt) {
+    const elapsed = Math.min(400, Math.max(0, now - clockAt)) / 1000
+    const extrapolated = media + elapsed * (audio.playbackRate || 1)
+    const duration = playerState.duration
+    playerState.currentTime = Math.max(0, duration > 0 ? Math.min(extrapolated, duration) : extrapolated)
+  }
+  updateActiveLyric()
+  clockRaf = requestAnimationFrame(tickClock)
+}
+
+function startClock(): void {
+  resetClock()
+  if (clockRaf !== null) return
+  clockRaf = requestAnimationFrame(tickClock)
+}
+
+function stopClock(): void {
+  if (clockRaf !== null) cancelAnimationFrame(clockRaf)
+  clockRaf = null
+  resetClock()
+}
+
+function resetClock(): void {
+  clockMedia = -1
+  clockAt = 0
+}
+
 export function initPlayer(): void {
   if (audio) return
   audio = new Audio()
@@ -203,6 +252,7 @@ export function initPlayer(): void {
   applyPlaybackRate()
   audio.addEventListener('play', () => {
     playerState.playing = true
+    startClock()
     void syncWakeLock()
     const track = currentTrack()
     if (track) {
@@ -212,6 +262,7 @@ export function initPlayer(): void {
   })
   audio.addEventListener('pause', () => {
     playerState.playing = false
+    stopClock()
     persist()
     void syncWakeLock()
     const track = currentTrack()
@@ -224,6 +275,7 @@ export function initPlayer(): void {
     // Ignore progress from the previous track while a new source is loading.
     if (!audio || startPending || !audio.getAttribute('src')) return
     playerState.currentTime = audio.currentTime
+    // 暂停/后台时 rAF 时钟不跑，这里补一次高亮，保证 seek 后歌词立刻跟上。
     updateActiveLyric()
     updatePositionState()
     const now = Date.now()
@@ -234,6 +286,16 @@ export function initPlayer(): void {
       persist()
     }
   })
+  audio.addEventListener('seeking', resetClock)
+  audio.addEventListener('seeked', resetClock)
+  audio.addEventListener('ratechange', resetClock)
+  // 缓冲时冻结歌词时钟，恢复播放后再校准，避免歌词跑到声音前面。
+  audio.addEventListener('waiting', () => {
+    stopClock()
+    resetClock()
+  })
+  audio.addEventListener('playing', startClock)
+  audio.addEventListener('ended', stopClock)
   audio.addEventListener('durationchange', () => {
     if (!audio) return
     playerState.duration = Number.isFinite(audio.duration) ? audio.duration : playerState.duration
@@ -298,6 +360,7 @@ export function applyPlaybackRate(): void {
     audio.playbackRate = rate
     ;(audio as any).preservesPitch = true
   } catch {}
+  resetClock()
 }
 
 function updatePositionState(): void {
@@ -612,6 +675,7 @@ export function seek(time: number): void {
   try {
     audio.currentTime = value
     playerState.currentTime = value
+    resetClock()
     updateActiveLyric()
     updatePositionState()
     if (currentTrack()) {

@@ -205,7 +205,10 @@ watch(selected, load)
       <div class="page-head mt10">
         <div>
           <h1>发现</h1>
-        <div class="sub">{{ providerName }} · {{ charts.length }} 个榜单 · {{ playlists.length }} 张歌单</div>
+        <div class="sub">
+          <template v-if="pluginState.loading">正在载入音源…</template>
+          <template v-else>{{ providerName }} · {{ charts.length }} 个榜单 · {{ playlists.length }} 张歌单</template>
+        </div>
         </div>
         <div class="page-actions">
           <button class="iconbtn soft" aria-label="云端歌单" @click="router.push('/cloud')">
@@ -266,7 +269,7 @@ watch(selected, load)
           </button>
         </div>
 
-        <div v-if="loading" class="pad mt24">
+        <div v-if="loading || pluginState.loading" class="pad mt24">
           <div class="skeleton" style="height: 190px; border-radius: 20px" />
           <div class="grid2 mt16">
             <div class="skeleton" style="height: 150px" />

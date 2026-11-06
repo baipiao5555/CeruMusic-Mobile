@@ -565,7 +565,7 @@ onUnmounted(() => {
 
     <!-- 播放队列 -->
     <div v-if="showQueue" class="sheet-mask q-mask" @click.self="showQueue = false">
-      <div class="scrim" />
+      <div class="scrim" @click="showQueue = false" />
       <div class="q-back">
         <div class="q-bar">
           <div class="cover">
@@ -642,7 +642,7 @@ onUnmounted(() => {
 
     <!-- 播放设置 -->
     <div v-if="showSettings" class="sheet-mask" @click.self="closeSettings">
-      <div class="scrim" />
+      <div class="scrim" @click="closeSettings" />
       <div class="sheet ps">
         <div class="grab" />
         <div class="sh-head">

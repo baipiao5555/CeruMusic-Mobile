@@ -376,7 +376,12 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
         </button>
       </div>
 
-      <div v-if="!installed.length" class="empty">
+      <div v-if="pluginState.loading && !installed.length" class="pad mt12">
+        <div class="skeleton" style="height: 74px" />
+        <div class="skeleton mt10" style="height: 74px" />
+      </div>
+
+      <div v-else-if="!installed.length" class="empty">
         <div class="glyph"><Icon name="plugin" :size="34" /></div>
         <h3>还没有安装插件</h3>
         <p>澜音通过 v2 插件获取音乐信息。可以从链接、文件或内置示例开始。</p>

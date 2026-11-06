@@ -440,7 +440,7 @@ onMounted(() => {
         </p>
       </div>
 
-      <div v-else-if="!providers.length" class="empty">
+      <div v-else-if="!pluginState.loading && !providers.length" class="empty">
         <div class="glyph"><Icon name="plugin" :size="34" /></div>
         <h3>还没有音源插件</h3>
         <p>安装插件后才能搜索音乐。</p>

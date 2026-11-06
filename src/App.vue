@@ -216,7 +216,11 @@ onMounted(async () => {
       await installDemoPlugin()
     } catch (error) {
       console.warn('安装内置示例插件失败:', error)
+    } finally {
+      pluginState.loading = false
     }
+  } else {
+    pluginState.loading = false
   }
   if (pluginState.selectedProvider) selectProvider(pluginState.selectedProvider)
   // 从链接安装的音源插件：启动后静默检查一次新版本（6 小时内不重复）。

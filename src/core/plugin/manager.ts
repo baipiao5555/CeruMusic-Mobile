@@ -397,7 +397,6 @@ export async function initPlugins(): Promise<void> {
     const list = await idb.all<PluginRecord>('plugins')
     for (const record of list) records.set(record.pluginId, record)
     refresh()
-    pluginState.loading = false
     for (const record of list) {
       if (!record.enabled) continue
       try {
@@ -406,6 +405,7 @@ export async function initPlugins(): Promise<void> {
         console.warn('恢复插件失败:', error)
       }
     }
+    pluginState.loading = false
   } catch (error) {
     console.error('读取插件失败:', error)
     pluginState.loading = false
@@ -562,7 +562,19 @@ function stableScope(value: any): string {
 }
 
 export async function fetchPluginCode(url: string): Promise<string> {
-  const response = await requestRemote({ url, raw: true, timeoutMs: 30_000 })
+  let response: { status: number; body?: unknown }
+  try {
+    response = await requestRemote({ url, raw: true, timeoutMs: 30_000 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    if (/Failed to fetch|NetworkError|Load failed|Network request failed/i.test(message)) {
+      throw new Error('无法下载插件：链接不可访问，或该地址未允许跨域访问')
+    }
+    if (/timeout|timed out|超时/i.test(message)) {
+      throw new Error('下载插件超时：请检查网络后重试')
+    }
+    throw new Error(message || '下载插件失败')
+  }
   if (response.status < 200 || response.status >= 300) {
     throw new Error('下载插件失败: HTTP ' + response.status)
   }

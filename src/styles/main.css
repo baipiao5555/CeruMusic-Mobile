@@ -295,6 +295,12 @@ ion-app {
   padding-top: calc(var(--safe-top) + 8px);
 }
 
+/* Android 兜底：原生插件量到真实状态栏高度前（首帧/旧机型），
+   先按 26px 让开系统栏，量到后 JS 用内联样式覆盖并加 .insets-ready */
+html.native-android:not(.insets-ready) {
+  --safe-top: 26px;
+}
+
 .safe-t-lg {
   padding-top: calc(var(--safe-top) + 18px);
 }

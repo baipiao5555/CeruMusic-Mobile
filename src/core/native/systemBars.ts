@@ -16,8 +16,18 @@ export async function applySystemInsets(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return
   try {
     const insets = await SystemBars.getInsets()
-    document.documentElement.style.setProperty('--safe-top', `${Math.max(0, insets.top)}px`)
-    document.documentElement.style.setProperty('--safe-bottom', `${Math.max(0, insets.bottom)}px`)
+    const root = document.documentElement
+    const top = Math.max(0, Math.round(insets?.top ?? 0))
+    const bottom = Math.max(0, Math.round(insets?.bottom ?? 0))
+    // 启动瞬间 WindowInsets 往往还是 0，此时若把 0 写进 --safe-top，
+    // 状态栏高度就永远补不回来，页面标题会压在系统时间上。只在量到正值时才写。
+    if (top > 0) {
+      root.style.setProperty('--safe-top', `${top}px`)
+      root.classList.add('insets-ready')
+    }
+    if (bottom > 0) {
+      root.style.setProperty('--safe-bottom', `${bottom}px`)
+    }
   } catch {
     // 插件尚未就绪时保留 CSS env() 的默认值，后续调用会接管
   }
@@ -57,7 +67,13 @@ export function onNativeThemeChange(handler: (dark: boolean) => void): void {
 /** 启动时立即测量一次，并在旋转、软键盘弹出等尺寸变化后重新测量。 */
 export function initSystemInsets(): void {
   if (!Capacitor.isNativePlatform()) return
-  void applySystemInsets()
+  if (Capacitor.getPlatform() === 'android') {
+    document.documentElement.classList.add('native-android')
+  }
+  // 首帧之后 WindowInsets 才可用，多测几次直到拿到正值。
+  for (const delay of [0, 240, 600, 1200, 2400]) {
+    window.setTimeout(() => void applySystemInsets(), delay)
+  }
   window.addEventListener('resize', () => void applySystemInsets())
   window.addEventListener('orientationchange', () => void applySystemInsets())
   document.addEventListener('deviceready', () => void applySystemInsets(), { once: true })

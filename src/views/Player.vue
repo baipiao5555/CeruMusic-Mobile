@@ -319,7 +319,7 @@ onUnmounted(() => {
       <div class="p-veil" />
     </div>
 
-    <header class="p-top safe-t">
+    <header class="p-top">
       <button class="iconbtn glass" aria-label="收起" @click="close">
         <Icon name="chevron-down" :size="20" />
       </button>
@@ -465,7 +465,7 @@ onUnmounted(() => {
         <img :src="track.artwork || '/default-cover.png'" alt="" />
         <div class="ly-veil" />
       </div>
-      <header class="p-top safe-t ly-top">
+      <header class="p-top ly-top">
         <button class="iconbtn glass" aria-label="收起歌词" @click="showLyrics = false">
           <Icon name="chevron-down" :size="20" />
         </button>
@@ -776,7 +776,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 var(--pad);
+  padding: calc(var(--safe-top) + 8px) var(--pad) 0;
 }
 .p-head {
   flex: 1;
@@ -805,20 +805,23 @@ onUnmounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   padding: 12px var(--pad) calc(18px + var(--safe-bottom));
 }
-/* 主体（封面/信息/进度/控制）整体垂直居中，剩余高度不被单点吞掉 */
+/* 主体（封面/信息/进度/控制）顶部锚定：内部间距全为固定值，
+   剩余高度只留在歌词之上，避免在长屏上被摊成几段空洞 */
 .p-core {
   display: flex;
   flex-direction: column;
+  flex: none;
   min-height: 0;
-  margin: auto 0;
+  margin: 0;
 }
 
 .p-art {
   position: relative;
-  width: min(320px, 78vw, 34vh);
-  height: min(320px, 78vw, 34vh);
+  width: min(340px, 80vw, calc(33vh - 6px));
+  height: min(340px, 80vw, calc(33vh - 6px));
   margin: 0 auto;
   border-radius: 24px;
   flex: none;
@@ -1038,7 +1041,7 @@ onUnmounted(() => {
 
 .p-lyric {
   flex: none;
-  margin-top: 0;
+  margin-top: clamp(14px, 4vh, 44px);
   padding-top: clamp(8px, 1.4vh, 16px);
   text-align: center;
 }
@@ -1261,7 +1264,7 @@ onUnmounted(() => {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-bottom: 4px;
+  padding-bottom: calc(4px + var(--safe-bottom));
 }
 .q-row {
   display: flex;

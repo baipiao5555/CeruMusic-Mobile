@@ -185,7 +185,7 @@ function completedMeta(task: DownloadTask): string {
           <div class="pgrp">
             <div v-for="task in activeTasks" :key="task.id" class="prow tall">
               <div class="pcv">
-                <img :src="task.track.artwork" alt="" loading="lazy" />
+                <img :src="task.track.artwork" alt="" />
               </div>
               <div class="pmain">
                 <div class="ptt truncate">{{ task.track.title }}</div>
@@ -220,7 +220,7 @@ function completedMeta(task: DownloadTask): string {
           <div class="pgrp">
             <div v-for="task in interruptedTasks" :key="task.id" class="prow tall">
               <div class="pcv">
-                <img :src="task.track.artwork" alt="" loading="lazy" />
+                <img :src="task.track.artwork" alt="" />
               </div>
               <div class="pmain">
                 <div class="ptt truncate">{{ task.track.title }}</div>
@@ -251,7 +251,7 @@ function completedMeta(task: DownloadTask): string {
           <div class="pgrp">
             <div v-for="task in completedTasks" :key="task.id" class="prow">
               <div class="pcv sm">
-                <img :src="task.track.artwork" alt="" loading="lazy" />
+                <img :src="task.track.artwork" alt="" />
               </div>
               <div class="pmain">
                 <div class="ptt truncate">

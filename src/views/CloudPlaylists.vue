@@ -223,7 +223,7 @@ onMounted(() => {
                 v-if="cloud.cover && cloud.cover !== 'default-cover'"
                 :src="cloud.cover"
                 alt=""
-                loading="lazy"
+               
                 @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
               />
               <Icon v-else name="music" :size="18" />

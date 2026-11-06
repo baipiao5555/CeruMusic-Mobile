@@ -1129,7 +1129,13 @@ mark.hl {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 34%, rgba(0, 0, 0, 0.62) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.3) 0%,
+    rgba(0, 0, 0, 0.08) 22%,
+    rgba(0, 0, 0, 0) 44%,
+    rgba(0, 0, 0, 0.62) 100%
+  );
 }
 .rankcard .rk {
   position: absolute;
@@ -1140,7 +1146,7 @@ mark.hl {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.92);
   letter-spacing: 0.02em;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
 }
 .rankcard .rt {
   position: absolute;

@@ -23,7 +23,6 @@ const totalTracks = computed(() =>
   libraryState.playlists.reduce((total, playlist) => total + playlist.tracks.length, 0)
 )
 const cloudCount = computed(() => playlists.value.filter((playlist) => playlist.cloudId).length)
-const collected = computed(() => playlists.value.filter((playlist) => playlist.cloudId))
 
 function stampOf(playlist: LocalPlaylist): number {
   const remote = playlist.cloudUpdatedAt ? Date.parse(playlist.cloudUpdatedAt) : 0
@@ -41,10 +40,6 @@ const visible = computed(() => {
 
 function coverOf(playlist: LocalPlaylist): string | undefined {
   return playlist.cover || playlist.tracks[0]?.artwork
-}
-
-function sourceOf(playlist: LocalPlaylist): string {
-  return playlist.tracks[0]?.providerName || '云端'
 }
 
 function updatedLabel(playlist: LocalPlaylist): string {
@@ -137,7 +132,7 @@ async function removePlaylist(playlist: LocalPlaylist): Promise<void> {
                 v-if="coverOf(playlist)"
                 :src="coverOf(playlist)"
                 alt=""
-                loading="lazy"
+               
                 @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
               />
               <div v-else class="ph"><Icon name="music" :size="22" /></div>
@@ -182,37 +177,16 @@ async function removePlaylist(playlist: LocalPlaylist): Promise<void> {
       </section>
 
       <section class="mt32">
-        <div class="section-head">
-          <div class="st"><h2>收藏的歌单</h2><span class="idx">Collected</span></div>
-          <button class="more" @click="router.push('/cloud')">
-            全部 {{ cloudCount }}<Icon name="chevron" :size="14" />
-          </button>
-        </div>
-
-        <div v-if="collected.length" class="p-col">
-          <div v-for="playlist in collected" :key="playlist.id" class="cg" @click="openPlaylist(playlist)">
-            <div class="cover">
-              <img
-                v-if="coverOf(playlist)"
-                :src="coverOf(playlist)"
-                alt=""
-                loading="lazy"
-                @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
-              />
-              <div v-else class="ph"><Icon name="music" :size="20" /></div>
-              <span class="badge gold">云端</span>
-            </div>
-            <div class="n">{{ playlist.name }}</div>
-            <div class="s">{{ sourceOf(playlist) }} · {{ playlist.tracks.length }} 首</div>
-          </div>
-        </div>
-
-        <div v-else class="p-hollow">
-          <p>还没有收藏的歌单。在电脑版把歌单上传到云端后，来这里点「云端歌单」导入。</p>
-          <button class="btn btn-ghost btn-sm mt8" @click="router.push('/cloud')">
-            <Icon name="cloud" :size="15" /> 去云端歌单
-          </button>
-        </div>
+        <button class="cloud-row" @click="router.push('/cloud')">
+          <span class="ci"><Icon name="cloud" :size="19" /></span>
+          <span class="ct">
+            <b>云端歌单</b>
+            <i>{{
+              cloudCount ? `${cloudCount} 张已同步到云端 · 与电脑版共用` : '把歌单同步到云端，电脑版也能打开'
+            }}</i>
+          </span>
+          <Icon name="chevron" :size="16" />
+        </button>
       </section>
 
       <div class="scroll-end" />
@@ -462,5 +436,51 @@ async function removePlaylist(playlist: LocalPlaylist): Promise<void> {
   display: flex;
   gap: 8px;
   padding-top: 14px;
+}
+.cloud-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: calc(100% - var(--pad) * 2);
+  margin: 0 var(--pad);
+  padding: 14px 16px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  color: var(--ink-2);
+}
+.cloud-row:active {
+  background: var(--tint-softer);
+}
+.cloud-row .ci {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--r-md);
+  background: var(--gold-soft, rgba(185, 143, 78, 0.12));
+  color: var(--gold);
+}
+.cloud-row .ct {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.cloud-row .ct b {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cloud-row .ct i {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

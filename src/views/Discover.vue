@@ -294,7 +294,7 @@ watch(selected, load)
                   <img
                     :src="artworkOf(chart)"
                     alt=""
-                    loading="lazy"
+                   
                     @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
                   />
                   <div class="shade" />
@@ -333,7 +333,7 @@ watch(selected, load)
                   <img
                     :src="artworkOf(playlist)"
                     alt=""
-                    loading="lazy"
+                   
                     @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
                   />
                   <span class="badge on-art">{{ countOf(playlist) }}</span>
@@ -404,7 +404,7 @@ watch(selected, load)
               <img
                 :src="track.artwork"
                 alt=""
-                loading="lazy"
+               
                 @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
               />
             </div>

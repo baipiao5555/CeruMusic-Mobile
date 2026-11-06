@@ -285,7 +285,7 @@ function openImport(): void {
           </div>
           <div v-if="albumGroups.length" class="p-list">
             <button v-for="group in albumGroups" :key="group.key" class="p-srow" @click="playGroup(group)">
-              <div class="cover"><img :src="group.cover" alt="" loading="lazy" /></div>
+              <div class="cover"><img :src="group.cover" alt="" /></div>
               <div class="m">
                 <div class="t truncate">{{ group.name }}</div>
                 <div class="a truncate">{{ group.sub }} · {{ group.tracks.length }} 首</div>
@@ -307,7 +307,7 @@ function openImport(): void {
           </div>
           <div v-if="artistGroups.length" class="p-list">
             <button v-for="group in artistGroups" :key="group.key" class="p-srow" @click="playGroup(group)">
-              <div class="cover round"><img :src="group.cover" alt="" loading="lazy" /></div>
+              <div class="cover round"><img :src="group.cover" alt="" /></div>
               <div class="m">
                 <div class="t truncate">{{ group.name }}</div>
                 <div class="a truncate">{{ group.tracks.length }} 首歌曲</div>
@@ -341,7 +341,7 @@ function openImport(): void {
               @keydown.enter="openPlaylist(playlist)"
             >
               <div class="p-cv">
-                <img v-if="coverOf(playlist)" :src="coverOf(playlist)" alt="" loading="lazy" />
+                <img v-if="coverOf(playlist)" :src="coverOf(playlist)" alt="" />
                 <Icon v-else name="music" :size="18" />
               </div>
               <div class="f1">

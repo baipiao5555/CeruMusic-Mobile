@@ -262,7 +262,6 @@ ion-app {
   overflow: hidden;
   background: var(--porcelain);
   color: var(--ink);
-  isolation: isolate;
 }
 
 .screen.dark {
@@ -616,7 +615,7 @@ ion-app {
   color: var(--cinnabar);
 }
 .btn-sm {
-  height: 34px;
+  height: 36px;
   padding: 0 13px;
   font-size: 13px;
 }
@@ -761,10 +760,16 @@ ion-app {
   position: relative;
   width: 44px;
   height: 26px;
+  cursor: pointer;
   border-radius: var(--r-pill);
   background: var(--c200);
   flex: none;
   transition: background 0.22s var(--e-out);
+}
+.switch::before {
+  content: '';
+  position: absolute;
+  inset: -9px -5px;
 }
 .switch::after {
   content: '';
@@ -901,12 +906,20 @@ ion-app {
   letter-spacing: 0.1em;
 }
 .section-head .more {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 3px;
+  height: 30px;
+  padding: 0 2px;
   font-size: 12px;
   color: var(--ink-3);
   font-weight: 500;
+}
+.section-head .more::after {
+  content: '';
+  position: absolute;
+  inset: -7px -8px;
 }
 
 /* 分组标题（设置/日志等） */

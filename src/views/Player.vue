@@ -787,7 +787,7 @@ onUnmounted(() => {
   gap: 2px;
 }
 .p-head-k {
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -805,7 +805,7 @@ onUnmounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px var(--pad) calc(10px + var(--safe-bottom));
+  padding: 12px var(--pad) calc(18px + var(--safe-bottom));
 }
 /* 主体（封面/信息/进度/控制）整体垂直居中，剩余高度不被单点吞掉 */
 .p-core {

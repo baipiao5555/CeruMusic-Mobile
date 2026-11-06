@@ -662,7 +662,7 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
 }
 .get {
   flex: none;
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   border-radius: 9px;
   font-size: 11.5px;
@@ -690,12 +690,18 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
   margin-top: 10px;
 }
 .altbtn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 4px 0;
   font-size: 11px;
   color: rgb(255 255 255 / 0.74);
+}
+.altbtn::after {
+  content: '';
+  position: absolute;
+  inset: -8px -6px;
 }
 .altbtn:disabled {
   opacity: 0.5;

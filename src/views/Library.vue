@@ -531,8 +531,8 @@ function openImport(): void {
 }
 .p-id .p-new {
   flex: none;
-  height: 32px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 13px;
   font-size: 12px;
 }
 .p-nums {

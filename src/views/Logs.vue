@@ -379,14 +379,15 @@ function clearAll(): void {
 }
 .chips {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   padding: 14px var(--pad) 0;
 }
 .chips .chip {
   flex: none;
+  min-width: 0;
   height: 36px;
-  padding: 0 4px;
+  padding: 0 2px;
   justify-content: center;
   position: relative;
   letter-spacing: 0.02em;
@@ -397,7 +398,7 @@ function clearAll(): void {
   inset: -3px 0;
 }
 .chips .chip em {
-  margin-left: 5px;
+  margin-left: 4px;
   font-style: normal;
   font-size: 11px;
   font-weight: 500;

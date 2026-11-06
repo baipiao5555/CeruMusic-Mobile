@@ -3,9 +3,8 @@ import { computed, ref } from 'vue'
 import Icon from './Icon.vue'
 import SongActionsSheet from './SongActionsSheet.vue'
 import { playerState, type Track } from '@/core/playback/player'
-import { isFavorite, toggleFavorite } from '@/core/library'
-import { downloadTrack, isDownloaded, isDownloading } from '@/core/downloads'
-import { notify } from '@/core/plugin/manager'
+import { isFavorite } from '@/core/library'
+import { isDownloaded, isDownloading } from '@/core/downloads'
 import { highestQuality, qualityLabel } from '@/core/quality'
 import { highlightParts } from '@/core/search'
 
@@ -44,9 +43,6 @@ const favorite = computed(() => isFavorite(props.track))
 const downloaded = computed(() => isDownloaded(props.track))
 const downloading = computed(() => isDownloading(props.track))
 const bestQuality = computed(() => highestQuality(props.track.qualities))
-const sourceTag = computed(() =>
-  props.track.providerId && props.track.providerId !== 'local' ? props.track.providerId : ''
-)
 const titleParts = computed(() =>
   props.query ? highlightParts(props.track.title, props.query) : [{ text: props.track.title, hit: false }]
 )
@@ -54,25 +50,15 @@ const artistParts = computed(() =>
   props.query ? highlightParts(props.track.artist, props.query) : [{ text: props.track.artist, hit: false }]
 )
 
+/** 歌单多选：开模式时点击行变成选择，不再起播。 */
+const selecting = computed(() => Boolean(props.selectable))
+
 function play(): void {
   if (props.selectable) {
     emit('toggle-select')
     return
   }
   emit('play', props.queue ?? [props.track], props.index)
-}
-
-function download(): void {
-  if (downloaded.value) {
-    notify('这首歌已经下载好了')
-    return
-  }
-  if (downloading.value) {
-    notify('这首歌正在下载中')
-    return
-  }
-  downloadTrack(props.track)
-  notify('已加入下载队列')
 }
 
 function formatDuration(ms: number): string {
@@ -86,55 +72,58 @@ function formatDuration(ms: number): string {
 
 <template>
   <div
-    class="song-row"
-    :class="{ playing: active, selecting: selectable, selected: selectable && selected }"
+    class="songrow"
+    :class="{ active, selecting, selected: selectable && selected }"
     @click="play"
   >
-    <span v-if="selectable" class="select-check" :class="{ checked: selected }" aria-hidden="true">
-      <Icon v-if="selected" name="check" :size="13" />
+    <span v-if="selecting" class="sel" :class="{ on: selected }" aria-hidden="true">
+      <Icon v-if="selected" name="check" :size="12" />
     </span>
-    <span v-else-if="showIndex" class="song-index">{{ index + 1 }}</span>
+    <span v-else-if="showIndex" class="idx">{{ String(index + 1).padStart(2, '0') }}</span>
+
     <div v-if="showCover" class="cover">
-      <img :src="track.artwork" alt="" loading="lazy" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
+      <img
+        :src="track.artwork"
+        alt=""
+        loading="lazy"
+        @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
+      />
     </div>
-    <div class="info">
-      <h3>
+
+    <div class="meta-wrap">
+      <div class="t truncate">
         <template v-for="(part, partIndex) in titleParts" :key="partIndex">
           <mark v-if="part.hit" class="hl">{{ part.text }}</mark>
           <template v-else>{{ part.text }}</template>
         </template>
-      </h3>
-      <p class="song-meta">
-        <span v-if="bestQuality" class="quality-tag">{{ qualityLabel(bestQuality) }}</span>
-        <span v-if="sourceTag" class="source-tag">{{ sourceTag }}</span>
-        <span class="song-artist">
+      </div>
+      <div class="a">
+        <span class="artist truncate">
           <template v-for="(part, partIndex) in artistParts" :key="partIndex">
             <mark v-if="part.hit" class="hl">{{ part.text }}</mark>
             <template v-else>{{ part.text }}</template>
           </template>
         </span>
-      </p>
+        <span v-if="bestQuality" class="q">{{ qualityLabel(bestQuality) }}</span>
+        <span v-if="favorite" class="mk fav" aria-label="已收藏">
+          <Icon name="heart-filled" :size="11" />
+        </span>
+        <span v-if="downloaded" class="mk dl" aria-label="已下载">
+          <Icon name="check" :size="11" />
+        </span>
+        <span v-if="downloading" class="mk busy" aria-label="下载中">
+          <Icon name="download" :size="11" />
+        </span>
+      </div>
     </div>
-    <div v-if="!selectable" class="row-actions" @click.stop>
-      <span v-if="showIndex" class="duration">{{ formatDuration(track.durationMs) }}</span>
-      <button
-        class="icon-action"
-        :class="{ active: favorite }"
-        :aria-label="favorite ? '取消收藏' : '收藏'"
-        @click="toggleFavorite(track)"
-      >
-        <Icon :name="favorite ? 'heart-filled' : 'heart'" :size="19" />
-      </button>
-      <button
-        class="icon-action"
-        :class="{ active: downloaded, busy: downloading }"
-        :aria-label="downloaded ? '已下载' : '下载'"
-        @click="download"
-      >
-        <Icon :name="downloaded ? 'check' : 'download'" :size="19" />
-      </button>
-      <button class="icon-action" aria-label="更多操作" @click="showActions = true">
-        <Icon name="more" :size="19" />
+
+    <div v-if="!selecting" class="r" @click.stop>
+      <div v-if="active" class="wave" aria-label="正在播放">
+        <i /><i /><i /><i />
+      </div>
+      <span v-else class="dur">{{ formatDuration(track.durationMs) }}</span>
+      <button class="iconbtn quiet" aria-label="更多操作" @click="showActions = true">
+        <Icon name="more" :size="18" />
       </button>
     </div>
   </div>
@@ -150,77 +139,75 @@ function formatDuration(ms: number): string {
 </template>
 
 <style scoped>
-.hl {
-  color: var(--brand);
-  background: var(--brand-soft);
-  border-radius: 3px;
-  font-weight: 700;
+.songrow.selecting.selected {
+  background: var(--tint-soft);
 }
-.song-index {
-  width: 22px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--muted-2);
-  font-variant-numeric: tabular-nums;
-}
-.select-check {
+.sel {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
+  flex: none;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  border: 1.5px solid var(--line);
-  color: #fff;
+  border: 1.5px solid var(--line-2);
+  color: var(--surface);
   background: var(--surface);
   transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.15s ease;
+    background 0.15s var(--e-out),
+    border-color 0.15s var(--e-out),
+    transform 0.15s var(--e-out);
 }
-.select-check.checked {
-  border-color: var(--brand);
-  background: var(--brand);
+.sel.on {
+  border-color: var(--tint);
+  background: var(--tint);
 }
-.song-row.selecting.selected {
-  background: var(--brand-softer);
-}
-.song-row.selecting:active .select-check {
+.songrow.selecting:active .sel {
   transform: scale(0.9);
 }
-.duration {
+.artist {
+  min-width: 0;
+}
+.src {
+  flex: none;
   font-size: 11px;
-  color: var(--muted-2);
-  margin-right: 2px;
-  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--ink-4);
 }
-.song-meta {
-  display: flex;
+.mk {
+  display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: 4px;
-  min-width: 0;
 }
-.song-artist {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.mk.fav {
+  color: var(--cinnabar);
 }
-.quality-tag,
-.source-tag {
-  flex: 0 0 auto;
-  padding: 1px 4px;
-  border-radius: 5px;
-  font-size: 9.5px;
-  font-weight: 650;
-  line-height: 1.45;
+.mk.dl {
+  color: var(--tint);
 }
-.quality-tag {
-  color: #f0a23a;
-  background: rgba(240, 138, 36, 0.14);
+.mk.busy {
+  color: var(--ink-4);
+  animation: mk-pulse 1.1s var(--e-inout) infinite;
 }
-.source-tag {
-  color: #38d6e6;
-  background: rgba(56, 214, 230, 0.12);
+@keyframes mk-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.r {
+  flex: none;
+  min-height: 44px;
+}
+.dur {
+  padding-right: 4px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-4);
+}
+.wave {
+  margin-right: 6px;
 }
 </style>

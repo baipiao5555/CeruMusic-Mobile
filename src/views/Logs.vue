@@ -19,8 +19,12 @@ const platformName =
       ? `Android ${androidVersion}`
       : 'Android'
     : Capacitor.getPlatform()
-const initialLevel = route.query.level === 'error' ? 'error' : 'all'
-const filter = ref<'all' | LogLevel>(initialLevel)
+const LEVELS = ['all', 'error', 'warn', 'info', 'debug'] as const
+type LevelFilter = (typeof LEVELS)[number]
+const levelQuery = typeof route.query.level === 'string' ? route.query.level : ''
+const initialLevel: LevelFilter = LEVELS.find((level) => level === levelQuery) ?? 'all'
+const filter = ref<LevelFilter>(initialLevel)
+const query = ref('')
 const nativeEntries = ref<string[]>([])
 
 onMounted(async () => {
@@ -28,18 +32,46 @@ onMounted(async () => {
 })
 
 const counts = computed(() => logCounts())
-const entries = computed(() =>
-  filter.value === 'all'
-    ? [...logState.entries].reverse()
-    : [...logState.entries].reverse().filter((entry) => entry.level === filter.value)
+const debugCount = computed(
+  () => logState.entries.filter((entry) => entry.module === 'DEBUG').length
 )
+const entries = computed(() => {
+  const all = [...logState.entries].reverse()
+  if (filter.value === 'all') return all
+  if (filter.value === 'debug') return all.filter((entry) => entry.module === 'DEBUG')
+  return all.filter((entry) => entry.level === filter.value)
+})
+
+const visibleEntries = computed(() => {
+  const term = query.value.trim().toLowerCase()
+  if (!term) return entries.value
+  return entries.value.filter((entry) =>
+    `${entry.module} ${entry.message} ${entry.detail ?? ''}`.toLowerCase().includes(term)
+  )
+})
+
+const visibleNative = computed(() => {
+  const term = query.value.trim().toLowerCase()
+  if (!term) return nativeEntries.value
+  return nativeEntries.value.filter((line) => line.toLowerCase().includes(term))
+})
 
 const filterOptions = computed(() => [
-  { value: 'all' as const, label: '全部', count: counts.value.total },
-  { value: 'error' as const, label: '错误', count: counts.value.errors },
-  { value: 'warn' as const, label: '警告', count: counts.value.warns },
-  { value: 'info' as const, label: '信息', count: Math.max(0, counts.value.total - counts.value.errors - counts.value.warns) }
+  { value: 'all' as const, label: 'ALL', count: counts.value.total },
+  { value: 'debug' as const, label: 'DEBUG', count: debugCount.value },
+  {
+    value: 'info' as const,
+    label: 'INFO',
+    count: Math.max(0, counts.value.total - counts.value.errors - counts.value.warns)
+  },
+  { value: 'warn' as const, label: 'WARN', count: counts.value.warns },
+  { value: 'error' as const, label: 'ERROR', count: counts.value.errors }
 ])
+
+function resetFilters(): void {
+  filter.value = 'all'
+  query.value = ''
+}
 
 function formatTime(time: number): string {
   const date = new Date(time)
@@ -127,266 +159,426 @@ function clearAll(): void {
 </script>
 
 <template>
-  <div class="page logs-page">    <header class="page-header">
-      <button class="icon-btn" aria-label="返回" @click="router.back()">
-        <Icon name="back" :size="20" />
-      </button>
-      <div class="brand-name" style="font-size: 20px">运行日志</div>
-      <button class="icon-btn" aria-label="清空日志" :disabled="!counts.total" @click="clearAll">
-        <Icon name="trash" :size="19" />
-      </button>
-    </header>
-
-    <section class="card summary">
-      <div class="summary-icon"><Icon name="smartphone" :size="24" /></div>
-      <div class="summary-info">
-        <h2>{{ appVersion }} · {{ platformName }}</h2>
-        <p>{{ counts.total }} 条日志<template v-if="counts.errors"> · {{ counts.errors }} 条错误</template><template v-if="counts.warns"> · {{ counts.warns }} 条警告</template><template v-if="nativeEntries.length"> · 原生 {{ nativeEntries.length }} 条</template></p>
+  <div class="screen">
+    <div class="scroll safe-t-lg logs-scroll">
+      <div class="navrow">
+        <button class="iconbtn soft" aria-label="返回" @click="router.back()">
+          <Icon name="back" :size="20" />
+        </button>
+        <span class="f1" />
+        <button
+          class="iconbtn soft trashbtn"
+          aria-label="清空日志"
+          :disabled="!counts.total"
+          @click="clearAll"
+        >
+          <Icon name="trash" :size="19" />
+        </button>
       </div>
-      <span v-if="counts.errors" class="error-badge">{{ counts.errors }} 错误</span>
-    </section>
 
-    <div class="filter-row">
-      <button
-        v-for="option in filterOptions"
-        :key="option.value"
-        class="filter-chip"
-        :class="{ active: filter === option.value }"
-        @click="filter = option.value"
-      >
-        <span>{{ option.label }}</span>
-        <span v-if="option.count" class="filter-count">{{ option.count }}</span>
-      </button>
-    </div>
-
-    <div v-if="entries.length" class="log-list">
-      <article v-for="entry in entries" :key="entry.id" class="log-row card">
-        <div class="log-head">
-          <span class="time">{{ formatTime(entry.time) }}</span>
-          <span class="level" :class="entry.level">{{ levelLabel(entry.level) }}</span>
-          <span class="module">{{ entry.module }}</span>
+      <header class="page-head phead">
+        <div>
+          <div class="eyebrow">CERU MUSIC · 诊断</div>
+          <h1 class="headline">日志</h1>
         </div>
-        <p class="message">{{ entry.message }}</p>
-        <pre v-if="entry.detail" class="detail">{{ entry.detail }}</pre>
-      </article>
-    </div>
+      </header>
 
-    <div v-else class="empty">
-      <div class="emoji">📄</div>
-      <h3>{{ counts.total ? '这个分类下没有日志' : '还没有运行日志' }}</h3>
-      <p>出问题时日志会自动记录在这里，可以直接复制或分享给开发者。</p>
-    </div>
+      <div class="sum">
+        <div class="cell">
+          <div class="b">{{ counts.total }}<span>条</span></div>
+          <div class="s">全部记录</div>
+        </div>
+        <div class="cell bad">
+          <div class="b">{{ counts.errors }}<span>条</span></div>
+          <div class="s">错误</div>
+        </div>
+        <div class="cell">
+          <div class="b">{{ counts.warns }}<span>条</span></div>
+          <div class="s">警告</div>
+        </div>
+      </div>
 
-    <section v-if="nativeEntries.length" class="native-card card">
-      <h3>原生歌词 / 播放日志</h3>
-      <p>来自 Android 播放服务，记录歌词行数、播放位置刷新和跳转，导出时会附在报告末尾。</p>
-      <pre v-for="(entry, index) in nativeEntries" :key="index">{{ entry }}</pre>
-    </section>
+      <div class="sumline">
+        <span>{{ appVersion }} · {{ platformName }}</span>
+        <span>原生播放服务 {{ nativeEntries.length }} 条</span>
+      </div>
 
-    <p class="footnote">日志只保存在本机，最多保留 1000 条；不记录账号密码、Cookie 和完整请求参数。</p>
+      <div class="chips">
+        <button
+          v-for="option in filterOptions"
+          :key="option.value"
+          class="chip"
+          :class="{ active: filter === option.value, err: option.value === 'error' }"
+          @click="filter = option.value"
+        >
+          {{ option.label }}<em>{{ option.count }}</em>
+        </button>
+      </div>
 
-    <div class="log-actions">
-      <button class="btn secondary" :disabled="!counts.total && !nativeEntries.length" @click="copyAll">
-        <Icon name="copy" :size="17" /> 复制全部
-      </button>
-      <button class="btn" :disabled="!counts.total && !nativeEntries.length" @click="shareLogs">
-        <Icon name="share" :size="17" /> 导出并分享
-      </button>
+      <div class="searchfield">
+        <Icon name="search" :size="16" />
+        <input
+          v-model="query"
+          type="search"
+          placeholder="搜索模块、内容或详情"
+          aria-label="搜索日志"
+        />
+        <button v-if="query" class="clearq" aria-label="清除搜索" @click="query = ''">
+          <Icon name="close" :size="14" />
+        </button>
+      </div>
+
+      <template v-if="counts.total || nativeEntries.length">
+        <div class="group-title">
+          <span class="cn">日志</span>
+          <span class="cnt">{{ visibleEntries.length }}</span>
+          <span class="en">Latest</span>
+        </div>
+
+        <div v-if="visibleEntries.length" class="pgrp">
+          <div v-for="entry in visibleEntries" :key="entry.id" class="log">
+            <div class="ltop">
+              <span class="time">{{ formatTime(entry.time) }}</span>
+              <i class="sep" />
+              <span class="mod">{{ entry.module }}</span>
+              <span class="lv" :class="entry.level">{{ levelLabel(entry.level) }}</span>
+            </div>
+            <div class="msg">{{ entry.message }}</div>
+            <div v-if="entry.detail" class="detail">{{ entry.detail }}</div>
+          </div>
+        </div>
+
+        <div v-else class="empty-block">
+          <Icon name="sort" :size="22" />
+          <div class="et">{{ query ? '没有匹配的日志' : '该分类还没有日志' }}</div>
+          <p class="ep">
+            {{ query ? '换一个关键词，或清空搜索看看全部记录。' : '换一个级别，或稍后回来看看。' }}
+          </p>
+          <button class="btn btn-ghost btn-sm" @click="resetFilters">查看全部</button>
+        </div>
+
+        <template v-if="visibleNative.length">
+          <div class="group-title">
+            <span class="cn">原生播放服务</span>
+            <span class="cnt">{{ visibleNative.length }} 条</span>
+            <span class="en">Android</span>
+          </div>
+          <div class="pgrp">
+            <div v-for="(line, index) in visibleNative" :key="index" class="nline">{{ line }}</div>
+          </div>
+        </template>
+
+        <p class="foot">日志只存在本机，最多保留 1000 条，不含账号与密码。</p>
+      </template>
+
+      <div v-else class="empty">
+        <div class="glyph"><Icon name="history" :size="30" /></div>
+        <h3>还没有日志</h3>
+        <p>运行日志关闭时不会记录；可以在 设置 · 数据 里打开。</p>
+        <button class="btn btn-primary" @click="router.push('/settings')">去设置</button>
+      </div>
+
+      <div class="actions">
+        <button
+          class="btn btn-ghost f1"
+          :disabled="!counts.total && !nativeEntries.length"
+          @click="copyAll"
+        >
+          <Icon name="copy" :size="15" />复制全部
+        </button>
+        <button
+          class="btn btn-tonal f1"
+          :disabled="!counts.total && !nativeEntries.length"
+          @click="shareLogs"
+        >
+          <Icon name="share" :size="15" />导出并分享
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.logs-page {
-  padding-bottom: calc(var(--nav-height) + 96px);
+.logs-scroll {
+  padding-bottom: calc(var(--dock-h) + 96px);
 }
-.summary {
+.navrow {
   display: flex;
   align-items: center;
-  gap: 13px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 8px var(--pad) 0;
 }
-.summary-icon {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 auto;
-  border-radius: 16px;
-  color: var(--brand);
-  background: var(--brand-soft);
+.navrow .iconbtn {
+  width: 42px;
+  height: 42px;
 }
-.summary-info {
-  flex: 1;
-  min-width: 0;
+.phead {
+  padding-top: 9px;
 }
-.summary-info h2 {
-  font-size: 13.5px;
+.headline {
+  margin-top: 7px;
 }
-.summary-info p {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--muted);
+.trashbtn:disabled {
+  opacity: 0.4;
 }
-.error-badge {
-  flex: 0 0 auto;
-  padding: 3px 8px;
-  border-radius: 999px;
-  color: #d94a35;
-  background: rgba(217, 74, 53, 0.1);
-  font-size: 10px;
-  font-weight: 650;
-}
-.filter-row {
+.sum {
   display: flex;
-  gap: 7px;
-  overflow-x: auto;
-  padding: 14px 2px 10px;
-  scrollbar-width: none;
-}
-.filter-row::-webkit-scrollbar {
-  display: none;
-}
-.filter-chip {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  color: var(--muted);
+  margin: 19px var(--pad) 0;
   background: var(--surface);
   border: 1px solid var(--line);
-  font-size: 12px;
-  font-weight: 550;
+  border-radius: var(--r-lg);
 }
-.filter-count {
-  font-size: 10.5px;
-  opacity: 0.72;
+.sum .cell {
+  flex: 1;
+  position: relative;
+  padding: 14px 0 12px;
+  text-align: center;
+}
+.sum .cell + .cell::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 14px;
+  width: 1px;
+  background: var(--line);
+}
+.sum .b {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.filter-chip.active {
-  color: #fff;
-  background: var(--brand);
-  border-color: transparent;
-  font-weight: 650;
+.sum .b span {
+  margin-left: 2px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-4);
 }
-.log-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.sum .s {
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
 }
-.log-row {
-  padding: 9px 11px;
-  border-radius: 14px;
+.sum .cell.bad .b {
+  color: var(--cinnabar);
 }
-.log-head {
+.sumline {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 4px 0;
+  margin: 0 var(--pad);
+  font-size: 11px;
+  color: var(--ink-4);
+  letter-spacing: 0.01em;
+}
+.chips {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
   gap: 6px;
+  padding: 14px var(--pad) 0;
 }
-.time {
-  color: var(--muted-2);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-.level {
-  padding: 2px 5px;
-  border-radius: 4px;
-  font-size: 9px;
-  font-weight: 750;
-  letter-spacing: 0.03em;
-}
-.level.error {
-  color: #cf4631;
-  background: #ffe7e2;
-}
-.level.warn {
-  color: #b37312;
-  background: #fff1d8;
-}
-.level.info {
-  color: #178a66;
-  background: #e8f7ef;
-}
-.module {
-  color: var(--muted-2);
-  font-size: 9px;
-  font-weight: 650;
+.chips .chip {
+  flex: none;
+  height: 36px;
+  padding: 0 4px;
+  justify-content: center;
+  position: relative;
   letter-spacing: 0.02em;
 }
-.message {
-  margin-top: 4px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+.chips .chip::after {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+}
+.chips .chip em {
+  margin-left: 5px;
+  font-style: normal;
   font-size: 11px;
-  line-height: 1.45;
-  color: var(--text);
+  font-weight: 500;
+  color: var(--ink-4);
+}
+.chips .chip.active em {
+  color: var(--tint);
+}
+.chips .chip.err {
+  color: var(--cinnabar);
+}
+.chips .chip.err.active {
+  color: var(--cinnabar);
+  background: var(--tint-softer);
+  border-color: transparent;
+}
+.searchfield {
+  margin: 12px var(--pad) 0;
+}
+.searchfield input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+.searchfield input::placeholder {
+  color: var(--ink-4);
+}
+.clearq {
+  width: 28px;
+  height: 28px;
+  margin-right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-4);
+}
+.pgrp {
+  margin: 0 var(--pad);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.log {
+  position: relative;
+  padding: 14px 16px 15px;
+}
+.log + .log::before,
+.nline + .nline::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--line);
+}
+.ltop {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.time {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.sep {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  opacity: 0.7;
+}
+.mod {
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.lv {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.lv.error {
+  color: var(--cinnabar);
+}
+.lv.warn {
+  color: var(--ink-2);
+}
+.lv.info {
+  color: var(--ink-4);
+}
+.msg {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
   word-break: break-word;
 }
 .detail {
-  margin: 5px 0 0;
-  padding: 7px 8px;
-  border-radius: 8px;
-  color: var(--muted);
-  background: var(--brand-softer);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 9.5px;
-  line-height: 1.4;
+  margin-top: 9px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: var(--porcelain-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--ink-3);
   white-space: pre-wrap;
-  word-break: break-word;
+  word-break: break-all;
 }
-.native-card {
-  margin-top: 14px;
-  padding: 12px 13px;
+.nline {
+  position: relative;
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-3);
+  word-break: break-all;
+  white-space: pre-wrap;
 }
-.native-card h3 {
+.empty-block {
+  margin: 0 var(--pad);
+  padding: 26px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-lg);
+  color: var(--ink-4);
+}
+.empty-block .et {
+  margin-top: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.empty-block .ep {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--ink-4);
+  max-width: 240px;
+}
+.empty-block .btn {
+  margin-top: 7px;
+}
+.foot {
+  padding: 20px var(--pad) 0;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ink-4);
+}
+.actions {
+  display: flex;
+  gap: 10px;
+  margin: 18px var(--pad) 0;
+}
+.actions .btn {
+  gap: 7px;
   font-size: 13px;
 }
-.native-card p {
-  margin: 4px 0 8px;
-  color: var(--muted);
-  font-size: 10.5px;
-  line-height: 1.5;
-}
-.native-card pre {
-  margin: 0 0 6px;
-  color: var(--muted);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 9.5px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.native-card pre:last-child {
-  margin-bottom: 0;
-}
-.footnote {
-  margin: 14px 4px 0;
-  color: var(--muted-2);
-  font-size: 10px;
-  line-height: 1.5;
-  text-align: center;
-}
-.log-actions {
-  position: fixed;
-  left: 50%;
-  bottom: calc(var(--nav-height) + 14px);
-  z-index: 40;
-  display: flex;
-  gap: 8px;
-  width: min(calc(100% - 28px), 592px);
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: var(--surface-solid);
-  box-shadow: 0 14px 40px rgba(16, 60, 45, 0.18);
-  transform: translateX(-50%);
-}
-.log-actions .btn {
-  flex: 1;
-}
-.log-actions .btn:disabled {
-  opacity: 0.4;
+.empty {
+  padding-top: 84px;
 }
 </style>

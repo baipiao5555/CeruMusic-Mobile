@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import Icon from './Icon.vue'
 import { createPlaylistWithTracks } from '@/core/library'
 import {
   allImporters,
@@ -91,11 +92,20 @@ async function startImport(): Promise<void> {
 
 <template>
   <div class="sheet-mask" @click.self="emit('close')">
+    <div class="scrim" @click="emit('close')" />
     <div class="sheet">
-      <h2>导入歌单</h2>
+      <div class="grab" />
+      <div class="sh-head">
+        <div class="sh-title">导入歌单</div>
+        <button class="iconbtn quiet" aria-label="关闭" @click="emit('close')">
+          <Icon name="close" :size="18" />
+        </button>
+      </div>
+
       <template v-if="importers.length">
-        <p class="sub">解析和登录态由插件提供，支持平台取决于你安装的音源插件。</p>
-        <div class="chips" style="margin-bottom: 12px">
+        <p class="sh-sub pad">解析和登录态由插件提供，支持平台取决于你安装的音源插件。</p>
+
+        <div class="imp-chips pad">
           <button
             v-for="item in importers"
             :key="item.pluginId + ':' + item.id"
@@ -109,52 +119,73 @@ async function startImport(): Promise<void> {
             {{ item.title }}
           </button>
         </div>
-        <p v-if="selectedImporter?.description" class="sub">{{ selectedImporter.description }}</p>
-        <ol v-if="selectedImporter?.instructions.length" class="instructions">
+
+        <p v-if="selectedImporter?.description" class="imp-desc pad">
+          {{ selectedImporter.description }}
+        </p>
+        <ol v-if="selectedImporter?.instructions.length" class="imp-steps pad">
           <li v-for="line in selectedImporter.instructions" :key="line">{{ line }}</li>
         </ol>
-        <div class="field">
-          <label>{{ selectedImporter?.title }} 链接 / 内容</label>
+
+        <div class="pad imp-field">
+          <label class="imp-lab" for="imp-value">
+            {{ selectedImporter?.title }} 链接 / 内容
+          </label>
           <textarea
+            id="imp-value"
             v-model="importValue"
-            class="input import-input"
+            class="imp-input"
             rows="3"
             :placeholder="selectedImporter?.placeholder || '粘贴歌单分享链接'"
           />
-          <p class="import-hint">
+          <p class="imp-hint">
             支持直接粘贴分享文案，会自动提取其中的链接或歌单 ID。个人收藏（如「我喜欢」）通常无法按 ID
             读取，请粘贴「分享 → 复制链接」得到的完整链接，或先转存为公开歌单。
           </p>
         </div>
-        <div v-if="selectedImporter?.examples.length" class="examples">
+
+        <div v-if="selectedImporter?.examples.length" class="imp-examples pad">
           <button
             v-for="example in selectedImporter.examples"
             :key="example.value"
-            class="example"
+            class="chip"
             @click="useExample(example)"
           >
             {{ example.label || example.value }}
           </button>
         </div>
-        <div v-if="importError" class="import-error">
-          <span>{{ importError }}</span>
-          <span v-if="importErrorDetail" class="import-error-detail">插件返回：{{ importErrorDetail }}</span>
+
+        <div v-if="importError" class="pad">
+          <div class="imp-error">
+            <span>{{ importError }}</span>
+            <span v-if="importErrorDetail" class="imp-error-detail">
+              插件返回：{{ importErrorDetail }}
+            </span>
+          </div>
         </div>
-        <div class="sheet-actions">
-          <button class="btn secondary" @click="emit('close')">取消</button>
-          <button class="btn" :disabled="importing || !importValue.trim()" @click="startImport">
+
+        <div class="row g10 pad imp-actions">
+          <button class="btn btn-ghost f1" @click="emit('close')">取消</button>
+          <button
+            class="btn btn-primary f1"
+            :disabled="importing || !importValue.trim()"
+            @click="startImport"
+          >
             <span v-if="importing" class="loading-dots"><i /><i /><i /></span>
             <span v-else>开始导入</span>
           </button>
         </div>
       </template>
+
       <template v-else>
-        <p class="sub">
+        <p class="sh-sub pad imp-empty">
           当前没有插件提供歌单导入能力。安装支持歌单导入的澜音 v2 插件后，就可以在这里粘贴其他平台的歌单链接。
         </p>
-        <div class="sheet-actions">
-          <button class="btn secondary" @click="emit('close')">关闭</button>
-          <button class="btn" @click="emit('close'); router.push('/plugins')">去安装插件</button>
+        <div class="row g10 pad imp-actions">
+          <button class="btn btn-ghost f1" @click="emit('close')">关闭</button>
+          <button class="btn btn-primary f1" @click="emit('close'); router.push('/plugins')">
+            去安装插件
+          </button>
         </div>
       </template>
     </div>
@@ -162,56 +193,107 @@ async function startImport(): Promise<void> {
 </template>
 
 <style scoped>
-.import-input {
-  min-height: 86px;
-  resize: vertical;
+.sh-sub {
+  margin: 0 0 12px;
+  font-size: 11.5px;
   line-height: 1.5;
-  user-select: text;
+  color: var(--ink-4);
 }
-.instructions {
-  margin: 0 0 14px 18px;
-  color: var(--muted);
-  font-size: 12px;
+.imp-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: none;
+}
+.imp-chips .chip {
+  flex: none;
+}
+.imp-desc {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+.imp-steps {
+  margin: 0 0 14px;
+  padding-left: calc(var(--pad) + 15px);
+  font-size: 12.5px;
   line-height: 1.7;
+  color: var(--ink-3);
 }
-.instructions li {
+.imp-steps li {
   list-style: decimal;
 }
-.examples {
+.imp-field {
+  margin-bottom: 12px;
+}
+.imp-lab {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+}
+.imp-input {
+  display: block;
+  width: 100%;
+  min-height: 86px;
+  padding: 11px 13px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--porcelain-2);
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  user-select: text;
+}
+.imp-input::placeholder {
+  color: var(--ink-4);
+}
+.imp-input:focus {
+  border-color: var(--tint);
+  box-shadow: 0 0 0 3px var(--tint-soft);
+}
+.imp-hint {
+  margin: 7px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-4);
+}
+.imp-examples {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 14px;
 }
-.example {
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  color: var(--brand);
-  background: var(--brand-soft);
-}
-.import-hint {
-  margin: 6px 0 0;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--muted-2);
-}
-.import-error {
+.imp-error {
   display: flex;
   flex-direction: column;
   gap: 5px;
+  margin-bottom: 12px;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--r-sm);
+  border-left: 2px solid var(--cinnabar);
+  background: var(--porcelain-2);
   font-size: 12px;
   line-height: 1.55;
-  color: var(--danger);
-  background: rgba(229, 72, 77, 0.1);
-  margin-bottom: 10px;
+  color: var(--cinnabar);
 }
-.import-error-detail {
+.imp-error-detail {
   font-size: 11px;
-  color: var(--muted);
+  color: var(--ink-3);
   user-select: text;
   word-break: break-all;
+}
+.imp-empty {
+  margin-bottom: 16px;
+  font-size: 12.5px;
+}
+.imp-actions {
+  margin-top: 4px;
 }
 </style>

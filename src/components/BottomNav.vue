@@ -1,26 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { IonIcon } from '@ionic/vue'
-import {
-  compass,
-  compassOutline,
-  musicalNotes,
-  musicalNotesOutline,
-  person,
-  personOutline,
-  search,
-  searchOutline
-} from 'ionicons/icons'
+import Icon from './Icon.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const items = [
-  { path: '/', label: '发现', icon: compassOutline, activeIcon: compass },
-  { path: '/search', label: '搜索', icon: searchOutline, activeIcon: search },
-  { path: '/playlists', label: '歌单', icon: musicalNotesOutline, activeIcon: musicalNotes },
-  { path: '/library', label: '我的', icon: personOutline, activeIcon: person }
+  { path: '/', label: '发现', icon: 'compass' },
+  { path: '/search', label: '搜索', icon: 'search' },
+  { path: '/playlists', label: '歌单', icon: 'playlist' },
+  { path: '/library', label: '我的', icon: 'user' }
 ]
 
 const activeIndex = computed(() => {
@@ -30,7 +20,11 @@ const activeIndex = computed(() => {
   if (
     path.startsWith('/library') ||
     path.startsWith('/settings') ||
-    path.startsWith('/plugins')
+    path.startsWith('/plugins') ||
+    path.startsWith('/cloud') ||
+    path.startsWith('/downloads') ||
+    path.startsWith('/logs') ||
+    path.startsWith('/update')
   ) {
     return 3
   }
@@ -43,21 +37,15 @@ function go(path: string): void {
 </script>
 
 <template>
-  <nav class="bottom-nav">
-    <span
-      class="nav-indicator"
-      :style="{ transform: `translateX(${activeIndex * 100}%)` }"
-    />
+  <nav class="tabbar">
     <button
       v-for="(item, index) in items"
       :key="item.path"
-      class="nav-item"
-      :class="{ active: activeIndex === index }"
+      class="tab"
+      :class="{ on: activeIndex === index }"
       @click="go(item.path)"
     >
-      <span class="nav-icon">
-        <ion-icon :icon="activeIndex === index ? item.activeIcon : item.icon" />
-      </span>
+      <span class="pillbg"><Icon :name="item.icon" :size="19" /></span>
       {{ item.label }}
     </button>
   </nav>

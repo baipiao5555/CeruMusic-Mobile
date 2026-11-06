@@ -69,6 +69,77 @@ const localMatches = computed(() => {
   return suggestTracks(query.value, libraryTracks.value, 12)
 })
 
+/* —— 以下只做纯 UI 派生：分组计数、真错误/无结果分流、热门词轮换 —— */
+
+/** 结果分组：单曲 / 歌手 / 本地歌单。 */
+const tab = ref<'songs' | 'artists' | 'playlists'>('songs')
+
+/** 换音源建议：换到下一个已启用的音源。 */
+const otherProvider = computed(() =>
+  providers.value.find((item) => item.providerId !== selected.value?.providerId)
+)
+
+/** 结果里出现过的歌手，按曲目数排序。 */
+const artistGroups = computed(() => {
+  const groups = new Map<string, number>()
+  for (const track of results.value) {
+    const name = track.artist?.trim() || '未知歌手'
+    groups.set(name, (groups.get(name) ?? 0) + 1)
+  }
+  return [...groups.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((left, right) => right.count - left.count)
+})
+
+/** 本地歌单里和当前关键词同名的那些（只读展示，点击进详情）。 */
+const playlistGroups = computed(() => {
+  const needle = (appliedQuery.value || query.value).trim().toLowerCase()
+  if (!needle) return []
+  return libraryState.playlists.filter((playlist) =>
+    String(playlist.name ?? '').toLowerCase().includes(needle)
+  )
+})
+
+/** 音源明确回「没有结果」是中性态，别拿它当报错。 */
+const noResult = computed(
+  () => !loading.value && !results.value.length && error.value === '没有找到相关歌曲'
+)
+
+/** 真错误：没装音源、音源不支持、请求抛错。 */
+const failureVisible = computed(
+  () =>
+    !loading.value &&
+    !results.value.length &&
+    Boolean(error.value) &&
+    error.value !== '没有找到相关歌曲' &&
+    providers.value.length > 0
+)
+
+const HOT_WORDS = [
+  '雨后初晴',
+  '深夜电台',
+  '白噪音',
+  '器物',
+  'City Pop',
+  '钢琴',
+  '民谣',
+  'Live',
+  '女声',
+  '爵士',
+  '清晨',
+  '器乐'
+]
+const hotBatch = ref(0)
+const hotBatchWords = computed(() => {
+  const size = 4
+  const start = (hotBatch.value * size) % HOT_WORDS.length
+  return Array.from({ length: size }, (_, offset) => HOT_WORDS[(start + offset) % HOT_WORDS.length])
+})
+
+function nextHotBatch(): void {
+  hotBatch.value += 1
+}
+
 function onInput(): void {
   // 只更新本地联想，不自动联网搜索：搜不搜由用户按「搜索」/回车决定。
   suggestOpen.value = true
@@ -203,6 +274,7 @@ function reset(): void {
   searched.value = false
   loading.value = false
   suggestOpen.value = false
+  tab.value = 'songs'
   nextTick(() => inputRef.value?.focus())
 }
 
@@ -244,180 +316,313 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="page">
-    <header class="page-header">
-      <div>
-        <div class="brand-name" style="font-size: 23px">搜索</div>
-        <div class="brand-sub">Search music</div>
+  <div class="screen search-page">
+    <div class="scroll safe-t-lg">
+      <div class="pad">
+        <div class="eyebrow">Ceru Music · 检索</div>
       </div>
-      <button class="icon-btn" aria-label="设置" @click="$router.push('/settings')">
-        <Icon name="settings" :size="21" />
-      </button>
-    </header>
 
-    <div class="search-wrap">
-      <form class="search-bar" @submit.prevent="submitSearch">
-        <Icon name="search" :size="19" style="color: var(--muted)" />
-        <input
-          ref="inputRef"
-          v-model="query"
-          type="search"
-          enterkeyhint="search"
-          placeholder="输入歌名或歌手，点搜索"
-          autocomplete="off"
-          @input="onInput"
-          @focus="onFocus"
-          @blur="onBlur"
-        />
-        <button v-if="query" type="button" class="clear" aria-label="清空" @mousedown.prevent="reset">
-          <Icon name="close" :size="17" />
-        </button>
-        <button type="submit" class="search-btn">搜索</button>
-      </form>
+      <div class="page-head mt6">
+        <div>
+          <h1>搜索</h1>
+          <div class="sub">
+            <template v-if="selected">{{ selected.name }} · {{ providers.length }} 个音源可用</template>
+            <template v-else>还没有可用的音源</template>
+          </div>
+        </div>
+        <div class="page-actions">
+          <button class="iconbtn soft" aria-label="设置" @click="$router.push('/settings')">
+            <Icon name="settings" :size="19" />
+          </button>
+        </div>
+      </div>
 
-      <div v-if="showSuggest" class="suggest-panel">
-        <button type="button" class="suggest-row direct" @mousedown.prevent="submitSearch">
-          <Icon name="search" :size="16" />
-          <span class="suggest-name">搜索「{{ query.trim() }}」</span>
-          <Icon name="chevron" :size="15" class="suggest-go" />
-        </button>
-        <button
-          v-for="track in suggestions"
-          :key="track.providerId + track.id"
-          type="button"
-          class="suggest-row"
-          @mousedown.prevent="pickSuggestion(track)"
-        >
-          <Icon name="music" :size="16" />
-          <span class="suggest-name">
-            <template v-for="(part, index) in highlightParts(track.title, query)" :key="index">
-              <mark v-if="part.hit" class="hl">{{ part.text }}</mark>
-              <template v-else>{{ part.text }}</template>
-            </template>
+      <div class="findrow pad mt16">
+        <div class="finder">
+          <form class="searchfield" :class="{ focus: focused }" @submit.prevent="submitSearch">
+            <Icon name="search" :size="17" />
+            <input
+              ref="inputRef"
+              v-model="query"
+              type="search"
+              enterkeyhint="search"
+              placeholder="输入歌名或歌手"
+              autocomplete="off"
+              @input="onInput"
+              @focus="onFocus"
+              @blur="onBlur"
+            />
+            <button v-if="query" type="button" class="clearbtn" aria-label="清空" @mousedown.prevent="reset">
+              <Icon name="close" :size="13" />
+            </button>
+          </form>
+
+          <div v-if="showSuggest" class="suggest">
+            <button type="button" class="srow direct" @mousedown.prevent="submitSearch">
+              <Icon name="search" :size="16" />
+              <span class="sname">搜索「{{ query.trim() }}」</span>
+              <Icon name="chevron" :size="15" class="sgo" />
+            </button>
+            <button
+              v-for="track in suggestions"
+              :key="track.providerId + track.id"
+              type="button"
+              class="srow"
+              @mousedown.prevent="pickSuggestion(track)"
+            >
+              <Icon name="music" :size="16" />
+              <span class="sname">
+                <template v-for="(part, index) in highlightParts(track.title, query)" :key="index">
+                  <mark v-if="part.hit" class="hl">{{ part.text }}</mark>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </span>
+              <span v-if="track.artist" class="sartist">{{ track.artist }}</span>
+            </button>
+          </div>
+        </div>
+        <button class="findgo" @click="submitSearch">搜索</button>
+      </div>
+
+      <div v-if="providers.length" class="pad mt12">
+        <div class="chip-row">
+          <button
+            v-for="provider in providers"
+            :key="provider.providerId + provider.pluginId"
+            class="chip"
+            :class="{ active: selected?.providerId === provider.providerId }"
+            @click="choose(provider.providerId)"
+          >
+            <span v-if="selected?.providerId === provider.providerId" class="dot" />
+            {{ provider.name }}
+          </button>
+        </div>
+      </div>
+
+      <section v-if="historyVisible" class="pad mt20">
+        <div class="strip">
+          <span class="cap">最近搜索</span>
+          <button class="linkbtn" @click="clearSearchHistory()">
+            <Icon name="trash" :size="13" /> 清空
+          </button>
+        </div>
+        <div class="chip-row wrap mt10">
+          <button v-for="item in searchHistory.items" :key="item" class="chip" @click="useKeyword(item)">
+            {{ item }}
+          </button>
+        </div>
+      </section>
+
+      <section v-if="!searched && !query.trim()" class="pad mt20">
+        <div class="strip">
+          <span class="cap">热门</span>
+          <button class="linkbtn" @click="nextHotBatch()">
+            <Icon name="refresh" :size="13" /> 换一批
+          </button>
+        </div>
+        <div class="hotline mt8">
+          <button v-for="word in hotBatchWords" :key="word" class="hotword" @click="useKeyword(word)">
+            {{ word }}
+          </button>
+        </div>
+      </section>
+
+      <div v-if="loading && !results.length" class="pad mt20" aria-live="polite">
+        <div v-for="row in 5" :key="row" class="skelrow">
+          <span class="skeleton skelcov" />
+          <span class="skellines">
+            <span class="skeleton skelt" />
+            <span class="skeleton skela" />
           </span>
-          <span v-if="track.artist" class="suggest-artist">{{ track.artist }}</span>
+        </div>
+        <p class="meta mt12">
+          正在「{{ selected?.name ?? '音源' }}」搜索「{{ query.trim() }}」…
+        </p>
+      </div>
+
+      <div v-else-if="!providers.length" class="empty">
+        <div class="glyph"><Icon name="plugin" :size="34" /></div>
+        <h3>还没有音源插件</h3>
+        <p>安装插件后才能搜索音乐。</p>
+        <button class="btn btn-primary btn-sm mt8" @click="$router.push('/plugins')">
+          <Icon name="plus" :size="16" /> 安装音源插件
         </button>
       </div>
-    </div>
 
-    <div v-if="providers.length" class="chips source-chips" style="margin-top: 14px">
-      <button
-        v-for="provider in providers"
-        :key="provider.providerId + provider.pluginId"
-        class="chip"
-        :class="{ active: selected?.providerId === provider.providerId }"
-        @click="choose(provider.providerId)"
-      >
-        {{ provider.name }}
-      </button>
-    </div>
-
-    <section v-if="historyVisible" class="history">
-      <div class="section-title">
-        <h2>最近搜索</h2>
-        <button class="link-btn" @click="clearSearchHistory()">
-          <Icon name="trash" :size="14" /> 清空
-        </button>
+      <div v-else-if="failureVisible" class="empty">
+        <div class="glyph"><Icon name="warning" :size="34" /></div>
+        <h3>搜索没成功</h3>
+        <p>{{ error }}</p>
+        <div class="row g8 mt8">
+          <button class="btn btn-ghost btn-sm" @click="reset">改搜</button>
+          <button class="btn btn-primary btn-sm" @click="submitSearch">重试</button>
+        </div>
       </div>
-      <div class="chips history-chips">
-        <button v-for="item in searchHistory.items" :key="item" class="chip" @click="useKeyword(item)">
-          {{ item }}
-        </button>
+
+      <div v-else-if="noResult" class="empty">
+        <div class="glyph"><Icon name="search" :size="34" /></div>
+        <h3>没有找到「{{ query.trim() }}」</h3>
+        <p>换个关键词，或换一个音源再试。只留歌名往往更准。</p>
+        <div class="row g8 mt8">
+          <button class="btn btn-ghost btn-sm" @click="reset">改搜</button>
+          <button
+            v-if="otherProvider"
+            class="btn btn-tint btn-sm"
+            @click="choose(otherProvider.providerId)"
+          >
+            换到 {{ otherProvider.name }}
+          </button>
+        </div>
+        <p v-if="!otherProvider" class="meta mt4">只有一个音源，可以去插件页再装一个。</p>
       </div>
-    </section>
 
-    <div v-if="loading && !results.length" class="state">
-      <span class="loading-dots"><i /><i /><i /></span>
-      <p>正在搜索「{{ query.trim() }}」…</p>
-    </div>
+      <template v-if="results.length">
+        <div class="section-head mt24">
+          <div class="st">
+            <h2>搜索结果</h2>
+            <span class="idx">{{ results.length }}</span>
+            <span v-if="loading" class="meta">搜索中…</span>
+          </div>
+          <button class="btn btn-primary btn-sm" @click="playAll">
+            <Icon name="play" :size="13" /> 播放全部
+          </button>
+        </div>
 
-    <div v-else-if="error && !results.length" class="state">
-      <div class="emoji">🔎</div>
-      <p>{{ error }}</p>
-      <p class="state-hint">可以少打几个字、只留歌名，或换一个音源再试。</p>
-    </div>
+        <div class="pad">
+          <div class="segment">
+            <button :class="{ on: tab === 'songs' }" @click="tab = 'songs'">
+              单曲 <em>{{ results.length }}</em>
+            </button>
+            <button :class="{ on: tab === 'artists' }" @click="tab = 'artists'">
+              歌手 <em>{{ artistGroups.length }}</em>
+            </button>
+            <button :class="{ on: tab === 'playlists' }" @click="tab = 'playlists'">
+              歌单 <em>{{ playlistGroups.length }}</em>
+            </button>
+          </div>
+          <p v-if="relaxedQuery" class="note mt10">
+            音源没有「{{ query.trim() }}」的结果，已按「{{ relaxedQuery }}」搜索。
+          </p>
+        </div>
 
-    <div v-if="results.length">
-      <div class="section-title">
-        <h2>
-          搜索结果
-          <span class="count">{{ results.length }}</span>
-          <span v-if="loading" class="inline-loading">搜索中…</span>
-        </h2>
-        <button class="play-all" @click="playAll">
-          <Icon name="play" :size="15" /> 播放全部
-        </button>
+        <div v-if="tab === 'songs'" class="pad mt4">
+          <SongRow
+            v-for="(track, index) in results"
+            :key="track.providerId + track.id"
+            :track="track"
+            :index="index"
+            :queue="results"
+            :query="appliedQuery"
+            show-index
+            @play="play(index)"
+          />
+        </div>
+
+        <div v-else-if="tab === 'artists'" class="pad mt4">
+          <button
+            v-for="group in artistGroups"
+            :key="group.name"
+            class="songrow rowlink"
+            @click="useKeyword(group.name)"
+          >
+            <span class="avatar">{{ group.name.slice(0, 1) }}</span>
+            <span class="meta-wrap">
+              <span class="t">{{ group.name }}</span>
+              <span class="a">{{ group.count }} 首相关歌曲</span>
+            </span>
+            <Icon name="chevron" :size="16" class="ink-4" />
+          </button>
+          <p v-if="!artistGroups.length" class="meta mt12">这批结果里没有可归类的歌手。</p>
+        </div>
+
+        <div v-else class="pad mt4">
+          <button
+            v-for="playlist in playlistGroups"
+            :key="playlist.id"
+            class="songrow rowlink"
+            @click="$router.push(`/playlist/${playlist.id}`)"
+          >
+            <span class="cover plcover"><Icon name="library" :size="18" /></span>
+            <span class="meta-wrap">
+              <span class="t">{{ playlist.name }}</span>
+              <span class="a">{{ playlist.tracks.length }} 首 · 本地歌单</span>
+            </span>
+            <Icon name="chevron" :size="16" class="ink-4" />
+          </button>
+          <p v-if="!playlistGroups.length" class="meta mt12">
+            本地歌单里没有「{{ appliedQuery || query.trim() }}」，先在单曲里找找。
+          </p>
+        </div>
+      </template>
+
+      <section v-if="localMatches.length">
+        <div class="group-title">
+          <span class="cn">本地结果</span>
+          <span class="cnt">{{ localMatches.length }}</span>
+          <span class="en">In Library</span>
+        </div>
+        <div class="pad">
+          <p class="meta">音源没有返回结果，这些来自你的收藏、歌单和搜过的歌。</p>
+        </div>
+        <div class="pad mt4">
+          <SongRow
+            v-for="(track, index) in localMatches"
+            :key="track.providerId + track.id"
+            :track="track"
+            :index="index"
+            :queue="localMatches"
+            :query="query"
+            @play="playLocal(index)"
+          />
+        </div>
+      </section>
+
+      <div v-if="!searched && !query.trim() && !historyVisible" class="hint-empty">
+        <div class="empty">
+          <div class="glyph"><Icon name="discover" :size="34" /></div>
+          <h3>想听点什么？</h3>
+          <p>输入歌名或歌手，点「搜索」或按回车；输入时会先提示你收藏和歌单里的同名歌。</p>
+        </div>
       </div>
-      <p v-if="relaxedQuery" class="relaxed-note">
-        音源没有「{{ query.trim() }}」的结果，已按「{{ relaxedQuery }}」搜索
-      </p>
-      <div class="song-list">
-        <SongRow
-          v-for="(track, index) in results"
-          :key="track.providerId + track.id"
-          :track="track"
-          :index="index"
-          :queue="results"
-          :query="appliedQuery"
-          @play="play(index)"
-        />
-      </div>
-    </div>
-
-    <div v-if="localMatches.length">
-      <div class="section-title">
-        <h2>本地歌曲</h2>
-      </div>
-      <p class="relaxed-note">音源没有返回结果，这些来自你的收藏、歌单和搜过的歌。</p>
-      <div class="song-list">
-        <SongRow
-          v-for="(track, index) in localMatches"
-          :key="track.providerId + track.id"
-          :track="track"
-          :index="index"
-          :queue="localMatches"
-          :query="query"
-          @play="playLocal(index)"
-        />
-      </div>
-    </div>
-
-    <div v-if="!providers.length" class="empty">
-      <div class="emoji">🎵</div>
-      <h3>还没有音源插件</h3>
-      <p>安装插件后才能搜索音乐。</p>
-      <button class="btn" @click="$router.push('/plugins')">
-        <Icon name="plus" :size="18" /> 安装音源插件
-      </button>
-    </div>
-
-    <div v-else-if="!searched && !query.trim() && !historyVisible" class="empty">
-      <div class="emoji">🎧</div>
-      <h3>想听点什么？</h3>
-      <p>输入歌名或歌手，点「搜索」或按回车；输入时会先提示你收藏和歌单里的同名歌。</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.search-wrap {
+.findrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.finder {
   position: relative;
   z-index: 20;
+  flex: 1;
+  min-width: 0;
 }
-.search-btn {
-  padding: 7px 13px;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--brand);
+.searchfield {
+  margin: 0;
 }
-.clear {
+.clearbtn {
   display: grid;
   place-items: center;
-  color: var(--muted-2);
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--ink-4);
+  background: var(--porcelain-2);
 }
-.suggest-panel {
+.findgo {
+  flex: none;
+  height: 44px;
+  min-width: 44px;
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tint);
+}
+.suggest {
   position: absolute;
   left: 0;
   right: 0;
@@ -425,123 +630,172 @@ onMounted(() => {
   max-height: 46vh;
   overflow-y: auto;
   padding: 6px;
-  border-radius: 16px;
-  background: var(--surface-solid);
-  border: 1px solid var(--line);
-  box-shadow: 0 16px 34px rgba(20, 60, 45, 0.16);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  box-shadow: var(--sh-3);
 }
-.suggest-row {
+.srow {
   display: flex;
   align-items: center;
   gap: 9px;
   width: 100%;
-  padding: 10px 10px;
-  border-radius: 11px;
-  color: var(--muted);
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: var(--r-sm);
+  color: var(--ink-3);
   text-align: left;
 }
-.suggest-row + .suggest-row {
-  margin-top: 1px;
+.srow:active {
+  background: var(--tint-softer);
 }
-.suggest-row:active {
-  background: var(--brand-softer);
-}
-.suggest-row.direct {
-  color: var(--brand);
+.srow.direct {
+  color: var(--tint);
   font-weight: 600;
 }
-.suggest-name {
+.sname {
   flex: 1;
   min-width: 0;
   font-size: 14px;
-  color: var(--text);
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.suggest-row.direct .suggest-name {
-  color: var(--brand);
+.srow.direct .sname {
+  color: var(--tint);
 }
-.suggest-artist {
+.sartist {
   flex: 0 0 auto;
   max-width: 44%;
   font-size: 12px;
-  color: var(--muted-2);
+  color: var(--ink-4);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.suggest-go {
-  color: var(--muted-2);
+.sgo {
+  color: var(--ink-4);
 }
 .hl {
-  color: var(--brand);
-  background: var(--brand-soft);
+  color: var(--tint);
+  background: var(--tint-soft);
   border-radius: 3px;
-  font-weight: 700;
+  font-weight: 650;
 }
-.source-chips {
-  flex-wrap: wrap;
-  overflow: visible;
-  row-gap: 8px;
-  padding: 2px 2px 4px;
+.strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
-.history-chips {
-  flex-wrap: wrap;
-  overflow: visible;
-  row-gap: 8px;
-}
-.link-btn {
+.linkbtn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-height: 32px;
+  padding: 0 4px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--ink-3);
 }
-.count {
-  margin-left: 5px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
+.wrap {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 8px;
 }
-.inline-loading {
-  margin-left: 7px;
-  font-size: 11.5px;
-  color: var(--brand);
-}
-.relaxed-note {
-  margin: -4px 2px 10px;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-.state-hint {
-  max-width: 260px;
-  text-align: center;
-  line-height: 1.6;
-  color: var(--muted-2);
-}
-.state {
+.hotline {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 54px 0;
-  color: var(--muted);
-  font-size: 13px;
+  gap: 8px;
 }
-.state .emoji {
-  font-size: 30px;
-}
-.play-all {
+.hotword {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 7px 12px;
-  border-radius: 999px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.hotword:active {
+  color: var(--tint);
+  border-color: var(--tint);
+}
+.segment em {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.segment > .on em {
+  color: var(--ink-3);
+}
+.note {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--brand);
-  background: var(--brand-soft);
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.skelrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 0 4px;
+}
+.skelcov {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--r-sm);
+}
+.skellines {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+.skelt {
+  display: block;
+  height: 11px;
+  width: 58%;
+  border-radius: 4px;
+}
+.skela {
+  display: block;
+  height: 9px;
+  width: 34%;
+  border-radius: 4px;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 50%;
+  font-family: var(--serif);
+  font-size: 17px;
+  color: var(--ink-3);
+  background: var(--porcelain-2);
+}
+.plcover {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+.rowlink {
+  width: 100%;
+  text-align: left;
+}
+.hint-empty {
+  padding-bottom: 8px;
+}
+.hint-empty .empty {
+  padding: 26px 24px 8px;
 }
 </style>

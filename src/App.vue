@@ -271,8 +271,6 @@ watch(navigationRequest, (request) => {
 <template>
   <ion-app>
     <div class="app-shell">
-    <div class="app-bg" />
-    <div class="status-scrim" />
     <router-view v-slot="{ Component }">
       <transition
         :name="
@@ -286,8 +284,12 @@ watch(navigationRequest, (request) => {
         <component :is="Component" />
       </transition>
     </router-view>
-    <MiniPlayer />
-    <BottomNav v-if="showNav" />
+    <div v-if="showNav" class="dock">
+      <div class="dock-inner">
+        <MiniPlayer />
+        <BottomNav />
+      </div>
+    </div>
 
     <div class="toast-stack">
       <div
@@ -309,14 +311,17 @@ watch(navigationRequest, (request) => {
 
     <div v-if="permissionRequest" class="sheet-mask" @click.self="answerPermission(false)">
       <div class="sheet">
-        <h2>权限请求</h2>
-        <p class="sub">
+        <div class="grab" />
+        <div class="sh-head">
+          <span class="sh-title">权限请求</span>
+        </div>
+        <p class="meta pad" style="margin: -4px 0 14px">
           {{ permissionRequest.pluginName }} 请求「{{ permissionRequest.name }}」权限。
           {{ permissionRequest.reason }}
         </p>
-        <div class="sheet-actions">
-          <button class="btn secondary" @click="answerPermission(false)">拒绝</button>
-          <button class="btn" @click="answerPermission(true)">允许</button>
+        <div class="row g10 pad">
+          <button class="btn btn-ghost f1" @click="answerPermission(false)">拒绝</button>
+          <button class="btn btn-primary f1" @click="answerPermission(true)">允许</button>
         </div>
       </div>
     </div>

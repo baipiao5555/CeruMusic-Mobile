@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import { settingsState, updateSettings } from '@/core/settings'
@@ -15,6 +15,9 @@ import type { AccentColor } from '@/core/settings'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
+const REPO_URL = 'https://github.com/baipiao5555/CeruMusic-Mobile'
+const UPSTREAM_URL = 'https://github.com/timeshiftsauce/CeruMusic'
+const LICENSE_URL = 'https://github.com/baipiao5555/CeruMusic-Mobile/blob/main/LICENSE'
 
 const downloads = computed(() => downloadSummary())
 const cloudCount = computed(
@@ -36,16 +39,82 @@ function signOut(): void {
 }
 
 const sections = [
+  { id: 'account', label: '账号' },
   { id: 'appearance', label: '外观' },
   { id: 'playback', label: '播放' },
   { id: 'lyrics', label: '歌词' },
   { id: 'download', label: '下载' },
-  { id: 'data', label: '数据' }
+  { id: 'data', label: '数据' },
+  { id: 'about', label: '关于' }
 ]
 
+const activeSection = ref('account')
+
 function jumpTo(id: string): void {
+  activeSection.value = id
   document.getElementById(`settings-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
+
+const searchOpen = ref(false)
+const settingsQuery = ref('')
+
+function toggleSearch(): void {
+  searchOpen.value = !searchOpen.value
+  if (!searchOpen.value) settingsQuery.value = ''
+}
+
+const ROW_TERMS: Record<string, string> = {
+  'account:login': '账号 登录 退出 澜音 同步 歌单',
+  'appearance:theme': '外观 主题 跟随系统 浅色 深色 夜间',
+  'appearance:accent': '主题色 强调色 青绿 蓝色 紫色 橙色 配色',
+  'playback:quality': '播放 默认音质 音质 自动 最高 无损',
+  'playback:mode': '播放模式 顺序播放 列表循环 单曲循环 随机播放',
+  'playback:speed': '播放速度 倍速 0.75 1.5 2',
+  'lyrics:scale': '歌词字号 字号 大小 特大',
+  'lyrics:offset': '歌词偏移 延迟 提前 校准 秒',
+  'lyrics:show': '显示歌词 歌词',
+  'lyrics:cloud': '自动匹配云歌词 云歌词 歌词',
+  'lyrics:shared': '启用歌词共享 歌词共享 共享',
+  'lyrics:sharedTranslation': '共享翻译 翻译 歌词',
+  'playback:keepScreenOn': '播放时保持亮屏 亮屏 屏幕',
+  'playback:headset': '耳机拔出时暂停 耳机 暂停',
+  'playback:fallback': '播放失败自动切换音源 音源 失败 切换',
+  'playback:swipePlayer': '播放页左右滑动切歌 手势 滑动 切歌',
+  'playback:swipeTabs': '主页面左右滑动切换 手势 滑动 页面',
+  'download:quality': '下载音质 音质 下载',
+  'download:template': '下载文件名 文件名 模板 命名',
+  'download:concurrency': '同时下载数量 并发 数量 下载',
+  'data:plugins': '音源插件 插件 音源',
+  'data:cloud': '云端歌单 歌单 同步 云',
+  'data:downloads': '下载管理 下载 离线',
+  'data:logs': '运行日志 日志',
+  'data:verbose': '详细日志 日志 调试',
+  'data:clear': '清除播放记录 清除 队列 历史 播放记录',
+  'data:reset': '恢复默认设置 恢复 默认 重置',
+  'about:scope': '版本 关于 应用 插件协议',
+  'about:autoUpdate': '插件自动更新 插件 更新',
+  'about:update': '检查更新 版本 更新 升级'
+}
+
+function show(key: string): boolean {
+  const term = settingsQuery.value.trim().toLowerCase()
+  if (!term) return true
+  return (ROW_TERMS[key] ?? '').toLowerCase().includes(term)
+}
+
+function groupVisible(group: string): boolean {
+  const term = settingsQuery.value.trim().toLowerCase()
+  if (!term) return true
+  return Object.entries(ROW_TERMS).some(
+    ([key, terms]) => key.startsWith(`${group}:`) && terms.toLowerCase().includes(term)
+  )
+}
+
+const hasVisibleRows = computed(() => {
+  const term = settingsQuery.value.trim().toLowerCase()
+  if (!term) return true
+  return Object.values(ROW_TERMS).some((terms) => terms.toLowerCase().includes(term))
+})
 
 const themes = [
   { value: 'system', label: '跟随系统' },
@@ -62,11 +131,11 @@ const playModes = [
 
 const concurrencies = [1, 2, 3]
 
-const accents: Array<{ value: AccentColor; label: string; color: string }> = [
-  { value: 'green', label: '青绿', color: '#00b578' },
-  { value: 'blue', label: '蓝色', color: '#2f7cf6' },
-  { value: 'purple', label: '紫色', color: '#7c5cff' },
-  { value: 'orange', label: '橙色', color: '#f08a24' }
+const accents: Array<{ value: AccentColor; label: string }> = [
+  { value: 'green', label: '青绿' },
+  { value: 'blue', label: '蓝色' },
+  { value: 'purple', label: '紫色' },
+  { value: 'orange', label: '橙色' }
 ]
 
 const speedOptions = [0.75, 1, 1.25, 1.5, 2]
@@ -76,6 +145,7 @@ const lyricScales = [
   { value: 1.12, label: '大' },
   { value: 1.25, label: '特大' }
 ]
+const offsetOptions = Array.from({ length: 21 }, (_, index) => (index - 10) / 10)
 
 const previewTrack = {
   id: 'preview',
@@ -106,9 +176,84 @@ function onTemplateInput(event: Event): void {
 
 const qualities = computed(() => availableQualities())
 const qualityHint = computed(() => qualityDescription(settingsState.quality))
+const qualityOptions = computed(() => ['', ...qualities.value])
+const currentQualityLabel = computed(() =>
+  settingsState.quality ? qualityLabel(settingsState.quality) : '自动（最高）'
+)
+const downloadQualityLabel = computed(() =>
+  settingsState.downloadQuality ? qualityLabel(settingsState.downloadQuality) : '跟随播放音质'
+)
+const themeLabel = computed(
+  () => themes.find((theme) => theme.value === settingsState.theme)?.label ?? '跟随系统'
+)
+const modeLabel = computed(
+  () => playModes.find((mode) => mode.value === playerState.mode)?.label ?? '列表循环'
+)
+const speedLabel = computed(
+  () =>
+    `${Number.isInteger(settingsState.playbackRate) ? settingsState.playbackRate.toFixed(1) : settingsState.playbackRate}×`
+)
+const lyricScaleLabel = computed(() => {
+  const option = lyricScales.find((item) => item.value === settingsState.lyricScale)
+  return `${option?.label ?? '标准'} · ${Math.round(settingsState.lyricScale * 100)}%`
+})
+const lyricOffsetLabel = computed(
+  () =>
+    `${settingsState.lyricOffsetMs >= 0 ? '+' : ''}${(settingsState.lyricOffsetMs / 1000).toFixed(1)} 秒`
+)
+const concurrencyLabel = computed(() => `${settingsState.downloadConcurrency} 个`)
+const runningPlugins = computed(() => pluginState.plugins.filter((plugin) => plugin.running).length)
+
+function selectValue(event: Event): string {
+  return (event.target as HTMLSelectElement).value
+}
 
 function chooseQuality(quality: string): void {
   setQuality(quality)
+}
+
+function onQualitySelect(event: Event): void {
+  chooseQuality(selectValue(event))
+}
+
+function onTheme(event: Event): void {
+  const value = selectValue(event)
+  if (value === 'system' || value === 'light' || value === 'dark') updateSettings({ theme: value })
+}
+
+function onAccent(value: AccentColor): void {
+  updateSettings({ accent: value })
+}
+
+function onPlayMode(event: Event): void {
+  const value = selectValue(event)
+  if (value === 'order' || value === 'repeat-all' || value === 'repeat-one' || value === 'shuffle') {
+    setMode(value)
+  }
+}
+
+function onSpeed(event: Event): void {
+  const rate = Number(selectValue(event))
+  if (Number.isFinite(rate)) updateSettings({ playbackRate: rate })
+}
+
+function onLyricScale(event: Event): void {
+  const scale = Number(selectValue(event))
+  if (Number.isFinite(scale)) updateSettings({ lyricScale: scale })
+}
+
+function onLyricOffset(event: Event): void {
+  const seconds = Number(selectValue(event))
+  if (Number.isFinite(seconds)) updateSettings({ lyricOffsetMs: Math.round(seconds * 1000) })
+}
+
+function onDownloadQuality(event: Event): void {
+  updateSettings({ downloadQuality: selectValue(event) })
+}
+
+function onConcurrency(event: Event): void {
+  const value = Number(selectValue(event))
+  if (value === 1 || value === 2 || value === 3) updateSettings({ downloadConcurrency: value })
 }
 
 function clearPlaybackData(): void {
@@ -134,699 +279,928 @@ function resetSettings(): void {
 </script>
 
 <template>
-  <div class="page">
-    <header class="page-header settings-header">
-      <button class="icon-btn" aria-label="返回" @click="router.back()">
-        <Icon name="back" :size="20" />
-      </button>
-      <div class="settings-heading">
-        <span>SETTINGS</span>
-        <strong>设置</strong>
+  <div class="screen">
+    <div class="scroll safe-t-lg">
+      <div class="navrow">
+        <button class="iconbtn quiet" aria-label="返回" @click="router.back()">
+          <Icon name="back" :size="20" />
+        </button>
       </div>
-      <span class="version-chip">{{ appVersion }}</span>
-    </header>
 
-    <section class="card account-card">
-      <div class="account-avatar">
-        <img v-if="authState.user?.picture" :src="authState.user.picture" alt="" />
-        <Icon v-else name="user" :size="22" />
+      <header class="page-head phead">
+        <div>
+          <div class="eyebrow">CERU MUSIC · 本机</div>
+          <h1 class="headline">设置</h1>
+        </div>
+        <div class="page-actions">
+          <button
+            class="iconbtn soft"
+            :aria-label="searchOpen ? '关闭设置搜索' : '搜索设置项'"
+            @click="toggleSearch"
+          >
+            <Icon :name="searchOpen ? 'close' : 'search'" :size="18" />
+          </button>
+        </div>
+      </header>
+
+      <div class="metal">
+        <span class="live" />
+        <span>{{ runningPlugins }} 个插件运行中</span>
+        <span class="dot">·</span>
+        <span>{{ qualities.length }} 档音质</span>
+        <span class="ver">v{{ appVersion }}</span>
       </div>
-      <div class="account-info">
-        <span class="account-kicker">澜音账号</span>
-        <h3>{{ authState.authenticated ? displayName() : '登录同步歌单' }}</h3>
-        <p>
-          {{
-            authState.authenticated
-              ? '已登录 · 可从电脑同步歌单'
-              : '登录后把电脑上的歌单同步到手机'
-          }}
-        </p>
+
+      <div v-if="searchOpen" class="searchfield">
+        <Icon name="search" :size="16" />
+        <input
+          v-model="settingsQuery"
+          type="search"
+          placeholder="搜索设置项，例如 歌词 / 音质 / 日志"
+          aria-label="搜索设置项"
+          autofocus
+        />
+        <button v-if="settingsQuery" class="clearq" aria-label="清除搜索" @click="settingsQuery = ''">
+          <Icon name="close" :size="14" />
+        </button>
       </div>
-      <button v-if="!authState.authenticated" class="btn small" @click="signIn">登录</button>
-      <button v-else class="btn ghost small" @click="signOut">退出</button>
-    </section>
 
-    <nav class="settings-nav" aria-label="设置分类">
-      <button
-        v-for="section in sections"
-        :key="section.id"
-        @click="jumpTo(section.id)"
-      >
-        {{ section.label }}
-      </button>
-    </nav>
-
-    <div id="settings-appearance" class="section-title settings-section" style="margin-top: 14px">
-      <h2>外观</h2>
-      <span>主题与配色</span>
-    </div>
-    <div class="card panel">
-      <div class="panel-label">主题</div>
-      <div class="chips">
+      <div class="chip-row jump">
         <button
-          v-for="theme in themes"
-          :key="theme.value"
+          v-for="section in sections"
+          :key="section.id"
           class="chip"
-          :class="{ active: settingsState.theme === theme.value }"
-          @click="updateSettings({ theme: theme.value })"
+          :class="{ active: activeSection === section.id }"
+          @click="jumpTo(section.id)"
         >
-          {{ theme.label }}
+          {{ section.label }}
         </button>
       </div>
-      <div class="panel-label" style="margin-top: 14px">主题色</div>
-      <div class="chips">
-        <button
-          v-for="accent in accents"
-          :key="accent.value"
-          class="chip accent-chip"
-          :class="{ active: settingsState.accent === accent.value }"
-          @click="updateSettings({ accent: accent.value })"
-        >
-          <span class="accent-dot" :style="{ background: accent.color }" />
-          {{ accent.label }}
-        </button>
-      </div>
-    </div>
 
-    <div id="settings-playback" class="section-title settings-section">
-      <h2>播放</h2>
-      <span>音质与播放行为</span>
-    </div>
-    <div class="card panel">
-      <div class="panel-label">默认音质</div>
-      <div class="chips quality-chips">
-        <button
-          class="chip"
-          :class="{ active: settingsState.quality === '' }"
-          @click="chooseQuality('')"
-        >
-          自动（最高）
-        </button>
-        <button
-          v-for="quality in qualities"
-          :key="quality"
-          class="chip"
-          :class="{ active: settingsState.quality === quality }"
-          @click="chooseQuality(quality)"
-        >
-          {{ qualityLabel(quality) }}
-        </button>
-      </div>
-      <p class="hint">{{ qualityHint }}。如果当前歌曲没有该音质，会自动回落到最接近的可用音质。</p>
-    </div>
+      <section id="settings-account" v-if="groupVisible('account')">
+        <div class="group-title">
+          <span class="cn">账号</span>
+          <span class="en">Account</span>
+        </div>
+        <div class="acc">
+          <div class="av">
+            <img v-if="authState.user?.picture" :src="authState.user.picture" alt="" />
+            <template v-else>澜</template>
+          </div>
+          <div class="accbody">
+            <div class="accname">{{ authState.authenticated ? displayName() : '登录同步歌单' }}</div>
+            <div class="accsub">
+              {{ authState.authenticated ? '账号已连接，歌单从电脑端同步' : '登录后歌单与收藏可在多端同步' }}
+            </div>
+          </div>
+          <button v-if="authState.authenticated" class="btn btn-ghost btn-sm" @click="signOut">
+            退出登录
+          </button>
+          <button v-else class="btn btn-ghost btn-sm" @click="signIn">登录</button>
+        </div>
+      </section>
 
-    <div class="card panel" style="margin-top: 12px">
-      <div class="panel-label">播放模式</div>
-      <div class="chips quality-chips">
-        <button
-          v-for="mode in playModes"
-          :key="mode.value"
-          class="chip"
-          :class="{ active: playerState.mode === mode.value }"
-          @click="setMode(mode.value)"
-        >
-          {{ mode.label }}
-        </button>
-      </div>
-      <p class="hint">和播放页的模式按钮同步，切换后立即生效。</p>
-    </div>
+      <section id="settings-appearance" v-if="groupVisible('appearance')">
+        <div class="group-title">
+          <span class="cn">外观</span>
+          <span class="en">Appearance</span>
+        </div>
+        <div class="pgrp">
+          <div v-if="show('appearance:theme')" class="settingrow pickrow">
+            <span class="ico"><Icon name="settings" :size="15" /></span>
+            <div class="body">
+              <div class="lab">主题</div>
+              <div class="sub">跟随系统、浅色或深色</div>
+            </div>
+            <span class="val">{{ themeLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+            <select :value="settingsState.theme" aria-label="主题" @change="onTheme">
+              <option v-for="theme in themes" :key="theme.value" :value="theme.value">
+                {{ theme.label }}
+              </option>
+            </select>
+          </div>
 
-    <div class="card panel" style="margin-top: 12px">
-      <div class="panel-label">播放速度</div>
-      <div class="chips">
-        <button
-          v-for="rate in speedOptions"
-          :key="rate"
-          class="chip"
-          :class="{ active: settingsState.playbackRate === rate }"
-          @click="updateSettings({ playbackRate: rate })"
-        >
-          {{ rate }}x
-        </button>
-      </div>
-      <div class="panel-label" style="margin-top: 14px">歌词字号</div>
-      <div class="chips">
-        <button
-          v-for="scale in lyricScales"
-          :key="scale.value"
-          class="chip"
-          :class="{ active: settingsState.lyricScale === scale.value }"
-          @click="updateSettings({ lyricScale: scale.value })"
-        >
-          {{ scale.label }}
-        </button>
-      </div>
-      <p class="hint">播放速度作用于当前和后续歌曲；歌词字号会立即应用到播放页。</p>
-    </div>
+          <div v-if="show('appearance:accent')" class="settingrow">
+            <span class="ico"><Icon name="select" :size="15" /></span>
+            <div class="body">
+              <div class="lab">主题色</div>
+              <div class="sub">按钮、进度与高亮的强调色</div>
+            </div>
+            <div class="dots">
+              <button
+                v-for="accent in accents"
+                :key="accent.value"
+                class="acdot"
+                :class="[accent.value, { on: settingsState.accent === accent.value }]"
+                :aria-label="accent.label"
+                :aria-pressed="settingsState.accent === accent.value"
+                @click="onAccent(accent.value)"
+              />
+            </div>
+          </div>
+        </div>
+      </section>
 
-    <div class="card panel" style="margin-top: 12px; padding: 4px 16px">
-      <div class="list-item" style="padding-left: 0; padding-right: 0">
-        <div class="info">
-          <h3>显示歌词</h3>
-          <p>在播放页展示歌词与翻译</p>
+      <section id="settings-playback" v-if="groupVisible('playback')">
+        <div class="group-title">
+          <span class="cn">播放</span>
+          <span class="en">Playback</span>
         </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.showLyrics }"
-          aria-label="显示歌词"
-          @click="updateSettings({ showLyrics: !settingsState.showLyrics })"
-        />
-      </div>
-      <div class="list-item" style="padding-left: 0; padding-right: 0">
-        <div class="info">
-          <h3>自动匹配云歌词</h3>
-          <p>插件没有歌词时，从 LrcLib / QQ音乐 / 网易云 搜索</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.cloudLyrics }"
-          aria-label="自动匹配云歌词"
-          @click="updateSettings({ cloudLyrics: !settingsState.cloudLyrics })"
-        />
-      </div>
-      <div class="list-item" style="padding-left: 0; padding-right: 0">
-        <div class="info">
-          <h3>播放时保持亮屏</h3>
-          <p>使用系统 Wake Lock，退出播放页后释放</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.keepScreenOn }"
-          aria-label="保持亮屏"
-          @click="updateSettings({ keepScreenOn: !settingsState.keepScreenOn })"
-        />
-      </div>
-      <div class="list-item" style="padding-left: 0; padding-right: 0">
-        <div class="info">
-          <h3>耳机拔出时暂停</h3>
-          <p>有线耳机或蓝牙音频断开时自动暂停</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.playOnHeadset }"
-          aria-label="耳机拔出时暂停"
-          @click="updateSettings({ playOnHeadset: !settingsState.playOnHeadset })"
-        />
-      </div>
-      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
-        <div class="info">
-          <h3>播放失败自动切换音源</h3>
-          <p>当前音源播放失败时，自动用其他已启用音源搜索同一首歌</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.autoSourceFallback }"
-          aria-label="播放失败自动切换音源"
-          @click="updateSettings({ autoSourceFallback: !settingsState.autoSourceFallback })"
-        />
-      </div>
-    </div>
+        <div class="pgrp">
+          <div v-if="show('playback:quality')" class="settingrow pickrow tall">
+            <span class="ico"><Icon name="volume" :size="15" /></span>
+            <div class="body">
+              <div class="lab">默认音质</div>
+              <div class="sub">{{ qualityHint }}</div>
+            </div>
+            <span class="val">{{ currentQualityLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+            <select
+              :value="settingsState.quality"
+              aria-label="默认音质"
+              @change="onQualitySelect"
+            >
+              <option v-for="quality in qualityOptions" :key="quality" :value="quality">
+                {{ quality ? qualityLabel(quality) : '自动（最高）' }}
+              </option>
+            </select>
+          </div>
 
-    <div class="section-title settings-section">
-      <h2>手势</h2>
-      <span>交互方式</span>
-    </div>
-    <div class="card panel" style="padding: 4px 16px">
-      <div class="list-item" style="padding-left: 0; padding-right: 0">
-        <div class="info">
-          <h3>播放页左右滑动切歌</h3>
-          <p>左滑下一首，右滑上一首</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.swipePlayer }"
-          aria-label="播放页滑动切歌"
-          @click="updateSettings({ swipePlayer: !settingsState.swipePlayer })"
-        />
-      </div>
-      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
-        <div class="info">
-          <h3>主页面左右滑动切换</h3>
-          <p>在发现 / 搜索 / 歌单 / 我的之间滑动切换</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.swipeTabs }"
-          aria-label="主页面滑动切换"
-          @click="updateSettings({ swipeTabs: !settingsState.swipeTabs })"
-        />
-      </div>
-    </div>
+          <div v-if="show('playback:mode')" class="settingrow pickrow">
+            <span class="ico"><Icon name="repeat" :size="15" /></span>
+            <div class="body">
+              <div class="lab">播放模式</div>
+              <div class="sub">顺序、循环或随机</div>
+            </div>
+            <span class="val">{{ modeLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+            <select :value="playerState.mode" aria-label="播放模式" @change="onPlayMode">
+              <option v-for="mode in playModes" :key="mode.value" :value="mode.value">
+                {{ mode.label }}
+              </option>
+            </select>
+          </div>
 
-    <div id="settings-lyrics" class="section-title settings-section">
-      <h2>歌词共享</h2>
-      <span>锁屏与状态栏</span>
-    </div>
-    <div class="card panel" style="padding: 4px 16px">
-      <div class="list-item" style="padding-left: 0; padding-right: 0">
-        <div class="info">
-          <h3>启用歌词共享</h3>
-          <p>把当前歌词共享到状态栏、锁屏或车机（需要系统支持或 Lyricon 模块）</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.systemLyrics }"
-          aria-label="启用歌词共享"
-          @click="updateSettings({ systemLyrics: !settingsState.systemLyrics })"
-        />
-      </div>
-      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
-        <div class="info">
-          <h3>共享翻译</h3>
-          <p>有翻译歌词时一起共享</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.systemLyricsTranslation, off: !settingsState.systemLyrics }"
-          aria-label="共享翻译"
-          @click="updateSettings({ systemLyricsTranslation: !settingsState.systemLyricsTranslation })"
-        />
-      </div>
-    </div>
+          <div v-if="show('playback:speed')" class="settingrow pickrow">
+            <span class="ico"><Icon name="timer" :size="15" /></span>
+            <div class="body">
+              <div class="lab">播放速度</div>
+              <div class="sub">不改变音高</div>
+            </div>
+            <span class="val">{{ speedLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+            <select
+              :value="settingsState.playbackRate"
+              aria-label="播放速度"
+              @change="onSpeed"
+            >
+              <option v-for="rate in speedOptions" :key="rate" :value="rate">{{ rate }}×</option>
+            </select>
+          </div>
 
-    <div id="settings-download" class="section-title settings-section">
-      <h2>下载</h2>
-      <span>音质与文件命名</span>
-    </div>
-    <div class="card panel">
-      <div class="panel-label">下载音质</div>
-      <div class="chips quality-chips">
-        <button
-          class="chip"
-          :class="{ active: settingsState.downloadQuality === '' }"
-          @click="updateSettings({ downloadQuality: '' })"
-        >
-          跟随播放音质
-        </button>
-        <button
-          v-for="quality in qualities"
-          :key="quality"
-          class="chip"
-          :class="{ active: settingsState.downloadQuality === quality }"
-          @click="updateSettings({ downloadQuality: quality })"
-        >
-          {{ qualityLabel(quality) }}
-        </button>
+          <div v-if="show('playback:keepScreenOn')" class="settingrow">
+            <span class="ico"><Icon name="smartphone" :size="15" /></span>
+            <div class="body">
+              <div class="lab">播放时保持亮屏</div>
+              <div class="sub">歌词页不自动息屏</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.keepScreenOn }"
+              role="switch"
+              :aria-checked="settingsState.keepScreenOn"
+              aria-label="播放时保持亮屏"
+              @click="updateSettings({ keepScreenOn: !settingsState.keepScreenOn })"
+            />
+          </div>
+
+          <div v-if="show('playback:headset')" class="settingrow">
+            <span class="ico"><Icon name="volume" :size="15" /></span>
+            <div class="body">
+              <div class="lab">耳机拔出时暂停</div>
+              <div class="sub">避免外放打扰</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.playOnHeadset }"
+              role="switch"
+              :aria-checked="settingsState.playOnHeadset"
+              aria-label="耳机拔出时暂停"
+              @click="updateSettings({ playOnHeadset: !settingsState.playOnHeadset })"
+            />
+          </div>
+
+          <div v-if="show('playback:fallback')" class="settingrow">
+            <span class="ico"><Icon name="refresh" :size="15" /></span>
+            <div class="body">
+              <div class="lab">播放失败自动切换音源</div>
+              <div class="sub">当前插件拿不到地址时换一个音源重试</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.autoSourceFallback }"
+              role="switch"
+              :aria-checked="settingsState.autoSourceFallback"
+              aria-label="播放失败自动切换音源"
+              @click="updateSettings({ autoSourceFallback: !settingsState.autoSourceFallback })"
+            />
+          </div>
+
+          <div v-if="show('playback:swipePlayer')" class="settingrow">
+            <span class="ico"><Icon name="sort" :size="15" /></span>
+            <div class="body">
+              <div class="lab">播放页左右滑动切歌</div>
+              <div class="sub">在封面区域滑动切换上一首 / 下一首</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.swipePlayer }"
+              role="switch"
+              :aria-checked="settingsState.swipePlayer"
+              aria-label="播放页左右滑动切歌"
+              @click="updateSettings({ swipePlayer: !settingsState.swipePlayer })"
+            />
+          </div>
+
+          <div v-if="show('playback:swipeTabs')" class="settingrow">
+            <span class="ico"><Icon name="sort" :size="15" /></span>
+            <div class="body">
+              <div class="lab">主页面左右滑动切换</div>
+              <div class="sub">在发现 / 搜索 / 歌单 / 音乐库之间滑动</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.swipeTabs }"
+              role="switch"
+              :aria-checked="settingsState.swipeTabs"
+              aria-label="主页面左右滑动切换"
+              @click="updateSettings({ swipeTabs: !settingsState.swipeTabs })"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="settings-lyrics" v-if="groupVisible('lyrics')">
+        <div class="group-title">
+          <span class="cn">歌词</span>
+          <span class="en">Lyrics</span>
+        </div>
+        <div class="pgrp">
+          <div v-if="show('lyrics:scale')" class="settingrow pickrow">
+            <span class="ico"><Icon name="lyrics" :size="15" /></span>
+            <div class="body">
+              <div class="lab">歌词字号</div>
+              <div class="sub">只影响歌词页的字号</div>
+            </div>
+            <span class="val">{{ lyricScaleLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+            <select :value="settingsState.lyricScale" aria-label="歌词字号" @change="onLyricScale">
+              <option v-for="scale in lyricScales" :key="scale.value" :value="scale.value">
+                {{ scale.label }}
+              </option>
+            </select>
+          </div>
+
+          <div v-if="show('lyrics:offset')" class="settingrow pickrow">
+            <span class="ico"><Icon name="timer" :size="15" /></span>
+            <div class="body">
+              <div class="lab">歌词偏移</div>
+              <div class="sub">正数让歌词延后高亮，负数为提前</div>
+            </div>
+            <span class="val">{{ lyricOffsetLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+            <select
+              :value="settingsState.lyricOffsetMs / 1000"
+              aria-label="歌词偏移"
+              @change="onLyricOffset"
+            >
+              <option v-for="ms in offsetOptions" :key="ms" :value="ms">
+                {{ ms > 0 ? '+' : '' }}{{ ms.toFixed(1) }} 秒
+              </option>
+            </select>
+          </div>
+
+          <div v-if="show('lyrics:show')" class="settingrow">
+            <span class="ico"><Icon name="scroll-text" :size="15" /></span>
+            <div class="body">
+              <div class="lab">显示歌词</div>
+              <div class="sub">播放页展示滚动歌词</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.showLyrics }"
+              role="switch"
+              :aria-checked="settingsState.showLyrics"
+              aria-label="显示歌词"
+              @click="updateSettings({ showLyrics: !settingsState.showLyrics })"
+            />
+          </div>
+
+          <div v-if="show('lyrics:cloud')" class="settingrow">
+            <span class="ico"><Icon name="cloud" :size="15" /></span>
+            <div class="body">
+              <div class="lab">自动匹配云歌词</div>
+              <div class="sub">插件不提供歌词时尝试云端匹配</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.cloudLyrics }"
+              role="switch"
+              :aria-checked="settingsState.cloudLyrics"
+              aria-label="自动匹配云歌词"
+              @click="updateSettings({ cloudLyrics: !settingsState.cloudLyrics })"
+            />
+          </div>
+
+          <div v-if="show('lyrics:shared')" class="settingrow">
+            <span class="ico"><Icon name="share" :size="15" /></span>
+            <div class="body">
+              <div class="lab">启用歌词共享</div>
+              <div class="sub">把本机歌词同步到系统与桌面端</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.systemLyrics }"
+              role="switch"
+              :aria-checked="settingsState.systemLyrics"
+              aria-label="启用歌词共享"
+              @click="updateSettings({ systemLyrics: !settingsState.systemLyrics })"
+            />
+          </div>
+
+          <div
+            v-if="show('lyrics:sharedTranslation')"
+            class="settingrow"
+            :class="{ off: !settingsState.systemLyrics }"
+          >
+            <span class="ico"><Icon name="scroll-text" :size="15" /></span>
+            <div class="body">
+              <div class="lab">共享翻译</div>
+              <div class="sub">歌词共享时会一并推送翻译行</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.systemLyricsTranslation }"
+              role="switch"
+              :aria-checked="settingsState.systemLyricsTranslation"
+              aria-label="共享翻译"
+              :disabled="!settingsState.systemLyrics"
+              @click="updateSettings({ systemLyricsTranslation: !settingsState.systemLyricsTranslation })"
+            />
+          </div>
+        </div>
+      </section>
+
+      <section id="settings-download" v-if="groupVisible('download')">
+        <div class="group-title">
+          <span class="cn">下载</span>
+          <span class="en">Download</span>
+        </div>
+        <div class="pgrp">
+          <div v-if="show('download:quality')" class="settingrow pickrow">
+            <span class="ico"><Icon name="download" :size="15" /></span>
+            <div class="body">
+              <div class="lab">下载音质</div>
+              <div class="sub">离线文件的音质档位</div>
+            </div>
+            <span class="val">{{ downloadQualityLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+            <select
+              :value="settingsState.downloadQuality"
+              aria-label="下载音质"
+              @change="onDownloadQuality"
+            >
+              <option v-for="quality in qualityOptions" :key="quality" :value="quality">
+                {{ quality ? qualityLabel(quality) : '跟随播放音质' }}
+              </option>
+            </select>
+          </div>
+
+          <div v-if="show('download:template')" class="settingrow colrow tall">
+            <div class="coltop">
+              <span class="ico"><Icon name="edit" :size="15" /></span>
+              <div class="body">
+                <div class="lab">下载文件名</div>
+                <div class="sub">%t 歌名 · %s 歌手 · %a 专辑 · %u 平台 · %q 音质 · %d 日期</div>
+              </div>
+            </div>
+            <input
+              class="tplinput"
+              :value="settingsState.downloadFilenameTemplate"
+              maxlength="80"
+              placeholder="%t - %s"
+              aria-label="下载文件名模板"
+              @input="onTemplateInput"
+            />
+            <div class="tplpreview">预览 · {{ templatePreview }}</div>
+          </div>
+
+          <div v-if="show('download:concurrency')" class="settingrow pickrow">
+            <span class="ico"><Icon name="queue" :size="15" /></span>
+            <div class="body">
+              <div class="lab">同时下载数量</div>
+              <div class="sub">同时进行的下载任务上限</div>
+            </div>
+            <span class="val">{{ concurrencyLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+            <select
+              :value="settingsState.downloadConcurrency"
+              aria-label="同时下载数量"
+              @change="onConcurrency"
+            >
+              <option v-for="count in concurrencies" :key="count" :value="count">
+                {{ count }} 个
+              </option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section id="settings-data" v-if="groupVisible('data')">
+        <div class="group-title">
+          <span class="cn">数据与存储</span>
+          <span class="en">Data</span>
+        </div>
+        <div class="pgrp">
+          <button v-if="show('data:plugins')" class="settingrow tap" @click="router.push('/plugins')">
+            <span class="ico"><Icon name="plugin" :size="15" /></span>
+            <div class="body">
+              <div class="lab">音源插件</div>
+              <div class="sub">已安装 {{ pluginState.plugins.length }} 个插件</div>
+            </div>
+            <span class="val">{{ runningPlugins }} 个运行中</span>
+            <Icon name="chevron" :size="14" />
+          </button>
+
+          <button v-if="show('data:cloud')" class="settingrow tap" @click="router.push('/cloud')">
+            <span class="ico"><Icon name="cloud" :size="15" /></span>
+            <div class="body">
+              <div class="lab">云端歌单</div>
+              <div class="sub">
+                {{
+                  authState.authenticated
+                    ? `已导入 ${cloudCount} 个 · 登录为 ${displayName()}`
+                    : '未登录 · 登录后从电脑同步'
+                }}
+              </div>
+            </div>
+            <span class="val">{{ cloudCount }} 个</span>
+            <Icon name="chevron" :size="14" />
+          </button>
+
+          <button v-if="show('data:downloads')" class="settingrow tap" @click="router.push('/downloads')">
+            <span class="ico"><Icon name="download" :size="15" /></span>
+            <div class="body">
+              <div class="lab">下载管理</div>
+              <div class="sub">
+                {{ downloads.completed }} 首已下载 · {{ downloads.active }} 进行中 ·
+                {{ downloads.failed }} 失败
+              </div>
+            </div>
+            <span class="val">{{ downloads.total }} 项</span>
+            <Icon name="chevron" :size="14" />
+          </button>
+
+          <div v-if="show('data:logs')" class="settingrow">
+            <span class="ico"><Icon name="history" :size="15" /></span>
+            <div class="body">
+              <div class="lab">运行日志</div>
+              <div class="sub">记录播放、插件与网络事件，便于排查</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.logsEnabled }"
+              role="switch"
+              :aria-checked="settingsState.logsEnabled"
+              aria-label="运行日志"
+              @click="updateSettings({ logsEnabled: !settingsState.logsEnabled })"
+            />
+          </div>
+
+          <div
+            v-if="show('data:verbose')"
+            class="settingrow"
+            :class="{ off: !settingsState.logsEnabled }"
+          >
+            <span class="ico"><Icon name="scroll-text" :size="15" /></span>
+            <div class="body">
+              <div class="lab">详细日志</div>
+              <div class="sub">同时收录 console 输出，体积更大</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.verboseLogs }"
+              role="switch"
+              :aria-checked="settingsState.verboseLogs"
+              aria-label="详细日志"
+              :disabled="!settingsState.logsEnabled"
+              @click="updateSettings({ verboseLogs: !settingsState.verboseLogs })"
+            />
+          </div>
+
+          <button v-if="show('data:clear')" class="settingrow tap tall" @click="clearPlaybackData">
+            <span class="ico"><Icon name="trash" :size="15" /></span>
+            <div class="body">
+              <div class="lab">清除播放记录</div>
+              <div class="sub">清空当前播放队列与最近播放历史</div>
+            </div>
+            <span class="val danger">清除</span>
+          </button>
+
+          <button v-if="show('data:reset')" class="settingrow tap tall" @click="resetSettings">
+            <span class="ico"><Icon name="refresh" :size="15" /></span>
+            <div class="body">
+              <div class="lab danger">恢复默认设置</div>
+              <div class="sub">外观、音质与开关恢复出厂状态，账号与歌单不受影响</div>
+            </div>
+            <Icon name="chevron" :size="14" />
+          </button>
+        </div>
+      </section>
+
+      <section id="settings-about" v-if="groupVisible('about')">
+        <div class="group-title">
+          <span class="cn">关于</span>
+          <span class="en">About</span>
+        </div>
+        <div class="pgrp">
+          <div v-if="show('about:scope')" class="settingrow tall">
+            <img class="logo" src="/logo.png" alt="" />
+            <div class="body">
+              <div class="lab">澜音 · CeruMusic 手机版</div>
+              <div class="sub">插件协议 v2.0 · Android</div>
+            </div>
+            <span class="val">{{ appVersion }}</span>
+          </div>
+
+          <div v-if="show('about:autoUpdate')" class="settingrow">
+            <span class="ico"><Icon name="plugin" :size="15" /></span>
+            <div class="body">
+              <div class="lab">插件自动更新</div>
+              <div class="sub">启动时检查已安装插件的新版本</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.pluginAutoUpdate }"
+              role="switch"
+              :aria-checked="settingsState.pluginAutoUpdate"
+              aria-label="插件自动更新"
+              @click="updateSettings({ pluginAutoUpdate: !settingsState.pluginAutoUpdate })"
+            />
+          </div>
+
+          <button v-if="show('about:update')" class="settingrow tap" @click="router.push('/update')">
+            <span class="ico"><Icon name="refresh" :size="15" /></span>
+            <div class="body">
+              <div class="lab">检查更新</div>
+              <div class="sub">
+                {{
+                  updateState.hasUpdate
+                    ? `发现新版本 ${updateState.latest?.tag}`
+                    : `已安装 ${appVersion}，点击检查新版本`
+                }}
+              </div>
+            </div>
+            <span v-if="updateState.hasUpdate" class="reddot" />
+            <Icon name="chevron" :size="14" />
+          </button>
+        </div>
+      </section>
+
+      <div v-if="!hasVisibleRows" class="empty result-empty">
+        <div class="glyph"><Icon name="search" :size="28" /></div>
+        <h3>没有匹配的设置</h3>
+        <p>换个关键词试试，比如「音质」「歌词」或「日志」。</p>
+        <button class="btn btn-ghost" @click="settingsQuery = ''">清空搜索</button>
       </div>
-      <p class="hint">
-        下载时使用这个音质；选择「跟随播放音质」时使用上面的默认音质。
+
+      <div class="flinks">
+        <a :href="REPO_URL" target="_blank" rel="noreferrer">查看源码</a>
+        <span>·</span>
+        <a :href="UPSTREAM_URL" target="_blank" rel="noreferrer">上游项目</a>
+        <span>·</span>
+        <a :href="LICENSE_URL" target="_blank" rel="noreferrer">AGPL-3.0</a>
+      </div>
+      <p class="fnote">设置只保存在本机，改动即时生效，不上传服务器。</p>
+      <p class="fnote">
+        本应用仅提供插件运行框架与播放功能，不存储、不提供任何音乐源文件。音乐信息由你自行安装的合规插件提供。
       </p>
     </div>
-
-    <div class="card panel" style="margin-top: 12px">
-      <div class="panel-label">下载文件名</div>
-      <input
-        class="input template-input"
-        :value="settingsState.downloadFilenameTemplate"
-        maxlength="80"
-        placeholder="%t - %s"
-        @input="onTemplateInput"
-      />
-      <div class="token-hints">
-        <span>%t 歌名</span>
-        <span>%s 歌手</span>
-        <span>%a 专辑</span>
-        <span>%u 平台</span>
-        <span>%q 音质</span>
-        <span>%d 日期</span>
-      </div>
-      <p class="hint">预览：{{ templatePreview }}</p>
-    </div>
-
-    <div class="card panel" style="margin-top: 12px">
-      <div class="panel-label">同时下载数量</div>
-      <div class="chips">
-        <button
-          v-for="count in concurrencies"
-          :key="count"
-          class="chip"
-          :class="{ active: settingsState.downloadConcurrency === count }"
-          @click="updateSettings({ downloadConcurrency: count })"
-        >
-          {{ count }} 个
-        </button>
-      </div>
-      <p class="hint">网络较慢时建议设为 1。</p>
-    </div>
-
-    <div id="settings-data" class="section-title settings-section">
-      <h2>音源与数据</h2>
-      <span>插件、账号与存储</span>
-    </div>
-    <div class="list-group">
-      <button class="list-item" @click="router.push('/plugins')">
-        <span class="entry-icon"><Icon name="link" :size="19" /></span>
-        <div class="info">
-          <h3>音源插件</h3>
-          <p>{{ pluginState.plugins.filter((item) => item.running).length }} 个运行中 · 共 {{ pluginState.plugins.length }} 个</p>
-        </div>
-        <Icon name="chevron" :size="18" class="chev" />
-      </button>
-      <button class="list-item" @click="router.push('/cloud')">
-        <span class="entry-icon"><Icon name="cloud" :size="19" /></span>
-        <div class="info">
-          <h3>云端歌单</h3>
-          <p>
-            {{
-              authState.authenticated
-                ? `已导入 ${cloudCount} 个 · 登录为 ${displayName()}`
-                : '未登录 · 登录后从电脑同步'
-            }}
-          </p>
-        </div>
-        <Icon name="chevron" :size="18" class="chev" />
-      </button>
-      <button class="list-item" @click="router.push('/downloads')">
-        <span class="entry-icon"><Icon name="download" :size="19" /></span>
-        <div class="info">
-          <h3>下载管理</h3>
-          <p>
-            {{ downloads.completed }} 首已下载<template v-if="downloads.active"> · {{ downloads.active }} 首进行中</template
-            ><template v-if="downloads.failed"> · {{ downloads.failed }} 首失败</template>
-          </p>
-        </div>
-        <Icon name="chevron" :size="18" class="chev" />
-      </button>
-      <div class="list-item" style="pointer-events: auto">
-        <div class="info">
-          <h3>运行日志</h3>
-          <p>记录错误、播放、插件和歌词共享信息，出问题时方便导出</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.logsEnabled }"
-          aria-label="运行日志"
-          @click="updateSettings({ logsEnabled: !settingsState.logsEnabled })"
-        />
-      </div>
-      <div class="list-item" style="pointer-events: auto">
-        <div class="info">
-          <h3>详细日志</h3>
-          <p>额外记录 console.log / info / debug，排查问题时开启</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.verboseLogs, off: !settingsState.logsEnabled }"
-          aria-label="详细日志"
-          @click="updateSettings({ verboseLogs: !settingsState.verboseLogs })"
-        />
-      </div>
-      <button class="list-item" @click="clearPlaybackData">
-        <span class="entry-icon"><Icon name="trash" :size="19" /></span>
-        <div class="info">
-          <h3>清除播放记录</h3>
-          <p>不会删除收藏和歌单</p>
-        </div>
-        <Icon name="chevron" :size="18" class="chev" />
-      </button>
-      <button class="list-item" @click="resetSettings">
-        <span class="entry-icon"><Icon name="repeat" :size="19" /></span>
-        <div class="info">
-          <h3>恢复默认设置</h3>
-          <p>主题、音质与播放选项</p>
-        </div>
-        <Icon name="chevron" :size="18" class="chev" />
-      </button>
-    </div>
-
-    <div class="section-title settings-section">
-      <h2>关于澜音</h2>
-      <span>版本与更新</span>
-    </div>
-    <div class="card about-card">
-      <img src="/logo.png" alt="" />
-      <div>
-        <h3>澜音 · CeruMusic 手机版</h3>
-        <p>当前版本 {{ appVersion }}</p>
-        <p>插件协议 v2.0 · Android</p>
-      </div>
-    </div>
-    <div class="list-group about-actions">
-      <div class="list-item" style="pointer-events: auto">
-        <span class="entry-icon"><Icon name="music" :size="19" /></span>
-        <div class="info">
-          <h3>插件自动更新</h3>
-          <p>链接安装的插件有新版本自动替换</p>
-        </div>
-        <button
-          class="switch"
-          :class="{ on: settingsState.pluginAutoUpdate }"
-          aria-label="插件自动更新"
-          @click="updateSettings({ pluginAutoUpdate: !settingsState.pluginAutoUpdate })"
-        />
-      </div>
-      <button class="list-item" @click="router.push('/update')">
-        <span class="entry-icon"><Icon name="refresh" :size="19" /></span>
-        <div class="info">
-          <h3>检查更新</h3>
-          <p>
-            <template v-if="updateState.hasUpdate">
-              <span class="update-badge">发现新版本 {{ updateState.latest?.tag }}</span>
-            </template>
-            <template v-else>已安装 {{ appVersion }}，点击检查新版本</template>
-          </p>
-        </div>
-        <span v-if="updateState.hasUpdate" class="dot" />
-        <Icon name="chevron" :size="18" class="chev" />
-      </button>
-    </div>
-    <p class="footer">
-      本应用仅提供插件运行框架与播放功能，不存储、不提供任何音乐源文件。音乐信息由你自行安装的合规插件提供。
-    </p>
   </div>
 </template>
 
 <style scoped>
-.settings-header {
-  display: grid;
-  grid-template-columns: 42px 1fr auto;
-  align-items: center;
-  padding-bottom: 10px;
-}
-.settings-heading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  line-height: 1.1;
-}
-.settings-heading span {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.8px;
-  color: var(--muted-2);
-}
-.settings-heading strong {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--text);
-}
-.version-chip {
-  justify-self: end;
-  padding: 6px 9px;
-  border-radius: 999px;
-  color: var(--muted);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-.account-card {
+.navrow {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
-  margin-top: 6px;
-  background:
-    radial-gradient(120% 180% at 0% 0%, var(--brand-soft), transparent 58%),
-    var(--surface);
+  padding: 8px var(--pad) 0;
 }
-.account-kicker {
-  display: block;
-  margin-bottom: 2px;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
-  color: var(--muted-2);
+.phead {
+  padding-top: 9px;
 }
-.account-avatar {
-  display: grid;
-  place-items: center;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  overflow: hidden;
-  color: var(--brand);
-  background: var(--brand-soft);
-  box-shadow: 0 8px 20px rgba(0, 181, 120, 0.16);
-  flex: 0 0 auto;
+.headline {
+  margin-top: 7px;
 }
-.settings-nav {
+.metal {
   display: flex;
+  align-items: center;
   gap: 7px;
-  margin: 13px -2px 2px;
-  padding: 2px;
+  margin: 12px var(--pad) 0;
+  font-size: 11px;
+  color: var(--ink-4);
+  letter-spacing: 0.02em;
+}
+.metal .live {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tint);
+  box-shadow: 0 0 0 3px var(--tint-soft);
+}
+.metal .dot {
+  opacity: 0.6;
+}
+.metal .ver {
+  margin-left: auto;
+  font-family: var(--mono);
+  letter-spacing: 0.04em;
+}
+.searchfield {
+  margin: 14px var(--pad) 0;
+}
+.searchfield input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+}
+.searchfield input::placeholder {
+  color: var(--ink-4);
+}
+.clearq {
+  width: 28px;
+  height: 28px;
+  margin-right: -6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-4);
+}
+.jump {
+  padding: 16px var(--pad) 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.settings-nav::-webkit-scrollbar {
+.jump::-webkit-scrollbar {
   display: none;
 }
-.settings-nav button {
-  flex: 0 0 auto;
-  padding: 8px 13px;
-  border-radius: 999px;
-  color: var(--muted);
+.jump .chip {
+  flex: none;
+  height: 32px;
+  padding: 0 13px;
+  position: relative;
+}
+.jump .chip::after {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.acc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 var(--pad);
+  padding: 13px 15px;
   background: var(--surface);
   border: 1px solid var(--line);
-  font-size: 12px;
-  font-weight: 600;
-  transition: background 0.15s ease, color 0.15s ease;
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
 }
-.settings-nav button:active {
-  color: var(--brand);
-  background: var(--brand-soft);
-}
-.settings-section {
-  margin: 22px 2px 10px;
-  scroll-margin-top: 12px;
-}
-.settings-section h2 {
+.av {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  font-family: var(--serif);
   font-size: 17px;
+  font-weight: 600;
+  color: var(--tint);
+  background: linear-gradient(140deg, var(--tint-softer), var(--tint-soft));
+  border: 1px solid var(--line);
 }
-.settings-section span {
-  font-size: 10.5px;
-  font-weight: 400;
-  color: var(--muted-2);
-}
-.account-avatar img {
+.av img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.account-info {
+.accbody {
   flex: 1;
   min-width: 0;
 }
-.account-info h3 {
+.accname {
   font-size: 14.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
-.account-info p {
+.accsub {
   margin-top: 3px;
   font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
+  color: var(--ink-4);
+}
+.pgrp {
+  margin: 0 var(--pad);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-.btn.small {
-  padding: 8px 14px;
-  font-size: 12.5px;
-  flex: 0 0 auto;
-}
-.update-badge {
-  color: var(--brand);
-  font-weight: 600;
-}
-.accent-chip {
-  display: inline-flex;
+.pgrp .settingrow.tall {
+  min-height: 68px;
   align-items: center;
-  gap: 6px;
 }
-.accent-dot {
-  display: inline-block;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
+.pickrow {
+  position: relative;
 }
-.template-input {
+.pickrow > .val {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.pickrow select {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  margin-top: 2px;
+  height: 100%;
+  opacity: 0;
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
 }
-.token-hints {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
+.pickrow select:focus-visible {
+  opacity: 1;
+  background: var(--tint-softer);
+  color: var(--ink);
+  font-size: 14px;
+  outline: none;
+  padding: 0 14px;
 }
-.token-hints span {
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  color: var(--muted);
-  background: var(--brand-softer);
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #e05353;
-  flex: 0 0 auto;
-  margin-right: 4px;
-}
-.panel {
-  padding: 16px;
-}
-.panel-label {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 11px;
-}
-.quality-chips {
-  flex-wrap: wrap;
-  overflow: visible;
-  row-gap: 8px;
-  padding: 2px 2px 4px;
-}
-.hint {
-  margin-top: 10px;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--muted);
-}
-.entry-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  flex: 0 0 auto;
-}
-.chev {
-  color: var(--muted-2);
-}
-.about-card {
+.dots {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
+  gap: 6px;
+  flex: none;
 }
-.about-actions {
-  margin-top: 10px;
+.acdot {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  flex: none;
 }
-.about-card img {
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
+.acdot::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
 }
-.about-card h3 {
-  font-size: 15px;
+.acdot.green {
+  background: var(--c500);
 }
-.about-card p {
-  margin-top: 3px;
-  font-size: 11.5px;
-  color: var(--muted);
+.acdot.blue {
+  background: var(--blue);
 }
-.footer {
-  margin: 18px 6px 8px;
-  font-size: 10.5px;
+.acdot.purple {
+  background: color-mix(in oklab, var(--blue) 55%, var(--cinnabar));
+}
+.acdot.orange {
+  background: var(--gold);
+}
+.acdot.on {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--tint);
+}
+.settingrow .switch {
+  position: relative;
+  flex: none;
+}
+.settingrow .switch::before {
+  content: '';
+  position: absolute;
+  inset: -9px 0;
+}
+.settingrow.off {
+  opacity: 0.5;
+}
+.settingrow.tap {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.settingrow.tap:last-child {
+  border-bottom: 0;
+}
+.settingrow.tap:active {
+  background: var(--porcelain-2);
+}
+.settingrow .val.danger {
+  color: var(--cinnabar);
+  font-weight: 600;
+}
+.settingrow .lab.danger {
+  color: var(--cinnabar);
+}
+.reddot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cinnabar);
+  flex: none;
+}
+.colrow {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+  padding-top: 12px;
+  padding-bottom: 13px;
+}
+.colrow .coltop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.colrow .ico {
+  flex: none;
+}
+.tplinput {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-2);
+  background: var(--porcelain-2);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  outline: none;
+}
+.tplinput:focus {
+  border-color: var(--tint);
+  box-shadow: 0 0 0 3px var(--tint-soft);
+}
+.tplpreview {
+  font-size: 11px;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  flex: none;
+  object-fit: contain;
+  background: var(--tint-softer);
+}
+.flinks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 26px var(--pad) 0;
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.flinks a {
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.fnote {
+  padding: 10px var(--pad) 0;
+  font-size: 11px;
   line-height: 1.7;
-  color: var(--muted-2);
+  color: var(--ink-4);
   text-align: center;
+}
+.result-empty {
+  padding-top: 24px;
+}
+.result-empty .btn {
+  margin-top: 4px;
 }
 </style>

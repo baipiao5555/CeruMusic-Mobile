@@ -15,6 +15,7 @@ import {
   pluginState,
   removePlugin,
   savePluginConfig,
+  selectProvider,
   type PluginDescriptor
 } from '@/core/plugin/manager'
 
@@ -27,8 +28,24 @@ const fileInput = ref<HTMLInputElement>()
 const pending = ref<{ code: string; manifest: any; sourceUrl?: string } | null>(null)
 const editing = ref<PluginDescriptor | null>(null)
 const configValues = ref<Record<string, any>>({})
+const expanded = ref('')
 
 const installed = computed(() => pluginState.plugins)
+
+/** 已安装插件提供的在线音源（每个 provider 一张 monogram 卡）。 */
+const sources = computed(() =>
+  installed.value.flatMap((plugin) => plugin.providers.map((provider) => ({ plugin, provider })))
+)
+const runningCount = computed(() => installed.value.filter((item) => item.running).length)
+const failedCount = computed(() => installed.value.filter((item) => item.loadError).length)
+
+function toggleDetails(pluginId: string): void {
+  expanded.value = expanded.value === pluginId ? '' : pluginId
+}
+
+function useSource(providerId: string): void {
+  selectProvider(providerId)
+}
 
 function manifestPermissions(manifest: any): any[] {
   return Array.isArray(manifest?.permissions) ? manifest.permissions : []
@@ -239,137 +256,261 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
 </script>
 
 <template>
-  <div class="page">
-    <header class="page-header">
-      <button class="icon-btn" aria-label="返回" @click="router.back()">
-        <Icon name="back" :size="20" />
-      </button>
-      <div class="brand-name" style="font-size: 20px">音源插件</div>
-      <button class="icon-btn" aria-label="刷新" @click="router.go(0)">
-        <Icon name="repeat" :size="19" />
-      </button>
-    </header>
+  <div class="screen">
+    <div class="scroll safe-t-lg">
+      <div class="appbar">
+        <button class="iconbtn quiet" aria-label="返回" @click="router.back()">
+          <Icon name="back" :size="20" />
+        </button>
+        <div class="ttl">
+          音源市场
+          <span class="sub">
+            已安装 {{ installed.length }} · 运行中 {{ runningCount }}
+            <template v-if="failedCount"> · {{ failedCount }} 个加载失败</template>
+          </span>
+        </div>
+        <button class="iconbtn quiet" aria-label="刷新" @click="router.go(0)">
+          <Icon name="refresh" :size="19" />
+        </button>
+      </div>
 
-    <div v-if="error" class="notice error">{{ error }}</div>
-    <div v-if="info" class="notice ok">{{ info }}</div>
+      <div v-if="error" class="pad mt12">
+        <div class="notice error">{{ error }}</div>
+      </div>
+      <div v-if="info" class="pad mt12">
+        <div class="notice ok">{{ info }}</div>
+      </div>
 
-    <section class="card add-card">
-      <h2>从链接安装</h2>
-      <p class="sub">粘贴澜音 v2 单文件插件（.js）的下载地址。</p>
-      <div class="add-row">
+      <!-- 订阅卡 -->
+      <section class="subcard">
+        <div class="crackle dark" aria-hidden="true" />
+        <div class="subglow" aria-hidden="true" />
+        <div class="subin">
+          <div class="eb">SUBSCRIPTION</div>
+          <h3>从链接订阅</h3>
+          <p class="fine">
+            <Icon name="info" :size="12" />
+            <span>安装前逐条确认权限 · 仅接受 HTTPS 源</span>
+          </p>
+          <div class="urlrow">
+            <Icon name="plugin" :size="14" class="uico" />
+            <input
+              v-model="url"
+              class="uinput"
+              inputmode="url"
+              placeholder="https://example.com/plugin.js"
+              autocomplete="off"
+              aria-label="插件地址"
+            />
+            <button class="get" :disabled="!url.trim() || busy === 'url'" @click="prepareFromUrl">
+              <span v-if="busy === 'url'" class="loading-dots"><i /><i /><i /></span>
+              <span v-else>获取</span>
+            </button>
+          </div>
+          <div class="alt">
+            <button class="altbtn" @click="fileInput?.click()">
+              <Icon name="folder" :size="13" /> 从文件安装
+            </button>
+            <span class="altsep" />
+            <button class="altbtn" :disabled="busy === 'demo'" @click="installDemo">
+              <Icon name="music" :size="13" />
+              {{ busy === 'demo' ? '安装中…' : '示例音源' }}
+            </button>
+          </div>
+        </div>
         <input
-          v-model="url"
-          class="input"
-          inputmode="url"
-          placeholder="https://example.com/plugin.js"
-          autocomplete="off"
+          ref="fileInput"
+          type="file"
+          accept=".js,text/javascript,application/javascript"
+          hidden
+          @change="onFile"
         />
-        <button class="btn" :disabled="!url.trim() || busy === 'url'" @click="prepareFromUrl">
-          <span v-if="busy === 'url'" class="loading-dots"><i /><i /><i /></span>
-          <span v-else>获取</span>
-        </button>
-      </div>
-      <div class="add-actions">
-        <button class="btn secondary" @click="fileInput?.click()">
-          <Icon name="folder" :size="18" /> 从文件安装
-        </button>
-        <button class="btn ghost" :disabled="busy === 'demo'" @click="installDemo">
-          <Icon name="music" :size="18" /> 安装示例音源
-        </button>
-      </div>
-      <input ref="fileInput" type="file" accept=".js,text/javascript,application/javascript" hidden @change="onFile" />
-    </section>
-
-    <div class="section-title">
-      <h2>已安装</h2>
-      <button class="check-all" :disabled="checkingAll" @click="checkAll">
-        <Icon name="refresh" :size="14" /> {{ checkingAll ? '检查中…' : '检查全部更新' }}
-      </button>
-    </div>
-
-    <div v-if="!installed.length" class="empty">
-      <div class="emoji">🔌</div>
-      <h3>还没有安装插件</h3>
-      <p>澜音通过 v2 插件获取音乐信息。可以从链接、文件或内置示例开始。</p>
-    </div>
-
-    <div class="plugin-list">
-      <section v-for="plugin in installed" :key="plugin.pluginId" class="card plugin-card">
-        <div class="plugin-head">
-          <div class="plugin-mark">{{ plugin.name.slice(0, 1) }}</div>
-          <div class="plugin-info">
-            <h3>{{ plugin.name }} <small>v{{ plugin.version }}</small></h3>
-            <p>{{ plugin.author || '未知作者' }} · {{ plugin.providers.map((item) => item.name).join('、') || '无音源' }}</p>
-          </div>
-          <button
-            class="switch"
-            :class="{ on: plugin.running }"
-            :aria-label="plugin.running ? '停用' : '启用'"
-            :disabled="busy === plugin.pluginId"
-            @click="toggle(plugin)"
-          />
-        </div>
-
-        <p v-if="plugin.description" class="plugin-desc">{{ plugin.description }}</p>
-        <p v-if="plugin.loadError" class="plugin-error">{{ plugin.loadError }}</p>
-
-        <div class="plugin-tags">
-          <span v-for="provider in plugin.providers" :key="provider.id" class="mini-tag">{{ provider.name }}</span>
-          <span v-if="plugin.running" class="mini-tag online">运行中</span>
-          <span v-else class="mini-tag">已停用</span>
-        </div>
-
-        <div class="plugin-actions">
-          <button
-            v-if="plugin.sourceUrl"
-            class="btn secondary small"
-            :disabled="busy === plugin.pluginId"
-            @click="checkUpdate(plugin)"
-          >
-            <Icon name="refresh" :size="15" /> 检查更新
-          </button>
-          <button
-            v-if="Object.keys(plugin.configDefaults).length"
-            class="btn secondary small"
-            @click="openConfig(plugin)"
-          >
-            <Icon name="settings" :size="15" /> 配置
-          </button>
-          <button class="btn danger small" :disabled="busy === plugin.pluginId" @click="uninstall(plugin)">
-            <Icon name="trash" :size="15" /> 卸载
-          </button>
-        </div>
       </section>
+
+      <!-- 在线音源 -->
+      <div class="section-head mt24">
+        <div class="st">
+          <h2>在线音源</h2>
+          <span class="idx">ONLINE</span>
+        </div>
+        <span class="meta num">{{ sources.length }} 个</span>
+      </div>
+
+      <div v-if="sources.length" class="hscroll tiles">
+        <button
+          v-for="item in sources"
+          :key="item.plugin.pluginId + ':' + item.provider.id"
+          class="tile"
+          :class="{ cur: pluginState.selectedProvider === item.provider.id }"
+          @click="useSource(item.provider.id)"
+        >
+          <span class="mono">{{ item.provider.name.slice(0, 1) }}</span>
+          <span class="tname truncate">{{ item.provider.name }}</span>
+          <span class="tv num">v{{ item.plugin.version }} · {{ item.provider.methods.length }} 接口</span>
+          <span class="ta">
+            <template v-if="pluginState.selectedProvider === item.provider.id">
+              <Icon name="check" :size="11" /> 使用中
+            </template>
+            <template v-else>+ 设为当前</template>
+          </span>
+        </button>
+      </div>
+      <p v-else class="pad meta">还没有可用的音源，先用上面的订阅卡装一个插件。</p>
+
+      <!-- 已安装 -->
+      <div class="section-head mt24">
+        <div class="st">
+          <h2>已安装</h2>
+          <span class="idx">INSTALLED</span>
+        </div>
+        <button class="more" :disabled="checkingAll" @click="checkAll">
+          <Icon name="refresh" :size="13" />
+          {{ checkingAll ? '检查中…' : '检查更新' }}
+        </button>
+      </div>
+
+      <div v-if="!installed.length" class="empty">
+        <div class="glyph"><Icon name="plugin" :size="34" /></div>
+        <h3>还没有安装插件</h3>
+        <p>澜音通过 v2 插件获取音乐信息。可以从链接、文件或内置示例开始。</p>
+      </div>
+
+      <div v-else class="pad">
+        <div class="card plist">
+          <div
+            v-for="plugin in installed"
+            :key="plugin.pluginId"
+            class="pitem"
+            :class="{ open: expanded === plugin.pluginId }"
+          >
+            <div class="prow" @click="toggleDetails(plugin.pluginId)">
+              <span class="pmark" :class="{ off: !plugin.running }">{{ plugin.name.slice(0, 1) }}</span>
+              <div class="pmain">
+                <div class="pname">
+                  <span class="truncate">{{ plugin.name }}</span>
+                  <span class="pv num">v{{ plugin.version }}</span>
+                </div>
+                <div v-if="plugin.loadError" class="perr">
+                  <Icon name="warning" :size="12" />
+                  <span class="truncate">加载失败 · {{ plugin.loadError }}</span>
+                </div>
+                <div v-else class="psub">
+                  <span class="truncate">{{ plugin.author || '未知作者' }}</span>
+                  <span class="dot" />
+                  <span>{{ plugin.sourceUrl ? '链接订阅' : '文件安装' }}</span>
+                </div>
+              </div>
+              <button
+                class="hit"
+                :aria-label="plugin.running ? '停用' : '启用'"
+                :disabled="busy === plugin.pluginId"
+                @click.stop="toggle(plugin)"
+              >
+                <span class="switch" :class="{ on: plugin.running }" />
+              </button>
+              <button
+                class="iconbtn quiet pchev"
+                :aria-label="expanded === plugin.pluginId ? '收起详情' : '查看详情'"
+                @click.stop="toggleDetails(plugin.pluginId)"
+              >
+                <Icon name="chevron-down" :size="15" />
+              </button>
+            </div>
+
+            <div v-if="expanded === plugin.pluginId" class="pdetail">
+              <p v-if="plugin.description" class="pdesc">{{ plugin.description }}</p>
+              <div class="ptags">
+                <span v-for="provider in plugin.providers" :key="provider.id" class="badge">
+                  {{ provider.name }}
+                </span>
+                <span class="badge" :class="{ on: plugin.running }">
+                  {{ plugin.running ? '运行中' : '已停用' }}
+                </span>
+              </div>
+              <div class="pacts">
+                <button
+                  v-if="plugin.sourceUrl"
+                  class="btn btn-ghost btn-sm"
+                  :disabled="busy === plugin.pluginId"
+                  @click="checkUpdate(plugin)"
+                >
+                  <Icon name="refresh" :size="14" /> 检查更新
+                </button>
+                <button
+                  v-if="Object.keys(plugin.configDefaults).length"
+                  class="btn btn-ghost btn-sm"
+                  @click="openConfig(plugin)"
+                >
+                  <Icon name="settings" :size="14" /> 配置
+                </button>
+                <button
+                  class="btn btn-danger btn-sm"
+                  :disabled="busy === plugin.pluginId"
+                  @click="uninstall(plugin)"
+                >
+                  <Icon name="trash" :size="14" /> 卸载
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pad mt16">
+        <div class="foot">
+          <div class="foot-h">
+            <Icon name="info" :size="12" />
+            <span>关于插件</span>
+          </div>
+          手机版沿用澜音 v2 插件协议，插件在独立沙箱（iframe）中运行，只能通过受控桥接访问网络、存储和播放器。
+          出于安全考虑，插件网络请求仅允许访问公网 HTTP(S) 地址，不能访问本机或局域网。
+          从链接安装的插件会记录更新地址，应用启动时自动检查新版本（6 小时内只查一次，可在设置里关掉），
+          也可以点上面的「检查更新」立刻检查。从文件安装的插件没有更新地址，需要重新从链接安装一次才能自动更新。
+        </div>
+      </div>
     </div>
 
-    <section class="card help-card">
-      <h3>关于插件</h3>
-      <p>
-        手机版沿用澜音 v2 插件协议，插件在独立沙箱（iframe）中运行，只能通过受控桥接访问网络、存储和播放器。
-        出于安全考虑，插件网络请求仅允许访问公网 HTTP(S) 地址，不能访问本机或局域网。
-        从链接安装的插件会记录更新地址，应用启动时自动检查新版本（6 小时内只查一次，可在设置里关掉），
-        也可以在这里点「检查全部更新」立刻检查。从文件安装的插件没有更新地址，需要重新从链接安装一次才能自动更新。
-      </p>
-    </section>
-
+    <!-- 安装确认 -->
     <div v-if="pending" class="sheet-mask" @click.self="pending = null">
+      <div class="scrim" @click="pending = null" />
       <div class="sheet">
-        <h2>安装 {{ pending.manifest.name }}？</h2>
-        <p class="sub">
-          v{{ pending.manifest.version }} · {{ pending.manifest.author || '未知作者' }}<br />
-          {{ pending.manifest.description || '没有描述' }}
-        </p>
-        <h3 style="font-size: 13px; margin: 14px 0 8px">该插件声明了以下权限</h3>
-        <div class="permission-list">
-          <div v-for="permission in manifestPermissions(pending.manifest)" :key="permission.key" class="permission-item">
-            <strong>{{ permissionLabel(permission) }}</strong>
-            <p>{{ permission.reason || '插件未说明用途' }}</p>
+        <div class="grab" />
+        <div class="sh-head">
+          <div class="f1">
+            <div class="sh-title truncate">安装 {{ pending.manifest.name }}？</div>
+            <div class="sh-sub num">
+              v{{ pending.manifest.version }} · {{ pending.manifest.author || '未知作者' }}
+            </div>
           </div>
-          <p v-if="!manifestPermissions(pending.manifest).length" class="sub">没有声明额外权限。</p>
+          <button class="iconbtn quiet" aria-label="关闭" @click="pending = null">
+            <Icon name="close" :size="18" />
+          </button>
         </div>
-        <div class="sheet-actions">
-          <button class="btn secondary" @click="pending = null">取消</button>
-          <button class="btn" :disabled="busy === 'install'" @click="confirmInstall">
+
+        <p v-if="pending.manifest.description" class="meta pad desc">
+          {{ pending.manifest.description }}
+        </p>
+
+        <div class="pad">
+          <div class="cap perms-cap">该插件声明了以下权限</div>
+          <div class="perms">
+            <div
+              v-for="permission in manifestPermissions(pending.manifest)"
+              :key="permission.key"
+              class="perm"
+            >
+              <span class="perm-name">{{ permissionLabel(permission) }}</span>
+              <span class="perm-why">{{ permission.reason || '插件未说明用途' }}</span>
+            </div>
+            <p v-if="!manifestPermissions(pending.manifest).length" class="meta">
+              没有声明额外权限。
+            </p>
+          </div>
+        </div>
+
+        <div class="row g10 pad acts">
+          <button class="btn btn-ghost f1" @click="pending = null">取消</button>
+          <button class="btn btn-primary f1" :disabled="busy === 'install'" @click="confirmInstall">
             <span v-if="busy === 'install'" class="loading-dots"><i /><i /><i /></span>
             <span v-else>安装并启用</span>
           </button>
@@ -377,31 +518,47 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
       </div>
     </div>
 
+    <!-- 插件配置 -->
     <div v-if="editing" class="sheet-mask" @click.self="editing = null">
+      <div class="scrim" @click="editing = null" />
       <div class="sheet">
-        <h2>{{ editing.name }} 配置</h2>
-        <p class="sub">配置会保存在本机，插件下次读取时生效。</p>
-        <div class="field" v-for="field in configFields(editing)" :key="field.key">
-          <label>{{ field.key }}</label>
-          <button
-            v-if="typeof field.value === 'boolean'"
-            class="switch"
-            :class="{ on: configValues[field.key] }"
-            @click="configValues[field.key] = !configValues[field.key]"
-          />
-          <input
-            v-else
-            v-model="configValues[field.key]"
-            class="input"
-            :type="typeof field.value === 'number' ? 'number' : 'text'"
-          />
+        <div class="grab" />
+        <div class="sh-head">
+          <div class="f1">
+            <div class="sh-title truncate">{{ editing.name }}</div>
+            <div class="sh-sub">配置会保存在本机，插件下次读取时生效。</div>
+          </div>
+          <button class="iconbtn quiet" aria-label="关闭" @click="editing = null">
+            <Icon name="close" :size="18" />
+          </button>
         </div>
-        <p v-if="!configFields(editing).length" class="sub">
-          该插件没有声明可直接编辑的配置项，可能通过插件页面进行设置。
-        </p>
-        <div class="sheet-actions">
-          <button class="btn secondary" @click="editing = null">取消</button>
-          <button class="btn" @click="saveConfig">保存</button>
+
+        <div class="pad cfgs">
+          <div v-for="field in configFields(editing)" :key="field.key" class="cfgrow">
+            <span class="cfg-lab truncate">{{ field.key }}</span>
+            <button
+              v-if="typeof field.value === 'boolean'"
+              class="hit"
+              :aria-label="configValues[field.key] ? '关闭' : '开启'"
+              @click="configValues[field.key] = !configValues[field.key]"
+            >
+              <span class="switch" :class="{ on: configValues[field.key] }" />
+            </button>
+            <input
+              v-else
+              v-model="configValues[field.key]"
+              class="input"
+              :type="typeof field.value === 'number' ? 'number' : 'text'"
+            />
+          </div>
+          <p v-if="!configFields(editing).length" class="meta">
+            该插件没有声明可直接编辑的配置项，可能通过插件页面进行设置。
+          </p>
+        </div>
+
+        <div class="row g10 pad acts">
+          <button class="btn btn-ghost f1" @click="editing = null">取消</button>
+          <button class="btn btn-primary f1" @click="saveConfig">保存</button>
         </div>
       </div>
     </div>
@@ -411,185 +568,413 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
 <style scoped>
 .notice {
   padding: 11px 14px;
-  margin-bottom: 12px;
-  border-radius: 13px;
+  border-radius: var(--r-md);
   font-size: 12.5px;
+  line-height: 1.5;
 }
 .notice.error {
-  color: var(--danger);
-  background: rgba(229, 72, 77, 0.1);
+  color: var(--cinnabar);
+  background: var(--porcelain-2);
+  border-left: 2px solid var(--cinnabar);
 }
 .notice.ok {
-  color: var(--brand-strong);
-  background: var(--brand-soft);
+  color: var(--c700);
+  background: var(--tint-soft);
 }
-.add-card {
-  padding: 16px;
+
+/* ---- 订阅卡 ---- */
+.subcard {
+  position: relative;
+  overflow: hidden;
+  margin: 12px var(--pad) 0;
+  padding: 13px 16px 12px;
+  border-radius: var(--r-xl);
+  background: linear-gradient(154deg, var(--c600), var(--c800) 46%, var(--c900));
+  box-shadow: var(--sh-2);
+  color: rgb(255 255 255 / 0.92);
 }
-.add-card h2 {
-  font-size: 17px;
+.subcard .crackle {
+  opacity: 0.34;
 }
-.add-card .sub {
-  margin-top: 5px;
-  font-size: 12px;
-  color: var(--muted);
+.subglow {
+  position: absolute;
+  top: -60px;
+  right: -40px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 255 255 / 0.13), transparent 68%);
+  pointer-events: none;
 }
-.add-row {
-  display: flex;
-  gap: 9px;
-  margin-top: 14px;
+.subin {
+  position: relative;
 }
-.add-row .input {
-  flex: 1;
-  min-width: 0;
+.eb {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.48);
 }
-.add-row .btn {
-  flex: 0 0 auto;
-  padding: 0 18px;
+.subcard h3 {
+  margin-top: 6px;
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.96);
 }
-.add-actions {
-  display: flex;
-  gap: 9px;
-  margin-top: 11px;
-}
-.add-actions .btn {
-  flex: 1;
-  padding: 11px 12px;
-  font-size: 12.5px;
-}
-.plugin-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.plugin-card {
-  padding: 16px;
-}
-.plugin-head {
+.fine {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.42);
 }
-.plugin-mark {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  font-size: 18px;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, var(--brand), #56dcae);
-  box-shadow: 0 8px 18px rgba(0, 181, 120, 0.24);
-  flex: 0 0 auto;
+.urlrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  margin-top: 11px;
+  padding: 0 5px 0 11px;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.09);
+  border: 1px solid rgb(255 255 255 / 0.13);
 }
-.plugin-info {
+.uico {
+  flex: none;
+  color: rgb(255 255 255 / 0.5);
+}
+.uinput {
   flex: 1;
   min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: rgb(255 255 255 / 0.92);
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 11px;
 }
-.plugin-info h3 {
-  font-size: 15px;
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
+.uinput::placeholder {
+  color: rgb(255 255 255 / 0.34);
 }
-.plugin-info h3 small {
-  font-size: 10.5px;
-  color: var(--muted-2);
-  font-weight: 400;
-}
-.plugin-info p {
-  margin-top: 4px;
+.get {
+  flex: none;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 9px;
   font-size: 11.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 700;
+  color: var(--c900);
+  background: rgb(255 255 255 / 0.94);
+  transition: transform 0.14s var(--e-out);
 }
-.plugin-desc {
-  margin-top: 11px;
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.6;
+.get:active {
+  transform: scale(0.95);
 }
-.plugin-error {
-  margin-top: 9px;
-  padding: 9px 11px;
-  border-radius: 10px;
-  font-size: 11.5px;
-  color: var(--danger);
-  background: rgba(229, 72, 77, 0.09);
+.get:disabled {
+  opacity: 1;
+  background: rgb(255 255 255 / 0.12);
+  color: rgb(255 255 255 / 0.42);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
 }
-.plugin-tags {
+.get .loading-dots {
+  color: var(--c900);
+}
+.alt {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 11px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
 }
-.mini-tag {
-  padding: 4px 9px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  color: var(--muted);
-  background: var(--brand-softer);
-  border: 1px solid var(--line);
-}
-.mini-tag.online {
-  color: var(--brand-strong);
-  background: var(--brand-soft);
-}
-.plugin-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 14px;
-}
-.btn.small {
-  padding: 9px 13px;
-  font-size: 12px;
-}
-.check-all {
+.altbtn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 11px;
-  border-radius: 999px;
+  padding: 4px 0;
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.74);
+}
+.altbtn:disabled {
+  opacity: 0.5;
+}
+.altsep {
+  width: 1px;
+  height: 10px;
+  background: rgb(255 255 255 / 0.18);
+}
+
+/* ---- 在线音源卡 ---- */
+.tiles {
+  padding-bottom: 2px;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: none;
+  width: 108px;
+  padding: 9px 10px 0;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  text-align: left;
+  transition: transform 0.14s var(--e-out);
+}
+.tile:active {
+  transform: scale(0.97);
+}
+.tile.cur {
+  border-color: var(--tint);
+  box-shadow: inset 0 0 0 1px var(--tint-soft);
+}
+.mono {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  font-family: var(--serif);
+  font-size: 14px;
+  color: var(--c700);
+  background: var(--c050);
+  border: 1px solid var(--tint-soft);
+}
+.tname {
+  width: 100%;
+  margin-top: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--brand);
-  background: var(--brand-soft);
+  color: var(--ink);
 }
-.check-all:disabled {
-  opacity: 0.6;
+.tv {
+  width: 100%;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-4);
 }
-.help-card {
-  margin-top: 18px;
-  padding: 16px;
+.ta {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: calc(100% + 20px);
+  margin: 8px -10px 0;
+  padding: 7px 10px 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c700);
 }
-.help-card h3 {
-  font-size: 14px;
+.tile.cur .ta {
+  color: var(--tint);
 }
-.help-card p {
-  margin-top: 7px;
-  font-size: 11.5px;
+
+/* ---- 已安装行 ---- */
+.plist {
+  overflow: hidden;
+}
+.prow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 7px 10px 7px 11px;
+  transition: background 0.15s var(--e-out);
+}
+.prow:active {
+  background: var(--tint-softer);
+}
+.pitem + .pitem {
+  border-top: 1px solid var(--line);
+}
+.pmark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  font-family: var(--serif);
+  font-size: 16px;
+  color: var(--c800);
+  background: linear-gradient(160deg, var(--c100), var(--c050));
+}
+.pmark.off {
+  color: var(--ink-3);
+  background: var(--porcelain-2);
+}
+.pmain {
+  flex: 1;
+  min-width: 0;
+}
+.pname {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pv {
+  flex: none;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-4);
+}
+.psub {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.perr {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--cinnabar);
+}
+.hit {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin-right: -6px;
+}
+.hit:disabled {
+  opacity: 0.45;
+}
+.pchev {
+  width: 32px;
+  height: 44px;
+}
+.pitem.open .pchev {
+  color: var(--tint);
+}
+.pdetail {
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--tint-softer);
+}
+.pdesc {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.ptags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+.badge.on {
+  color: var(--tint);
+  background: var(--tint-soft);
+}
+.pacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 11px;
+}
+.pacts .btn {
+  gap: 5px;
+}
+
+/* ---- 页脚说明 ---- */
+.foot {
+  font-size: 11px;
   line-height: 1.7;
-  color: var(--muted);
+  color: var(--ink-4);
 }
-.permission-list {
+.foot-h {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+
+/* ---- sheet ---- */
+.sh-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--ink-4);
+}
+.desc {
+  margin: 0 0 12px;
+}
+.perms-cap {
+  margin-bottom: 8px;
+}
+.perms {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.perm {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  background: var(--porcelain-2);
+}
+.perm-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.perm-why {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.acts {
+  margin-top: 12px;
+}
+.cfgs {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 4px;
 }
-.permission-item {
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--brand-softer);
+.cfgrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
 }
-.permission-item strong {
+.cfg-lab {
+  flex: 1;
+  min-width: 0;
   font-size: 12.5px;
+  color: var(--ink-2);
 }
-.permission-item p {
-  margin-top: 3px;
-  font-size: 11px;
-  color: var(--muted);
+.input {
+  flex: none;
+  width: 52%;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--porcelain-2);
+  color: var(--ink);
+  font-size: 13px;
+  outline: none;
+}
+.input:focus {
+  border-color: var(--tint);
+  box-shadow: 0 0 0 3px var(--tint-soft);
 }
 </style>

@@ -31,6 +31,10 @@ const router = useRouter()
 const track = computed(() => currentTrack())
 const lyricsBox = ref<HTMLElement>()
 const showQueue = ref(false)
+const showLyrics = ref(false)
+const showQuality = ref(false)
+const queueFilter = ref<'next' | 'played' | 'all'>('next')
+
 const activeLineCharCount = computed(() => {
   const index = playerState.activeLyric
   const line = index >= 0 ? playerState.lyrics[index] : undefined
@@ -43,6 +47,7 @@ const activeLineCharCount = computed(() => {
 function lyricChars(text: string): string[] {
   return Array.from(text || '♪')
 }
+
 const showSettings = ref(false)
 const dragging = ref(false)
 const dragValue = ref(0)
@@ -70,6 +75,16 @@ const sleepLabel = computed(() => {
     return `剩余 ${minutes}:${String(seconds).padStart(2, '0')}`
   }
   return '未设置'
+})
+
+const sleepShort = computed(() => {
+  if (playerState.sleepAtTrackEnd) return '播完停'
+  if (playerState.sleepEndAt > now.value) {
+    const total = Math.max(0, Math.round((playerState.sleepEndAt - now.value) / 1000))
+    const minutes = Math.floor(total / 60)
+    return `${minutes} 分`
+  }
+  return '定时'
 })
 
 function openSettings(): void {
@@ -133,6 +148,19 @@ function chooseOffset(value: number): void {
   refreshBackgroundLyrics()
 }
 
+function cycleOffset(direction = 1): void {
+  const index = offsets.indexOf(Number(settingsState.lyricOffsetMs) || 0)
+  const base = index < 0 ? offsets.indexOf(0) : index
+  const nextIndex = (base + direction + offsets.length) % offsets.length
+  chooseOffset(offsets[nextIndex])
+}
+
+function cycleScale(): void {
+  const index = lyricScales.findIndex((item) => item.value === settingsState.lyricScale)
+  const next = lyricScales[(index + 1) % lyricScales.length]
+  updateSettings({ lyricScale: next.value })
+}
+
 const progress = computed(() => {
   const duration = playerState.duration || (track.value?.durationMs ?? 0) / 1000
   if (!duration) return 0
@@ -140,8 +168,10 @@ const progress = computed(() => {
   return Math.min(100, Math.max(0, (value / duration) * 100))
 })
 
-const displayTime = computed(() =>
-  dragging.value ? dragValue.value : playerState.currentTime
+const displayTime = computed(() => (dragging.value ? dragValue.value : playerState.currentTime))
+
+const totalTime = computed(
+  () => playerState.duration || (track.value?.durationMs ?? 0) / 1000
 )
 
 const modeIcon = computed(() => {
@@ -152,6 +182,15 @@ const modeIcon = computed(() => {
 })
 
 const favorite = computed(() => (track.value ? isFavorite(track.value) : false))
+
+const qualityShort = computed(() => {
+  const resolved = playerState.quality || playerState.resolvedQuality
+  return resolved ? qualityLabel(resolved) : '自动'
+})
+
+const scrollLabel = computed(() =>
+  settingsState.showLyricTranslation ? '翻译已开启' : '翻译已关闭'
+)
 
 function formatTime(value: number): string {
   if (!Number.isFinite(value) || value < 0) return '0:00'
@@ -175,6 +214,17 @@ function onSeekChange(event: Event): void {
 function close(): void {
   if (window.history.length > 1) router.back()
   else router.replace('/')
+}
+
+function retry(): void {
+  if (!track.value) return
+  const queue = playerState.queue.length ? playerState.queue : [track.value]
+  void playTracks(queue, playerState.queue.length ? playerState.index : 0)
+}
+
+function openLyrics(): void {
+  showLyrics.value = true
+  setTimeout(scrollActiveLyric, 120)
 }
 
 function onTouchStart(event: TouchEvent): void {
@@ -206,11 +256,34 @@ function playQueue(index: number): void {
   void playTracks(playerState.queue, index)
 }
 
+const queueRows = computed(() =>
+  playerState.queue
+    .map((item, index) => ({ item, index }))
+    .filter(({ index }) => {
+      if (queueFilter.value === 'next') return index >= playerState.index
+      if (queueFilter.value === 'played') return index < playerState.index
+      return true
+    })
+)
+
+const queueRemaining = computed(() => {
+  const list = playerState.queue.slice(playerState.index)
+  const seconds = list.reduce((sum, item) => sum + (item.durationMs || 0) / 1000, 0)
+  const minutes = Math.round(seconds / 60)
+  return minutes > 0 ? `剩余约 ${minutes} 分钟` : `共 ${list.length} 首`
+})
+
+const lyricCurrent = computed(() => {
+  const index = playerState.activeLyric
+  if (index < 0) return null
+  return playerState.lyrics[index] ?? null
+})
+
 function scrollActiveLyric(): void {
   const box = lyricsBox.value
   if (!box) return
   void nextTick(() => {
-    const active = box.querySelector<HTMLElement>('.lyric-line.active')
+    const active = box.querySelector<HTMLElement>('.ly-line.cur')
     if (active) active.scrollIntoView({ block: 'center', behavior: 'smooth' })
   })
 }
@@ -236,138 +309,98 @@ onUnmounted(() => {
 <template>
   <div
     v-if="track"
-    class="page full player-page"
+    class="screen dark player"
+    :class="{ 'q-open': showQueue }"
     @touchstart.passive="onTouchStart"
     @touchend.passive="onTouchEnd"
   >
-    <div class="player-bg">
-      <img :src="track.artwork" alt="" />
-      <div class="player-bg-mask" />
+    <div class="p-bg">
+      <img :src="track.artwork || '/default-cover.png'" alt="" />
+      <div class="p-veil" />
     </div>
 
-    <header class="player-header">
-      <button class="icon-btn glass" aria-label="收起" @click="close">
-        <Icon name="back" :size="20" style="transform: rotate(90deg)" />
+    <header class="p-top safe-t">
+      <button class="iconbtn glass" aria-label="收起" @click="close">
+        <Icon name="chevron-down" :size="20" />
       </button>
-      <div class="player-title">
-        <span>正在播放</span>
-        <small>{{ track.providerName }}</small>
+      <div class="p-head">
+        <span class="p-head-k">正在播放</span>
+        <span class="p-head-s truncate">{{ track.providerName || '本地文件' }} · {{ qualityShort }}</span>
       </div>
-      <div class="header-actions">
-        <button class="icon-btn glass" aria-label="播放设置" @click="openSettings">
-          <Icon name="settings" :size="20" />
-        </button>
-        <button class="icon-btn glass" aria-label="播放队列" @click="showQueue = true">
-          <Icon name="queue" :size="20" />
-        </button>
-      </div>
+      <button class="iconbtn glass" aria-label="播放设置" @click="openSettings">
+        <Icon name="more" :size="20" />
+      </button>
     </header>
 
-    <div class="player-body">
-      <div class="disc-wrap" :class="{ spinning: playerState.playing }">
-        <div class="disc">
-          <img :src="track.artwork" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
-        </div>
+    <div class="p-main">
+      <div class="p-art">
+        <img
+          :src="track.artwork || '/default-cover.png'"
+          alt=""
+          @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
+        />
+        <span class="badge on-art p-art-badge">
+          <Icon name="headphone" :size="11" /> {{ qualityShort }}
+        </span>
       </div>
 
-      <div class="track-meta">
-        <div class="meta-text">
-          <h1>{{ track.title }}</h1>
-          <p>{{ track.artist }}<template v-if="track.album"> · {{ track.album }}</template></p>
-        </div>
-        <button class="icon-btn glass" :class="{ liked: favorite }" aria-label="收藏" @click="toggleFavorite(track)">
-          <Icon :name="favorite ? 'heart-filled' : 'heart'" :size="21" />
-        </button>
+      <div class="p-meta">
+        <h1 class="p-title truncate">{{ track.title }}</h1>
+        <p class="p-artist truncate">
+          {{ track.artist }}<template v-if="track.album"> · {{ track.album }}</template>
+        </p>
       </div>
 
-      <div v-if="playerState.error" class="player-error">{{ playerState.error }}</div>
+      <div v-if="playerState.error" class="p-error">
+        <Icon name="warning" :size="15" />
+        <span class="f1 truncate">{{ playerState.error }}</span>
+        <button class="p-error-btn" @click="retry">重试</button>
+      </div>
 
-      <div
-        v-if="settingsState.showLyrics && playerState.lyricSource && playerState.lyricSource !== 'plugin'"
-        class="lyrics-source"
-      >
+      <div v-else-if="playerState.lyricSource && playerState.lyricSource !== 'plugin'" class="p-source">
         歌词来源：{{ playerState.lyricSource }}
       </div>
 
-      <div v-if="settingsState.showLyrics" ref="lyricsBox" class="lyrics-box" :class="{ empty: !playerState.lyrics.length }">
-        <template v-if="playerState.lyrics.length">
-          <p
-            v-for="(line, index) in playerState.lyrics"
-            :key="index"
-            class="lyric-line"
-            :class="{ active: index === playerState.activeLyric, passed: index < playerState.activeLyric }"
-            @click="lyricSeek(line)"
-          >
-            <template v-if="index === playerState.activeLyric">
-              <span
-                v-for="(char, charIndex) in lyricChars(line.text)"
-                :key="charIndex"
-                class="lyric-char"
-                :class="{ sung: charIndex < activeLineCharCount }"
-              >{{ char }}</span>
-            </template>
-            <template v-else>{{ line.text || '♪' }}</template>
-            <span
-              v-if="line.translation && settingsState.showLyricTranslation"
-              class="translation"
-            >{{ line.translation }}</span>
-          </p>
-        </template>
-        <div v-else class="no-lyrics">
-          <p>{{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词' }}</p>
-          <button
-            v-if="!playerState.lyricsLoading"
-            class="match-btn"
-            @click="matchLyricsOnline()"
-          >
-            在线匹配歌词
-          </button>
-        </div>
-      </div>
-
-      <div class="progress-block">
+      <div class="p-seek">
         <input
-          class="progress"
+          class="p-range"
           type="range"
           min="0"
           :max="playerState.duration || (track.durationMs ? track.durationMs / 1000 : 0)"
           step="0.1"
           :value="displayTime"
-          :style="{ '--progress': progress + '%' }"
+          :style="{ '--p': progress + '%' }"
+          aria-label="播放进度"
           @input="onSeekInput"
           @change="onSeekChange"
         />
-        <div class="time-row">
+        <div class="p-times num">
           <span>{{ formatTime(displayTime) }}</span>
-          <span>{{ formatTime(playerState.duration || (track.durationMs ?? 0) / 1000) }}</span>
+          <span>{{ formatTime(totalTime) }}</span>
         </div>
       </div>
 
-      <div class="controls">
-        <button class="control small" :aria-label="playerState.mode" @click="cycleMode">
-          <Icon :name="modeIcon" :size="22" />
+      <div class="p-ctrl">
+        <button class="p-aux" :aria-label="'播放模式 ' + playerState.mode" @click="cycleMode">
+          <Icon :name="modeIcon" :size="20" />
         </button>
-        <button class="control" aria-label="上一首" @click="previous">
-          <Icon name="prev" :size="29" />
+        <button class="p-skip" aria-label="上一首" @click="previous">
+          <Icon name="prev" :size="27" />
         </button>
-        <button class="control main" aria-label="播放或暂停" @click="togglePlay">
-          <span v-if="playerState.loading" class="loading-dots big"><i /><i /><i /></span>
-          <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="34" />
+        <button class="p-play" aria-label="播放或暂停" @click="togglePlay">
+          <span v-if="playerState.loading" class="loading-dots"><i /><i /><i /></span>
+          <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="27" />
         </button>
-        <button class="control" aria-label="下一首" @click="next">
-          <Icon name="next" :size="29" />
+        <button class="p-skip" aria-label="下一首" @click="next">
+          <Icon name="next" :size="27" />
         </button>
-        <button class="control small" aria-label="播放队列" @click="showQueue = true">
-          <Icon name="queue" :size="22" />
+        <button class="p-aux" :class="{ on: showQuality }" aria-label="音质" @click="showQuality = !showQuality">
+          <Icon name="volume" :size="20" />
         </button>
       </div>
 
-      <div v-if="track.qualities.length" class="quality-row">
-        <button
-          class="chip"
-          :class="{ active: playerState.quality === '' }"
-          @click="setQuality('')"
-        >
+      <div v-if="showQuality" class="p-quality">
+        <button class="chip" :class="{ active: playerState.quality === '' }" @click="setQuality('')">
           自动
         </button>
         <button
@@ -384,44 +417,244 @@ onUnmounted(() => {
           {{ qualityLabel(quality) }}
         </button>
       </div>
+
+      <div class="p-sub">
+        <button class="p-sub-item" :class="{ on: favorite }" @click="toggleFavorite(track)">
+          <Icon :name="favorite ? 'heart-filled' : 'heart'" :size="20" />
+          <span>{{ favorite ? '已喜欢' : '喜欢' }}</span>
+        </button>
+        <button class="p-sub-item" @click="openLyrics">
+          <Icon name="lyrics" :size="20" />
+          <span>歌词</span>
+        </button>
+        <button class="p-sub-item" @click="showQueue = true">
+          <Icon name="queue" :size="20" />
+          <span>队列</span>
+        </button>
+        <button class="p-sub-item" :class="{ on: sleepShort !== '定时' }" @click="openSettings">
+          <Icon name="timer" :size="20" />
+          <span>{{ sleepShort }}</span>
+        </button>
+        <button class="p-sub-item" @click="downloadCurrent">
+          <Icon name="download" :size="20" />
+          <span>下载</span>
+        </button>
+      </div>
+
+      <div v-if="settingsState.showLyrics" class="p-lyric" @click="openLyrics">
+        <div class="p-grab" />
+        <template v-if="playerState.lyrics.length">
+          <div class="p-lyric-cur">
+            {{ lyricCurrent?.text || '♪' }}
+          </div>
+          <div class="p-lyric-next truncate">
+            {{ playerState.lyrics[playerState.activeLyric + 1]?.text || ' ' }}
+          </div>
+        </template>
+        <div v-else class="p-lyric-cur dim">
+          {{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词 · 点这里在线匹配' }}
+        </div>
+      </div>
     </div>
 
-    <div v-if="showQueue" class="sheet-mask" @click.self="showQueue = false">
-      <div class="sheet queue-sheet">
-        <h2>播放队列</h2>
-        <p class="sub">{{ playerState.queue.length }} 首歌曲</p>
-        <div class="queue-list">
-          <div
-            v-for="(item, index) in playerState.queue"
-            :key="item.providerId + item.id + index"
-            class="queue-row"
-            :class="{ current: index === playerState.index }"
-            @click="playQueue(index)"
+    <!-- 全屏歌词 -->
+    <div v-if="showLyrics" class="ly">
+      <div class="ly-bg">
+        <img :src="track.artwork || '/default-cover.png'" alt="" />
+        <div class="ly-veil" />
+      </div>
+      <header class="p-top safe-t ly-top">
+        <button class="iconbtn glass" aria-label="收起歌词" @click="showLyrics = false">
+          <Icon name="chevron-down" :size="20" />
+        </button>
+        <div class="p-head">
+          <span class="p-head-k">歌词</span>
+          <span class="p-head-s truncate">{{ scrollLabel }} · 偏移 {{ offsetLabel(Number(settingsState.lyricOffsetMs) || 0) }}</span>
+        </div>
+        <div class="row g6">
+          <button class="iconbtn glass" aria-label="歌词偏移" @click="cycleOffset(1)">
+            <Icon name="swap" :size="18" />
+          </button>
+          <button class="iconbtn glass" aria-label="歌词字号" @click="cycleScale">
+            <Icon name="size" :size="18" />
+          </button>
+        </div>
+      </header>
+
+      <div
+        ref="lyricsBox"
+        class="ly-box"
+        :style="{ '--ly-scale': settingsState.lyricScale }"
+      >
+        <template v-if="playerState.lyrics.length">
+          <p
+            v-for="(line, index) in playerState.lyrics"
+            :key="index"
+            class="ly-line"
+            :class="{ cur: index === playerState.activeLyric, passed: index < playerState.activeLyric }"
+            @click="lyricSeek(line)"
           >
-            <span class="queue-index">{{ index + 1 }}</span>
-            <div class="queue-info">
-              <h3>{{ item.title }}</h3>
-              <p>{{ item.artist }}</p>
+            <template v-if="index === playerState.activeLyric">
+              <span
+                v-for="(char, charIndex) in lyricChars(line.text)"
+                :key="charIndex"
+                class="ly-char"
+                :class="{ on: charIndex < activeLineCharCount }"
+              >{{ char }}</span>
+            </template>
+            <template v-else>{{ line.text || '♪' }}</template>
+            <span
+              v-if="line.translation && settingsState.showLyricTranslation"
+              class="ly-tr"
+            >{{ line.translation }}</span>
+          </p>
+        </template>
+        <div v-else class="ly-empty">
+          <div class="p-head-k">{{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词' }}</div>
+          <p class="meta mt8">可以从音源重新匹配，或换一个歌词更全的版本。</p>
+          <button
+            v-if="!playerState.lyricsLoading"
+            class="btn btn-tint btn-sm mt16"
+            @click="matchLyricsOnline()"
+          >
+            <Icon name="search" :size="15" /> 在线匹配歌词
+          </button>
+        </div>
+      </div>
+
+      <footer class="ly-foot">
+        <div class="p-seek tight">
+          <input
+            class="p-range"
+            type="range"
+            min="0"
+            :max="playerState.duration || (track.durationMs ? track.durationMs / 1000 : 0)"
+            step="0.1"
+            :value="displayTime"
+            :style="{ '--p': progress + '%' }"
+            aria-label="播放进度"
+            @input="onSeekInput"
+            @change="onSeekChange"
+          />
+          <div class="p-times num">
+            <span>{{ formatTime(displayTime) }}</span>
+            <span>{{ formatTime(totalTime) }}</span>
+          </div>
+        </div>
+        <div class="ly-ctrl">
+          <button class="p-aux" aria-label="播放模式" @click="cycleMode">
+            <Icon :name="modeIcon" :size="18" />
+          </button>
+          <button class="p-skip" aria-label="上一首" @click="previous">
+            <Icon name="prev" :size="22" />
+          </button>
+          <button class="p-play sm" aria-label="播放或暂停" @click="togglePlay">
+            <Icon :name="playerState.playing ? 'pause' : 'play'" :size="20" />
+          </button>
+          <button class="p-skip" aria-label="下一首" @click="next">
+            <Icon name="next" :size="22" />
+          </button>
+          <button class="p-aux" :class="{ on: favorite }" aria-label="收藏" @click="toggleFavorite(track)">
+            <Icon :name="favorite ? 'heart-filled' : 'heart'" :size="18" />
+          </button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- 播放队列 -->
+    <div v-if="showQueue" class="sheet-mask q-mask" @click.self="showQueue = false">
+      <div class="scrim" />
+      <div class="q-back">
+        <div class="q-bar">
+          <div class="cover">
+            <img :src="track.artwork || '/default-cover.png'" alt="" />
+          </div>
+          <div class="f1">
+            <div class="q-bar-t truncate serif">{{ track.title }}</div>
+            <div class="q-bar-a truncate">{{ track.artist }}</div>
+          </div>
+          <button class="p-play sm" aria-label="播放或暂停" @click="togglePlay">
+            <Icon :name="playerState.playing ? 'pause' : 'play'" :size="18" />
+          </button>
+        </div>
+      </div>
+      <div class="sheet q-sheet">
+        <div class="grab" />
+        <div class="sh-head">
+          <div>
+            <div class="sh-title">播放队列</div>
+            <div class="meta">{{ playerState.queue.length }} 首 · {{ queueRemaining }}</div>
+          </div>
+          <button class="iconbtn quiet" aria-label="关闭队列" @click="showQueue = false">
+            <Icon name="close" :size="18" />
+          </button>
+        </div>
+
+        <div class="chip-row q-chips">
+          <button class="chip" :class="{ active: queueFilter === 'next' }" @click="queueFilter = 'next'">
+            接下来 {{ Math.max(0, playerState.queue.length - playerState.index) }}
+          </button>
+          <button class="chip" :class="{ active: queueFilter === 'played' }" @click="queueFilter = 'played'">
+            已播 {{ playerState.index }}
+          </button>
+          <button class="chip" :class="{ active: queueFilter === 'all' }" @click="queueFilter = 'all'">
+            全部 {{ playerState.queue.length }}
+          </button>
+        </div>
+
+        <div class="q-list">
+          <div
+            v-for="row in queueRows"
+            :key="row.item.providerId + row.item.id + row.index"
+            class="q-row"
+            :class="{ cur: row.index === playerState.index }"
+            @click="playQueue(row.index)"
+          >
+            <span class="q-idx num">
+              <span v-if="row.index === playerState.index" class="wave"><i /><i /><i /><i /></span>
+              <template v-else>{{ String(row.index + 1).padStart(2, '0') }}</template>
+            </span>
+            <div class="cover">
+              <img
+                :src="row.item.artwork || '/default-cover.png'"
+                alt=""
+                @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
+              />
             </div>
-            <button class="icon-action" aria-label="移除" @click.stop="removeFromQueue(index)">
-              <Icon name="close" :size="17" />
+            <div class="q-info">
+              <div class="q-t truncate">{{ row.item.title }}</div>
+              <div class="q-a truncate">{{ row.item.artist }}</div>
+            </div>
+            <span class="q-dur num">{{ formatTime((row.item.durationMs || 0) / 1000) }}</span>
+            <button class="iconbtn quiet q-del" aria-label="移出队列" @click.stop="removeFromQueue(row.index)">
+              <Icon name="close" :size="15" />
             </button>
+          </div>
+          <div v-if="!queueRows.length" class="empty tight">
+            <div class="glyph"><Icon name="queue" :size="28" /></div>
+            <p>{{ queueFilter === 'next' ? '队列里没有下一首了' : '这一栏还是空的' }}</p>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- 播放设置 -->
     <div v-if="showSettings" class="sheet-mask" @click.self="closeSettings">
-      <div class="sheet player-settings">
-        <div class="sheet-head">
-          <h2>播放设置</h2>
-          <button class="icon-action" aria-label="关闭" @click="closeSettings">
+      <div class="scrim" />
+      <div class="sheet ps">
+        <div class="grab" />
+        <div class="sh-head">
+          <div>
+            <div class="sh-title">播放设置</div>
+            <div class="meta">{{ track.providerName }} · {{ qualityShort }}</div>
+          </div>
+          <button class="iconbtn quiet" aria-label="关闭" @click="closeSettings">
             <Icon name="close" :size="18" />
           </button>
         </div>
 
-        <div class="settings-label">播放速度</div>
-        <div class="chips wrap-chips">
+        <div class="ps-label">播放速度</div>
+        <div class="chip-row wrap">
           <button
             v-for="rate in speedOptions"
             :key="rate"
@@ -433,8 +666,8 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div class="settings-label">歌词字号</div>
-        <div class="chips wrap-chips">
+        <div class="ps-label">歌词字号</div>
+        <div class="chip-row wrap">
           <button
             v-for="scale in lyricScales"
             :key="scale.value"
@@ -446,42 +679,38 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <div class="settings-label">歌词偏移</div>
-        <div class="chips wrap-chips">
+        <div class="ps-label">歌词偏移</div>
+        <div class="chip-row wrap">
           <button
             v-for="value in offsets"
             :key="value"
             class="chip"
-            :class="{ active: settingsState.lyricOffsetMs === value }"
+            :class="{ active: Number(settingsState.lyricOffsetMs) === value }"
             @click="chooseOffset(value)"
           >
             {{ offsetLabel(value) }}
           </button>
         </div>
-        <p class="settings-hint">正值表示歌词延后显示；点击歌词跳转时会按偏移量校正。</p>
+        <p class="ps-hint">正值表示歌词延后显示；点击歌词跳转时会按偏移量校正。</p>
 
-        <div class="list-item settings-row" style="border-bottom: 0">
-          <div class="info">
-            <h3>显示翻译</h3>
-            <p>在歌词下方显示翻译</p>
+        <div class="ps-row">
+          <div class="f1">
+            <div class="ps-row-t">显示翻译</div>
+            <div class="ps-row-s">在歌词下方显示翻译</div>
           </div>
           <button
             class="switch"
             :class="{ on: settingsState.showLyricTranslation }"
             aria-label="显示翻译"
-            @click="
-              updateSettings({ showLyricTranslation: !settingsState.showLyricTranslation })
-            "
+            @click="updateSettings({ showLyricTranslation: !settingsState.showLyricTranslation })"
           />
         </div>
 
-        <div class="settings-label">定时停止</div>
-        <div class="chips wrap-chips">
+        <div class="ps-label">定时停止</div>
+        <div class="chip-row wrap">
           <button
             class="chip"
-            :class="{
-              active: !playerState.sleepEndAt && !playerState.sleepAtTrackEnd
-            }"
+            :class="{ active: !playerState.sleepEndAt && !playerState.sleepAtTrackEnd }"
             @click="stopSleep"
           >
             关闭
@@ -495,17 +724,13 @@ onUnmounted(() => {
           >
             {{ minutes }} 分钟
           </button>
-          <button
-            class="chip"
-            :class="{ active: playerState.sleepAtTrackEnd }"
-            @click="sleepAtEnd"
-          >
+          <button class="chip" :class="{ active: playerState.sleepAtTrackEnd }" @click="sleepAtEnd">
             播完当前歌
           </button>
         </div>
-        <p class="settings-hint">{{ sleepLabel }}</p>
+        <p class="ps-hint">{{ sleepLabel }}</p>
 
-        <button class="btn secondary player-download" @click="downloadCurrent">
+        <button class="btn btn-primary btn-block mt16" @click="downloadCurrent">
           <Icon name="download" :size="17" /> 下载当前歌曲
         </button>
       </div>
@@ -514,421 +739,635 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.header-actions {
-  display: flex;
-  gap: 6px;
-}
-.player-settings {
-  color: var(--text);
-}
-.sheet-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-.sheet-head h2 {
-  margin: 0;
-  font-size: 18px;
-}
-.settings-label {
-  margin: 16px 0 8px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text);
-}
-.wrap-chips {
-  flex-wrap: wrap;
-  overflow: visible;
-  row-gap: 8px;
-  padding: 2px;
-}
-.settings-hint {
-  margin: 8px 2px 0;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--muted);
-}
-.settings-row {
-  padding-left: 0;
-  padding-right: 0;
-}
-.player-download {
-  width: 100%;
-  margin-top: 18px;
-}
-.player-page {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
+.player {
+  background: #08100e;
   color: #fff;
+  overflow: hidden;
 }
-.player-bg {
+
+/* 背景：封面大模糊 + 压暗 */
+.p-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  background: #0b1210;
 }
-.player-bg img {
+.p-bg img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: blur(46px) saturate(1.3);
-  transform: scale(1.25);
-  opacity: 0.55;
+  filter: blur(64px) saturate(1.15) brightness(0.55);
+  transform: scale(1.35);
+  opacity: 0.75;
 }
-.player-bg-mask {
+.p-veil {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(8, 18, 14, 0.42) 0%, rgba(8, 18, 14, 0.72) 48%, rgba(8, 18, 14, 0.95) 100%),
-    radial-gradient(80% 50% at 50% 0%, rgba(0, 181, 120, 0.18), transparent 70%);
+    radial-gradient(120% 62% at 50% 0%, rgba(8, 16, 14, 0.24) 0%, rgba(8, 16, 14, 0.86) 62%, #08100e 100%),
+    linear-gradient(180deg, rgba(8, 16, 14, 0.5) 0%, rgba(8, 16, 14, 0.1) 30%, rgba(8, 16, 14, 0.92) 100%);
 }
-.player-header {
+
+.p-top {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: calc(12px + var(--safe-top)) 16px 10px;
-  flex: 0 0 auto;
+  gap: 10px;
+  padding: 0 var(--pad);
 }
-.player-title {
+.p-head {
   flex: 1;
+  min-width: 0;
+  text-align: center;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 2px;
-  font-size: 13px;
-  font-weight: 600;
 }
-.player-title small {
-  font-size: 10px;
-  font-weight: 400;
-  opacity: 0.6;
+.p-head-k {
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
 }
-.icon-btn.glass {
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #fff;
-  box-shadow: none;
-  backdrop-filter: blur(14px);
+.p-head-s {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.9);
 }
-.icon-btn.liked {
-  color: #ff6b8a;
-}
-.player-body {
+
+.p-main {
   position: relative;
   z-index: 2;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 4px 24px calc(20px + var(--safe-bottom));
-  overflow-y: auto;
-  scrollbar-width: none;
+  padding: 14px var(--pad) calc(18px + var(--safe-bottom));
 }
-.disc-wrap {
-  display: flex;
-  justify-content: center;
-  padding: 14px 0 20px;
-  flex: 0 0 auto;
-}
-.disc {
+
+.p-art {
   position: relative;
-  width: min(58vw, 240px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  padding: 10px;
-  background:
-    radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.18), transparent 40%),
-    repeating-radial-gradient(circle, #1b2521 0 3px, #121a17 3px 5px);
-  box-shadow:
-    0 26px 60px rgba(0, 0, 0, 0.45),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-  animation: float 6s ease-in-out infinite;
+  width: min(294px, 36vh);
+  height: min(294px, 36vh);
+  margin: 4px auto 0;
+  border-radius: 24px;
+  flex: none;
 }
-.disc::after {
+.p-art::after {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.08);
+  border-radius: 24px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 24px 60px rgba(0, 0, 0, 0.5);
   pointer-events: none;
 }
-.disc img {
+.p-art img {
   width: 100%;
   height: 100%;
-  border-radius: 50%;
   object-fit: cover;
-  border: 6px solid rgba(10, 18, 15, 0.9);
-}
-.spinning .disc {
-  animation: float 6s ease-in-out infinite, spin 22s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-@keyframes float {
-  0%,
-  100% {
-    translate: 0 0;
-  }
-  50% {
-    translate: 0 -6px;
-  }
-}
-.track-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 0 0 auto;
-}
-.meta-text {
-  flex: 1;
-  min-width: 0;
-}
-.meta-text h1 {
-  font-size: 22px;
-  font-weight: 750;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.meta-text p {
-  margin-top: 5px;
-  font-size: 12.5px;
-  opacity: 0.66;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.player-error {
-  margin-top: 10px;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 12px;
-  color: #ffb4b6;
-  background: rgba(229, 72, 77, 0.16);
-}
-.lyrics-box {
-  flex: 1;
-  min-height: 90px;
-  max-height: 26vh;
-  margin: 14px 0 4px;
-  overflow-y: auto;
-  text-align: center;
-  mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent);
-  scrollbar-width: none;
-}
-.lyrics-box.empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.lyric-line {
-  padding: 7px 4px;
-  font-size: calc(14px * var(--lyric-scale, 1));
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.38);
-  transition: color 0.25s ease, transform 0.25s ease;
-}
-.lyric-line.active {
-  color: #fff;
-  font-size: calc(16px * var(--lyric-scale, 1));
-  font-weight: 650;
-  transform: scale(1.02);
-  text-shadow: 0 0 22px rgba(45, 212, 160, 0.45);
-}
-.lyric-char {
-  color: rgba(255, 255, 255, 0.92);
-  transition: color 0.16s linear, text-shadow 0.16s linear;
-}
-.lyric-char.sung {
-  color: var(--brand);
-  text-shadow: 0 0 12px rgba(45, 212, 160, 0.55);
-}
-.lyric-line .translation {
+  border-radius: 24px;
   display: block;
-  margin-top: 3px;
-  font-size: calc(11px * var(--lyric-scale, 1));
-  font-weight: 400;
-  opacity: 0.7;
 }
-.lyrics-source {
-  margin-top: 8px;
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: 0.3px;
-  color: rgba(255, 255, 255, 0.45);
+.p-art::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -46px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(159, 216, 196, 0.34) 0%, rgba(111, 184, 161, 0.12) 45%, transparent 72%);
+  filter: blur(26px);
 }
-.no-lyrics {
-  display: flex;
-  flex-direction: column;
+.p-art-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  opacity: 0.7;
+  gap: 4px;
 }
-.no-lyrics p {
-  opacity: 0.8;
+
+.p-meta {
+  margin-top: 22px;
+  text-align: center;
 }
-.match-btn {
-  padding: 7px 14px;
-  border-radius: 999px;
-  font-size: 11.5px;
+.p-title {
+  font-family: var(--serif);
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1.24;
+  letter-spacing: 0.012em;
   color: #fff;
-  background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.16);
 }
-.match-btn:active {
-  transform: scale(0.96);
+.p-artist {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.66);
 }
-.progress-block {
-  flex: 0 0 auto;
-  margin-top: 8px;
+
+.p-error,
+.p-source {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
-.progress {
+.p-error {
+  background: rgba(189, 83, 71, 0.16);
+  border: 1px solid rgba(189, 83, 71, 0.4);
+  color: #f0c9c4;
+}
+.p-error-btn {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.p-source {
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 0;
+}
+
+.p-seek {
+  margin-top: 20px;
+}
+.p-main > .p-seek {
+  margin-top: auto;
+  padding-top: 22px;
+}
+.p-seek.tight {
+  margin-top: 0;
+}
+.p-range {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
   height: 18px;
   background: transparent;
+  display: block;
 }
-.progress::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
+.p-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
   background: linear-gradient(
     90deg,
-    var(--brand) 0,
-    var(--brand) var(--progress),
-    rgba(255, 255, 255, 0.18) var(--progress),
+    #9fd8c4 0%,
+    #6fb8a1 var(--p, 0%),
+    rgba(255, 255, 255, 0.18) var(--p, 0%),
     rgba(255, 255, 255, 0.18) 100%
   );
 }
-.progress::-webkit-slider-thumb {
+.p-range::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  margin-top: -5px;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
-.time-row {
+.p-times {
   display: flex;
   justify-content: space-between;
-  margin-top: -2px;
+  margin-top: 2px;
   font-size: 10.5px;
-  opacity: 0.55;
-  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.52);
 }
-.controls {
+
+.p-ctrl {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex: 0 0 auto;
-  padding: 8px 2px 4px;
+  margin-top: 12px;
 }
-.control {
+.p-aux,
+.p-skip,
+.p-play {
   display: grid;
   place-items: center;
+  color: rgba(255, 255, 255, 0.86);
+}
+.p-aux {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+.p-aux.on {
+  color: #9fd8c4;
+}
+.p-skip {
   width: 52px;
   height: 52px;
+}
+.p-play {
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
-  color: #fff;
-  background: transparent;
-  transition: transform 0.15s ease;
+  background: #f4faf7;
+  color: #0d211c;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
 }
-.control:active {
-  transform: scale(0.9);
+.p-play.sm {
+  width: 40px;
+  height: 40px;
 }
-.control.small {
-  color: rgba(255, 255, 255, 0.62);
+.p-play:active {
+  transform: scale(0.95);
 }
-.control.main {
-  width: 72px;
-  height: 72px;
-  color: #052018;
-  background: linear-gradient(135deg, #5ce7bc, var(--brand));
-  box-shadow:
-    0 14px 34px rgba(0, 181, 120, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+.p-aux:active,
+.p-skip:active {
+  opacity: 0.6;
 }
-.loading-dots.big i {
-  width: 7px;
-  height: 7px;
-  background: #052018;
-}
-.quality-row {
+
+.p-quality {
   display: flex;
-  flex-wrap: wrap;
+  gap: 6px;
   justify-content: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 6px 0 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
-.quality-row .chip {
-  color: rgba(255, 255, 255, 0.62);
+.p-quality .chip {
   background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: none;
+  color: rgba(255, 255, 255, 0.72);
+  border-color: transparent;
 }
-.quality-row .chip.active {
-  color: #052018;
-  background: #fff;
+.p-quality .chip.active {
+  background: rgba(159, 216, 196, 0.2);
+  color: #d5f0e6;
 }
-.queue-sheet {
-  color: var(--text);
-  max-height: 70%;
+
+.p-sub {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 0 2px;
 }
-.queue-list {
+.p-sub-item {
+  min-width: 52px;
+  height: 48px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
 }
-.queue-row {
+.p-sub-item.on {
+  color: #9fd8c4;
+}
+.p-sub-item:active {
+  opacity: 0.6;
+}
+
+.p-lyric {
+  margin-top: auto;
+  padding-top: 12px;
+  text-align: center;
+}
+/* 队列打开时，压暗层的播放信息会与弹层内容重影，先淡出 */
+.player.q-open .p-bg img {
+  filter: blur(52px) brightness(0.82) saturate(1.15);
+}
+.player.q-open .p-veil {
+  opacity: 0.6;
+}
+.player.q-open .p-art,
+.player.q-open .p-top,
+.player.q-open .p-meta,
+.player.q-open .p-seek,
+.player.q-open .p-sub,
+.player.q-open .p-lyric {
+  opacity: 0;
+  transition: opacity 0.16s var(--e-out);
+}
+.p-grab {
+  width: 34px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 0 auto 10px;
+}
+.p-lyric-cur {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.94);
+}
+.p-lyric-cur.dim {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+}
+.p-lyric-next {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+/* 全屏歌词 */
+.ly {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: #07100d;
+}
+.ly-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.ly-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(58px) brightness(0.62) saturate(1.2);
+  transform: scale(1.3);
+  opacity: 0.9;
+}
+.ly-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(7, 16, 13, 0.7) 0%, rgba(7, 16, 13, 0.38) 38%, rgba(7, 16, 13, 0.58) 72%, rgba(7, 16, 13, 0.92) 100%);
+}
+.ly-top {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  padding-top: calc(var(--safe-top) + 10px);
+}
+.ly-box {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  overflow-y: auto;
+  padding: 76px var(--pad) 96px;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 78%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 12%, #000 78%, transparent 100%);
+}
+.ly-box::-webkit-scrollbar {
+  display: none;
+}
+.ly-line {
+  position: relative;
+  padding: 9px 0 9px 14px;
+  font-family: var(--serif);
+  font-size: calc(15px * var(--ly-scale, 1));
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.38);
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.35);
+  transition: color 0.35s var(--e-out), font-size 0.35s var(--e-out);
+}
+.ly-line.passed {
+  color: rgba(255, 255, 255, 0.5);
+}
+.ly-line.cur {
+  font-size: calc(20px * var(--ly-scale, 1));
+  color: #f4faf7;
+}
+.ly-line.cur::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  border-radius: 2px;
+  background: #9fd8c4;
+}
+.ly-char {
+  color: rgba(255, 255, 255, 0.4);
+  transition: color 0.12s linear;
+}
+.ly-line.cur .ly-char {
+  color: rgba(255, 255, 255, 0.82);
+}
+.ly-char.on {
+  color: #f4faf7;
+}
+.ly-tr {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--sans);
+  font-size: calc(11px * var(--ly-scale, 1));
+  color: rgba(255, 255, 255, 0.42);
+}
+.ly-line.cur .ly-tr {
+  color: rgba(159, 216, 196, 0.78);
+}
+.ly-empty {
+  padding: 40px 4px;
+  text-align: center;
+}
+.ly-empty .meta {
+  color: rgba(255, 255, 255, 0.44);
+}
+.ly-foot {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  padding: 4px var(--pad) calc(14px + var(--safe-bottom));
+}
+.ly-ctrl {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+
+/* 队列 sheet */
+.q-mask {
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  background: transparent;
+}
+.q-mask .scrim {
+  z-index: 0;
+  background: rgba(4, 9, 7, 0.55);
+}
+.q-back {
+  position: relative;
+  z-index: 1;
+  margin-top: auto;
+  padding: 0 var(--pad) 12px;
+}
+.q-back .cover,
+.q-back .q-bar-t,
+.q-back .q-bar-a {
+  opacity: 0.5;
+}
+.q-back .p-play {
+  opacity: 0.92;
+}
+.q-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.q-bar .cover {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+}
+.q-bar-t {
+  font-size: 15px;
+  color: #fff;
+}
+.q-bar-a {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.6);
+}
+.q-sheet {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  z-index: 2;
+  max-height: 74vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(16px + var(--safe-bottom));
+}
+.q-chips {
+  margin-top: 4px;
+  padding-bottom: 10px;
+}
+.q-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+.q-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 6px;
-  border-radius: 12px;
+  height: 56px;
+  padding: 0 12px;
+  border-radius: var(--r-md);
 }
-.queue-row.current {
-  background: var(--brand-soft);
+.q-row.cur {
+  background: var(--tint-soft);
+  box-shadow: inset 2px 0 0 var(--c500);
 }
-.queue-index {
-  width: 22px;
+.q-idx {
+  width: 20px;
+  flex: none;
   text-align: center;
-  font-size: 11px;
-  color: var(--muted-2);
+  font-size: 10.5px;
+  color: var(--ink-4);
 }
-.queue-info {
+.q-row.cur .q-idx {
+  color: var(--tint);
+}
+.q-row .cover {
+  width: 40px;
+  height: 40px;
+  flex: none;
+}
+.q-info {
   flex: 1;
   min-width: 0;
 }
-.queue-info h3 {
+.q-t {
   font-size: 13.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--ink);
 }
-.queue-info p {
+.q-row.cur .q-t {
+  color: var(--tint);
+}
+.q-a {
   margin-top: 2px;
   font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--ink-3);
 }
-.queue-row.current .queue-info h3 {
-  color: var(--brand);
+.q-dur {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.q-del {
+  flex: none;
+  width: 30px;
+  height: 30px;
+}
+
+/* 播放设置 sheet */
+.ps {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 86vh;
+  overflow-y: auto;
+  padding-bottom: calc(26px + var(--safe-bottom));
+}
+.ps > .ps-label,
+.ps > .ps-hint,
+.ps > .ps-row,
+.ps > .btn-block,
+.ps > .ps-actions {
+  margin-left: var(--pad);
+  margin-right: var(--pad);
+}
+.ps > .chip-row {
+  padding: 0 var(--pad);
+}
+.ps-label {
+  margin: 16px 0 8px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--ink-2);
+}
+.chip-row.wrap {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 8px;
+}
+.ps-hint {
+  margin: 8px 2px 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-4);
+}
+.ps-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.ps-row-t {
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.ps-row-s {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.empty.tight {
+  padding: 26px 0;
 }
 </style>

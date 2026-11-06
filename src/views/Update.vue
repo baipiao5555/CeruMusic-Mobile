@@ -13,6 +13,7 @@ import {
 } from '@/core/updater'
 
 const router = useRouter()
+const REPO_URL = 'https://github.com/baipiao5555/CeruMusic-Mobile'
 
 const notes = computed(() =>
   (updateState.latest?.body ?? '')
@@ -49,288 +50,473 @@ function ignoreLatest(): void {
   if (updateState.latest) ignoreVersion(updateState.latest.tag)
 }
 
+const statusTitle = computed(() => {
+  if (updateState.checking) return '正在检查更新…'
+  if (updateState.error) return '检查更新失败'
+  if (!updateState.latest) return '还没有检查过更新'
+  if (updateState.hasUpdate) return `发现新版本 ${updateState.latest.tag}`
+  return '已是最新版本'
+})
+
+const statusDetail = computed(() => {
+  if (updateState.checking) return '正在读取 GitHub Release'
+  if (updateState.error) return updateState.error
+  if (!updateState.latest) return '联网后点右侧按钮再试一次'
+  if (updateState.hasUpdate) {
+    const published = formatDate(updateState.latest.publishedAt)
+    const size = formatSize(updateState.latest.apkSize)
+    return [published && `发布于 ${published}`, size].filter(Boolean).join(' · ')
+  }
+  return `${lastCheckedText.value} 检查 · 最新 ${updateState.latest.tag}`
+})
+
+const installLabel = computed(() => {
+  if (updateState.installing) return '正在安装…'
+  if (updateState.downloading) return `下载中 ${Math.round(updateState.progress * 100)}%`
+  if (updateState.downloadedFileName) return '安装已下载的更新'
+  return '下载并安装'
+})
+
+const statusIcon = computed(() => {
+  if (updateState.checking) return 'refresh'
+  if (updateState.error) return 'warning'
+  if (updateState.hasUpdate) return 'download'
+  return 'check'
+})
+
 onMounted(() => {
   if (!updateState.latest) void checkForUpdate({ silent: true })
 })
 </script>
 
 <template>
-  <div class="page">
-    <header class="page-header">
-      <button class="icon-btn" aria-label="返回" @click="router.back()">
-        <Icon name="back" :size="20" />
-      </button>
-      <div class="brand-name" style="font-size: 20px">检查更新</div>
-      <button
-        class="icon-btn"
-        aria-label="检查更新"
-        :disabled="updateState.checking"
-        @click="checkForUpdate({ force: true })"
-      >
-        <Icon name="refresh" :size="20" />
-      </button>
-    </header>
-
-    <section class="card current-card">
-      <img src="/logo.png" alt="" />
-      <div class="current-info">
-        <h2>澜音 · CeruMusic 手机版</h2>
-        <p>当前版本 {{ updateState.currentVersion }}</p>
-        <p class="muted">上次检查：{{ lastCheckedText }}</p>
-      </div>
-    </section>
-
-    <div v-if="updateState.checking" class="card status-card">
-      <span class="spinner" />
-      正在检查更新…
-    </div>
-
-    <section v-else-if="updateState.latest && updateState.hasUpdate" class="card release-card">
-      <div class="release-head">
-        <div>
-          <h2>{{ updateState.latest.tag }}</h2>
-          <p>
-            发布于 {{ formatDate(updateState.latest.publishedAt) }}
-            <template v-if="updateState.latest.apkSize"> · {{ formatSize(updateState.latest.apkSize) }}</template>
-          </p>
-        </div>
-        <span class="badge">新版本</span>
-      </div>
-
-      <pre v-if="notes" class="notes">{{ notes }}</pre>
-
-      <div v-if="updateState.downloading" class="download-progress">
-        <div class="bar"><span :style="{ width: `${Math.round(updateState.progress * 100)}%` }" /></div>
-        <p>正在下载安装包… {{ Math.round(updateState.progress * 100) }}%</p>
-      </div>
-
-      <p v-if="updateState.needsPermission" class="permission-hint">
-        已打开「安装未知应用」设置，为本应用打开权限后，回到这里再点一次即可。
-      </p>
-      <p v-if="updateState.error" class="error-text">{{ updateState.error }}</p>
-
-      <div class="release-actions">
-        <button class="btn" :disabled="updateState.downloading || updateState.installing" @click="install">
-          <Icon name="download" :size="17" />
-          {{
-            updateState.downloading
-              ? '下载中…'
-              : updateState.installing
-                ? '正在安装…'
-                : updateState.downloadedFileName
-                  ? '安装已下载的更新'
-                  : '下载并安装'
-          }}
+  <div class="screen">
+    <div class="scroll safe-t-lg">
+      <div class="navrow">
+        <button class="backpill" @click="router.back()">
+          <Icon name="chevron-left" :size="13" />
+          <span>我的</span>
         </button>
+        <span class="f1" />
         <button
-          class="btn secondary"
-          @click="updateState.downloadedFileName ? downloadUpdate(true) : openReleasePage()"
+          class="iconbtn soft"
+          aria-label="检查更新"
+          :disabled="updateState.checking"
+          @click="checkForUpdate({ force: true })"
         >
-          {{ updateState.downloadedFileName ? '重新下载' : '在浏览器打开' }}
+          <Icon name="refresh" :size="18" />
         </button>
       </div>
-      <button class="ignore-btn" @click="ignoreLatest">忽略这个版本</button>
-    </section>
 
-    <section v-else class="card status-card">
-      <template v-if="updateState.latest">
-        <div class="up-to-date">
-          <span class="check-dot"><Icon name="check" :size="16" /></span>
-          已是最新版本
+      <header class="page-head phead">
+        <div>
+          <div class="eyebrow">设置 · 软件更新</div>
+          <h1 class="headline">检查更新</h1>
         </div>
-        <p class="muted">最新发布：{{ updateState.latest.tag }}</p>
-      </template>
-      <template v-else>
-        <p>{{ updateState.error || '还没有检查过更新' }}</p>
-        <button class="btn secondary" style="margin-top: 12px" @click="checkForUpdate({ force: true })">
-          检查更新
-        </button>
-      </template>
-    </section>
+      </header>
 
-    <div class="card panel">
-      <div class="list-item" style="padding-left: 0; padding-right: 0; border-bottom: 0">
-        <div class="info">
-          <h3>自动检查更新</h3>
-          <p>启动时每天最多检查一次，发现新版本会发通知</p>
+      <section class="hero">
+        <div class="hero-top">
+          <div class="appicon">澜</div>
+          <div class="appmeta">
+            <div class="appname">澜音 · CeruMusic</div>
+            <div class="appsub">Android · 插件协议 v2.0</div>
+          </div>
+          <span class="chipbadge">{{ updateState.hasUpdate ? '可更新' : '稳定版' }}</span>
         </div>
-        <button
-          class="switch"
-          :class="{ on: updateState.autoCheck }"
-          aria-label="自动检查更新"
-          @click="setAutoCheck(!updateState.autoCheck)"
-        />
+        <div class="hero-hair" />
+        <div class="verline">
+          <div class="ver">{{ updateState.latest?.tag || updateState.currentVersion }}</div>
+          <div class="vermeta">
+            <span>当前 {{ updateState.currentVersion }}</span>
+            <template v-if="updateState.latest">
+              <span class="dotsep">·</span>
+              <span>最新 {{ updateState.latest.tag }}</span>
+            </template>
+          </div>
+        </div>
+        <div
+          class="band"
+          :class="{ bad: !!updateState.error && !updateState.checking, live: updateState.checking }"
+        >
+          <span class="bdot">
+            <Icon :name="statusIcon" :size="13" />
+          </span>
+          <div class="btext">
+            <div class="bt">{{ statusTitle }}</div>
+            <div class="bs">{{ statusDetail }}</div>
+          </div>
+          <button
+            class="recheck"
+            :disabled="updateState.checking"
+            @click="checkForUpdate({ force: true })"
+          >
+            {{ updateState.checking ? '检查中' : updateState.error ? '重试' : '再次检查' }}
+          </button>
+        </div>
+      </section>
+
+      <template v-if="updateState.hasUpdate && updateState.latest">
+        <div class="group-title">
+          <span class="cn">更新内容</span>
+          <span class="cnt">{{ updateState.latest.tag }}</span>
+          <span class="en">Release</span>
+        </div>
+        <div class="pgrp rel">
+          <pre class="notes">{{ notes || '这个版本没有填写更新说明。' }}</pre>
+
+          <div v-if="updateState.downloading" class="dl">
+            <div class="progress">
+              <span
+                class="fill"
+                :style="{ width: `${Math.round(updateState.progress * 100)}%` }"
+              />
+            </div>
+            <span class="pct">{{ Math.round(updateState.progress * 100) }}%</span>
+          </div>
+
+          <p v-if="updateState.needsPermission" class="hint">
+            安装前需要在系统设置里允许「安装未知应用」，授权后返回再点一次安装。
+          </p>
+          <p v-if="updateState.error" class="hint bad">{{ updateState.error }}</p>
+
+          <div class="btnrow">
+            <button
+              class="btn btn-primary f1"
+              :disabled="updateState.downloading || updateState.installing"
+              @click="install"
+            >
+              {{ installLabel }}
+            </button>
+            <button
+              class="btn btn-ghost"
+              :disabled="updateState.downloading"
+              @click="updateState.downloadedFileName ? downloadUpdate(true) : openReleasePage()"
+            >
+              {{ updateState.downloadedFileName ? '重新下载' : '在浏览器打开' }}
+            </button>
+          </div>
+          <button class="btn btn-ghost btn-block ignore" @click="ignoreLatest">忽略这个版本</button>
+        </div>
+      </template>
+
+      <div class="group-title">
+        <span class="cn">更新设置</span>
+        <span class="en">Update</span>
       </div>
+      <div class="pgrp">
+        <div class="settingrow">
+          <span class="ico"><Icon name="refresh" :size="15" /></span>
+          <div class="body">
+            <div class="lab">自动检查更新</div>
+            <div class="sub">启动时静默检查，发现新版本再提示</div>
+          </div>
+          <button
+            class="switch"
+            :class="{ on: updateState.autoCheck }"
+            role="switch"
+            :aria-checked="updateState.autoCheck"
+            aria-label="自动检查更新"
+            @click="setAutoCheck(!updateState.autoCheck)"
+          />
+        </div>
+      </div>
+
+      <div class="group-title">
+        <span class="cn">关于</span>
+        <span class="en">About</span>
+      </div>
+      <div class="pgrp">
+        <div class="settingrow">
+          <span class="ico"><Icon name="music" :size="15" /></span>
+          <div class="body">
+            <div class="lab">应用名称</div>
+          </div>
+          <span class="val">澜音 CeruMusic 手机版</span>
+        </div>
+        <a class="settingrow linkrow" :href="REPO_URL" target="_blank" rel="noreferrer">
+          <span class="ico"><Icon name="link" :size="15" /></span>
+          <div class="body">
+            <div class="lab">开源地址</div>
+            <div class="sub">GitHub · baipiao5555/CeruMusic-Mobile</div>
+          </div>
+          <Icon name="chevron" :size="14" />
+        </a>
+        <div class="settingrow">
+          <span class="ico"><Icon name="info" :size="15" /></span>
+          <div class="body">
+            <div class="lab">开源许可</div>
+            <div class="sub">衍生自 CeruMusic，遵循上游许可</div>
+          </div>
+          <span class="val">AGPL-3.0-only</span>
+        </div>
+      </div>
+
+      <p class="foot">
+        更新包来自本项目的 GitHub Release，使用与当前应用相同的签名覆盖安装，不会清除收藏、歌单和下载记录。
+      </p>
     </div>
-
-    <p class="footnote">
-      更新包来自本项目的 GitHub Release，使用与当前应用相同的签名覆盖安装，不会清除收藏、歌单和下载记录。
-    </p>
   </div>
 </template>
 
 <style scoped>
-.current-card {
+.navrow {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  margin-top: 6px;
-}
-.current-card img {
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-}
-.current-info h2 {
-  font-size: 15.5px;
-}
-.current-info p {
-  margin-top: 3px;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.muted {
-  color: var(--muted-2) !important;
-}
-.status-card {
-  display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 26px 20px;
-  margin-top: 12px;
+  padding: 8px var(--pad) 0;
+}
+.backpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 38px;
+  padding: 0 14px 0 10px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-1);
   font-size: 13px;
-  color: var(--muted);
-  text-align: center;
+  font-weight: 600;
+  color: var(--ink);
+  position: relative;
 }
-.up-to-date {
+.backpill::after {
+  content: '';
+  position: absolute;
+  inset: -3px -2px;
+}
+.phead {
+  padding-top: 9px;
+}
+.headline {
+  margin-top: 7px;
+}
+.hero {
+  margin: 19px var(--pad) 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--sh-2);
+  overflow: hidden;
+}
+.hero-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
+  gap: 12px;
+  padding: 12px 16px 11px;
 }
-.check-dot {
+.appicon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  color: #fff;
-  background: var(--brand);
-}
-.release-card {
-  padding: 16px;
-  margin-top: 12px;
-}
-.release-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
-}
-.release-head h2 {
-  font-size: 20px;
-}
-.release-head p {
-  margin-top: 4px;
-  font-size: 11.5px;
-  color: var(--muted);
-}
-.badge {
-  flex: 0 0 auto;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 10.5px;
+  font-family: var(--serif);
+  font-size: 22px;
   font-weight: 600;
-  color: var(--brand);
-  background: var(--brand-soft);
+  color: var(--tint);
+  background: linear-gradient(140deg, var(--surface) 0%, var(--tint-softer) 100%);
+  border: 1px solid var(--line);
+  flex: none;
 }
-.notes {
-  margin-top: 14px;
-  max-height: 300px;
-  overflow: auto;
-  padding: 12px;
-  border-radius: 14px;
-  background: rgba(127, 127, 127, 0.06);
-  font-size: 12px;
-  line-height: 1.75;
-  color: var(--muted);
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
+.appmeta {
+  flex: 1;
+  min-width: 0;
 }
-.download-progress {
-  margin-top: 14px;
+.appname {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
-.download-progress .bar {
-  height: 6px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--brand-soft);
+.appsub {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--ink-3);
 }
-.download-progress .bar span {
-  display: block;
-  height: 100%;
-  background: var(--brand);
-  border-radius: 999px;
-  transition: width 0.25s ease;
-}
-.download-progress p {
-  margin-top: 7px;
+.chipbadge {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-xs);
+  background: var(--tint-soft);
+  color: var(--tint);
   font-size: 11px;
-  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  display: flex;
+  align-items: center;
+  flex: none;
 }
-.release-actions {
+.hero-hair {
+  height: 1px;
+  background: var(--line);
+}
+.verline {
+  padding: 10px 16px 11px;
+}
+.ver {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.vermeta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
+  gap: 6px;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--ink-4);
+  letter-spacing: 0.02em;
 }
-.permission-hint {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--brand);
-  background: var(--brand-soft);
+.band {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 16px;
+  background: var(--tint-softer);
 }
-.error-text {
-  margin-top: 12px;
-  font-size: 12px;
-  color: #e05353;
+.band.bad {
+  background: color-mix(in oklab, var(--cinnabar) 8%, var(--surface));
 }
-.ignore-btn {
-  margin-top: 14px;
-  font-size: 11.5px;
-  color: var(--muted-2);
-  text-decoration: underline;
-}
-.panel {
-  padding: 4px 16px;
-  margin-top: 12px;
-}
-.spinner {
-  width: 18px;
-  height: 18px;
+.bdot {
+  width: 23px;
+  height: 23px;
   border-radius: 50%;
-  border: 2px solid var(--brand-soft);
-  border-top-color: var(--brand);
-  animation: spin 0.8s linear infinite;
+  background: var(--tint-soft);
+  color: var(--tint);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.band.bad .bdot {
+  background: color-mix(in oklab, var(--cinnabar) 14%, var(--surface));
+  color: var(--cinnabar);
+}
+.band.live .bdot .i {
+  animation: spin 1.1s linear infinite;
 }
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
-.footnote {
-  margin: 18px 6px 8px;
-  font-size: 10.5px;
-  line-height: 1.7;
-  color: var(--muted-2);
-  text-align: center;
+.btext {
+  flex: 1;
+  min-width: 0;
+}
+.bt {
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.005em;
+}
+.bs {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recheck {
+  position: relative;
+  height: 32px;
+  padding: 0 13px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  flex: none;
+}
+.recheck::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
+.recheck:disabled {
+  opacity: 0.45;
+}
+.pgrp {
+  margin: 0 var(--pad);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.rel {
+  padding: 14px 16px 16px;
+}
+.notes {
+  margin: 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.dl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 13px;
+}
+.progress {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--tint);
+  transition: width 0.25s var(--e-out);
+}
+.pct {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.hint {
+  margin-top: 11px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: var(--porcelain-2);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.hint.bad {
+  color: var(--cinnabar);
+}
+.btnrow {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+.ignore {
+  margin-top: 10px;
+}
+.linkrow {
+  color: inherit;
+  text-decoration: none;
+}
+.linkrow .val {
+  color: var(--ink-3);
+}
+.foot {
+  padding: 20px var(--pad) 0;
+  font-size: 11px;
+  line-height: 1.75;
+  color: var(--ink-4);
 }
 </style>

@@ -5,8 +5,10 @@ import type { Track } from '@/core/track'
 import {
   addTrackToPlaylist,
   createPlaylist,
+  isFavorite,
   libraryState,
   removeTrackFromPlaylist,
+  toggleFavorite,
   type LocalPlaylist
 } from '@/core/library'
 import { addToQueue } from '@/core/playback/player'
@@ -25,6 +27,7 @@ const newName = ref('')
 
 const downloaded = computed(() => isDownloaded(props.track))
 const downloading = computed(() => isDownloading(props.track))
+const favorite = computed(() => isFavorite(props.track))
 const playlists = computed(() => libraryState.playlists)
 
 function playNext(): void {
@@ -48,6 +51,12 @@ function download(): void {
     downloadTrack(props.track)
     notify('已加入下载队列')
   }
+  emit('close')
+}
+
+function toggleFav(): void {
+  const liked = toggleFavorite(props.track)
+  notify(liked ? '已收藏' : '已取消收藏')
   emit('close')
 }
 
@@ -76,80 +85,102 @@ function createAndAdd(): void {
 
 <template>
   <div class="sheet-mask" @click.self="emit('close')">
-    <div class="sheet actions-sheet">
+    <div class="scrim" @click="emit('close')" />
+    <div class="sheet">
+      <div class="grab" />
+
       <template v-if="view === 'menu'">
-        <div class="song-head">
-          <img
-            :src="track.artwork"
-            alt=""
-            @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
-          />
-          <div class="song-meta">
-            <h3>{{ track.title }}</h3>
-            <p>{{ track.artist }}</p>
+        <div class="sh-head">
+          <div class="song">
+            <div class="cover">
+              <img
+                :src="track.artwork"
+                alt=""
+                @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
+              />
+            </div>
+            <div class="song-text">
+              <div class="sh-title truncate">{{ track.title }}</div>
+              <div class="sh-sub truncate">{{ track.artist }}</div>
+            </div>
           </div>
-          <button class="icon-action" aria-label="关闭" @click="emit('close')">
-            <Icon name="close" :size="18" />
-          </button>
+          <div class="sh-acts">
+            <button class="iconbtn quiet" aria-label="关闭" @click="emit('close')">
+              <Icon name="close" :size="18" />
+            </button>
+          </div>
         </div>
 
-        <div class="action-list">
-          <button class="action-row" @click="playNext">
-            <Icon name="next" :size="19" />
-            <span>下一首播放</span>
+        <div class="sh-list">
+          <button class="sh-item" @click="playNext">
+            <span class="ico"><Icon name="next" :size="19" /></span>
+            <span class="lab">下一首播放</span>
           </button>
-          <button class="action-row" @click="queue">
-            <Icon name="queue" :size="19" />
-            <span>添加到播放队列</span>
+          <button class="sh-item" @click="queue">
+            <span class="ico"><Icon name="queue" :size="19" /></span>
+            <span class="lab">添加到播放队列</span>
           </button>
-          <button class="action-row" @click="view = 'playlist'">
-            <Icon name="folder" :size="19" />
-            <span>添加到歌单</span>
-            <Icon name="chevron" :size="17" class="trailing" />
+          <button class="sh-item" @click="view = 'playlist'">
+            <span class="ico"><Icon name="folder" :size="19" /></span>
+            <span class="lab">添加到歌单</span>
+            <Icon name="chevron" :size="16" class="trail" />
           </button>
-          <button class="action-row" @click="download">
-            <Icon :name="downloaded ? 'check' : 'download'" :size="19" />
-            <span>{{ downloaded ? '已下载' : downloading ? '下载中…' : '下载' }}</span>
+          <button class="sh-item" @click="toggleFav">
+            <span class="ico">
+              <Icon :name="favorite ? 'heart-filled' : 'heart'" :size="19" />
+            </span>
+            <span class="lab">{{ favorite ? '取消收藏' : '收藏' }}</span>
+            <span class="trail-note">{{ favorite ? '已收藏' : '' }}</span>
           </button>
-          <button v-if="playlistId" class="action-row danger" @click="removeFromPlaylist">
-            <Icon name="trash" :size="19" />
-            <span>从当前歌单移除</span>
+          <button class="sh-item" @click="download">
+            <span class="ico"><Icon :name="downloaded ? 'check' : 'download'" :size="19" /></span>
+            <span class="lab">{{ downloaded ? '已下载' : downloading ? '下载中…' : '下载' }}</span>
+          </button>
+          <button v-if="playlistId" class="sh-item danger" @click="removeFromPlaylist">
+            <span class="ico"><Icon name="trash" :size="19" /></span>
+            <span class="lab">从当前歌单移除</span>
           </button>
         </div>
       </template>
 
       <template v-else>
-        <div class="sheet-head">
-          <button class="icon-action" aria-label="返回" @click="view = 'menu'">
-            <Icon name="back" :size="18" />
+        <div class="sh-head">
+          <div class="hdrow">
+            <button class="iconbtn quiet" aria-label="返回" @click="view = 'menu'">
+              <Icon name="back" :size="18" />
+            </button>
+            <div class="sh-title">添加到歌单</div>
+          </div>
+          <button class="iconbtn quiet" aria-label="关闭" @click="emit('close')">
+            <Icon name="close" :size="18" />
           </button>
-          <h2>添加到歌单</h2>
-          <span style="width: 36px" />
         </div>
 
-        <div v-if="playlists.length" class="playlist-picker">
+        <div v-if="playlists.length" class="sh-list">
           <button
             v-for="playlist in playlists"
             :key="playlist.id"
-            class="action-row"
+            class="sh-item"
             @click="addTo(playlist)"
           >
-            <span class="playlist-icon"><Icon name="music" :size="17" /></span>
-            <span class="playlist-name">{{ playlist.name }}</span>
-            <span class="playlist-count">{{ playlist.tracks.length }} 首</span>
+            <span class="ico"><Icon name="music" :size="18" /></span>
+            <span class="lab truncate">{{ playlist.name }}</span>
+            <span class="cnt">{{ playlist.tracks.length }} 首</span>
           </button>
         </div>
-        <p v-else class="picker-hint">还没有歌单，在下面新建一个。</p>
+        <p v-else class="hint">还没有歌单，在下面新建一个。</p>
 
-        <div class="new-playlist">
+        <div class="newrow">
           <input
             v-model="newName"
-            class="input"
+            class="field"
             placeholder="新建歌单名称"
             maxlength="40"
             @keyup.enter="createAndAdd"
           />
-          <button class="btn" :disabled="!newName.trim()" @click="createAndAdd">创建并添加</button>
+          <button class="btn btn-primary btn-sm" :disabled="!newName.trim()" @click="createAndAdd">
+            创建并添加
+          </button>
         </div>
       </template>
     </div>
@@ -157,117 +188,95 @@ function createAndAdd(): void {
 </template>
 
 <style scoped>
-.actions-sheet {
-  max-height: 82vh;
-  overflow-y: auto;
-}
-.song-head {
+.song {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
-}
-.song-head img {
-  width: 48px;
-  height: 48px;
-  border-radius: 13px;
-  object-fit: cover;
-  flex: 0 0 auto;
-}
-.song-meta {
+  gap: 11px;
+  min-width: 0;
   flex: 1;
+}
+.song .cover {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+}
+.song-text {
   min-width: 0;
 }
-.song-meta h3 {
-  font-size: 14.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.song-meta p {
-  margin-top: 3px;
+.sh-sub {
+  margin-top: 2px;
   font-size: 11.5px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--ink-4);
 }
-.action-list {
+.sh-acts {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+.hdrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.hdrow .iconbtn {
+  margin-left: -10px;
+}
+.sh-list {
   display: flex;
   flex-direction: column;
 }
-.action-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 13px 4px;
-  font-size: 14px;
-  color: var(--text);
+.lab {
+  flex: 1;
+  min-width: 0;
   text-align: left;
-  border-bottom: 1px solid var(--line, rgba(127, 127, 127, 0.12));
 }
-.action-row:last-child {
-  border-bottom: 0;
-}
-.action-row.danger {
-  color: #e05353;
-}
-.action-row .trailing {
+.trail {
   margin-left: auto;
-  color: var(--muted-2);
+  color: var(--ink-4);
 }
-.sheet-head {
+.trail-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--tint);
+}
+.cnt {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.hint {
+  padding: 2px var(--pad) 14px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.newrow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.sheet-head h2 {
-  margin: 0;
-  font-size: 17px;
-}
-.playlist-picker {
-  max-height: 42vh;
-  overflow-y: auto;
-}
-.playlist-icon {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  flex: 0 0 auto;
-}
-.playlist-name {
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.playlist-count {
-  font-size: 11px;
-  color: var(--muted-2);
-}
-.picker-hint {
-  margin: 4px 0 14px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.new-playlist {
-  display: flex;
   gap: 8px;
-  margin-top: 14px;
+  padding: 12px var(--pad) 2px;
 }
-.new-playlist .input {
+.field {
   flex: 1;
   min-width: 0;
+  height: 42px;
+  padding: 0 13px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: var(--porcelain-2);
+  color: var(--ink);
+  font-size: 13.5px;
+  outline: none;
 }
-.new-playlist .btn {
-  flex: 0 0 auto;
-  padding: 0 14px;
+.field::placeholder {
+  color: var(--ink-4);
+}
+.field:focus {
+  border-color: var(--tint);
+  box-shadow: 0 0 0 3px var(--tint-soft);
+}
+.newrow .btn {
+  flex: none;
 }
 </style>

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from './Icon.vue'
-import { currentTrack, playerState, togglePlay, next, previous } from '@/core/playback/player'
+import { currentTrack, playerState, togglePlay } from '@/core/playback/player'
 
 const router = useRouter()
 const route = useRoute()
@@ -21,8 +21,8 @@ function open(): void {
 
 <template>
   <transition name="fade">
-    <div v-if="visible" class="mini-player" @click="open">
-      <div class="progress-line"><i :style="{ width: progress + '%' }" /></div>
+    <div v-if="visible" class="mini" @click="open">
+      <div class="bar"><i :style="{ width: progress + '%' }" /></div>
       <div class="cover">
         <img
           :src="track!.artwork"
@@ -31,23 +31,29 @@ function open(): void {
         />
       </div>
       <div class="info">
-        <h3>{{ track!.title }}</h3>
-        <p>{{ track!.artist }}</p>
+        <div class="t truncate">{{ track!.title }}</div>
+        <div class="a truncate">{{ track!.artist }}</div>
       </div>
-      <button class="icon-action" aria-label="上一首" @click.stop="previous">
-        <Icon name="prev" :size="19" />
-      </button>
-      <button
-        class="icon-action primary"
-        aria-label="播放或暂停"
-        @click.stop="togglePlay"
-      >
+      <button class="mini-play" aria-label="播放或暂停" @click.stop="togglePlay">
         <span v-if="playerState.loading" class="loading-dots"><i /><i /><i /></span>
-        <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="20" />
-      </button>
-      <button class="icon-action" aria-label="下一首" @click.stop="next">
-        <Icon name="next" :size="19" />
+        <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="18" />
       </button>
     </div>
   </transition>
 </template>
+
+<style scoped>
+.mini-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--ink-inv);
+}
+.mini-play:active {
+  transform: scale(0.94);
+}
+</style>

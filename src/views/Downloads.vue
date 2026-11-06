@@ -11,18 +11,44 @@ import {
   retryTask,
   type DownloadTask
 } from '@/core/downloads'
-import { playTrack } from '@/core/playback/player'
+import { playTrack, playTracks } from '@/core/playback/player'
 import { notify } from '@/core/plugin/manager'
+import { qualityLabel } from '@/core/quality'
 
 const router = useRouter()
 const summary = computed(() => downloadSummary())
 const tasks = computed(() => downloadState.tasks)
+
+const activeTasks = computed(() =>
+  tasks.value.filter((task) => task.status === 'downloading' || task.status === 'queued')
+)
+const interruptedTasks = computed(() =>
+  tasks.value.filter((task) => task.status === 'failed' || task.status === 'cancelled')
+)
+const completedTasks = computed(() => tasks.value.filter((task) => task.status === 'completed'))
+const completedSize = computed(() =>
+  formatSize(completedTasks.value.reduce((total, task) => total + (task.size || 0), 0))
+)
 
 function formatSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 MB'
   const mb = bytes / 1024 / 1024
   if (mb >= 1) return `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
+}
+
+function formatDuration(durationMs: number): string {
+  if (!durationMs || durationMs <= 0) return ''
+  const total = Math.round(durationMs / 1000)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+function qualityTag(task: DownloadTask): string {
+  return task.quality ? qualityLabel(task.quality) : ''
+}
+
+function queuePosition(task: DownloadTask): number {
+  return activeTasks.value.findIndex((item) => item.id === task.id) + 1
 }
 
 function statusText(task: DownloadTask): string {
@@ -49,8 +75,19 @@ function play(task: DownloadTask): void {
   void playTrack(task.track)
 }
 
+function playAll(): void {
+  if (!completedTasks.value.length) return
+  void playTracks(completedTasks.value.map((task) => task.track))
+}
+
 async function retry(task: DownloadTask): Promise<void> {
   retryTask(task.id)
+}
+
+function retryAll(): void {
+  if (!interruptedTasks.value.length) return
+  interruptedTasks.value.forEach((task) => retryTask(task.id))
+  notify(`已重新加入 ${interruptedTasks.value.length} 个下载`)
 }
 
 async function remove(task: DownloadTask): Promise<void> {
@@ -65,245 +102,456 @@ async function clearAll(): Promise<void> {
   await clearCompleted()
   notify('已清理下载文件')
 }
+
+function queueHint(task: DownloadTask): string {
+  if (task.status !== 'queued') return ''
+  const position = queuePosition(task)
+  return position > 0 ? `队列第 ${position} 位` : '等待空闲下载位'
+}
+
+function percent(task: DownloadTask): string {
+  if (task.status === 'queued') return '—'
+  return `${Math.round(task.progress * 100)}%`
+}
+
+function completedMeta(task: DownloadTask): string {
+  const duration = formatDuration(task.track.durationMs)
+  return [task.track.artist, formatSize(task.size), duration].filter(Boolean).join(' · ')
+}
 </script>
 
 <template>
-  <div class="page">
-    <header class="page-header">
-      <button class="icon-btn" aria-label="返回" @click="router.back()">
-        <Icon name="back" :size="20" />
-      </button>
-      <div class="brand-name" style="font-size: 20px">下载</div>
-      <button
-        class="icon-btn"
-        aria-label="清理已完成"
-        :disabled="!summary.completed"
-        @click="clearAll"
-      >
-        <Icon name="trash" :size="19" />
-      </button>
-    </header>
+  <div class="screen">
+    <div class="scroll safe-t-lg">
+      <div class="navrow">
+        <button class="iconbtn quiet" aria-label="返回" @click="router.back()">
+          <Icon name="back" :size="20" />
+        </button>
+      </div>
 
-    <section class="card summary">
-      <div class="summary-icon"><Icon name="download" :size="24" /></div>
-      <div class="summary-info">
-        <h2>离线歌曲</h2>
-        <p>
-          {{ summary.completed }} 首已下载<span v-if="summary.active"> · {{ summary.active }} 首进行中</span
-          ><span v-if="summary.failed"> · {{ summary.failed }} 首失败</span>
+      <header class="page-head phead">
+        <div>
+          <div class="eyebrow">CERU MUSIC · 离线</div>
+          <h1 class="headline">下载</h1>
+        </div>
+        <div class="page-actions">
+          <button
+            class="iconbtn soft trashbtn"
+            aria-label="清理已完成"
+            :disabled="!summary.completed"
+            @click="clearAll"
+          >
+            <Icon name="trash" :size="19" />
+            <span v-if="summary.completed" class="count">{{ summary.completed }}</span>
+          </button>
+        </div>
+      </header>
+
+      <template v-if="tasks.length">
+        <div class="sum">
+          <div class="cell">
+            <div class="n">{{ summary.completed }}<small>首</small></div>
+            <div class="t">已完成</div>
+          </div>
+          <div class="cell live">
+            <div class="n">{{ summary.active }}</div>
+            <div class="t">进行中</div>
+          </div>
+          <div class="cell bad">
+            <div class="n">{{ summary.failed }}</div>
+            <div class="t">失败</div>
+          </div>
+        </div>
+
+        <section v-if="activeTasks.length" class="psec">
+          <div class="group-title">
+            <span class="cn">进行中</span>
+            <span class="cnt">{{ activeTasks.length }}</span>
+            <span class="en">Downloading</span>
+          </div>
+          <div class="pgrp">
+            <div v-for="task in activeTasks" :key="task.id" class="prow tall">
+              <div class="pcv">
+                <img :src="task.track.artwork" alt="" loading="lazy" />
+              </div>
+              <div class="pmain">
+                <div class="ptt truncate">{{ task.track.title }}</div>
+                <div class="pst">
+                  {{ statusText(task)
+                  }}<template v-if="qualityTag(task)"> · {{ qualityTag(task) }}</template
+                  ><template v-if="queueHint(task)"> · {{ queueHint(task) }}</template>
+                </div>
+                <div
+                  v-if="task.status === 'downloading'"
+                  class="pbar"
+                  :class="{ wait: task.total <= 0 }"
+                >
+                  <i :style="{ width: `${Math.round(task.progress * 100)}%` }" />
+                </div>
+              </div>
+              <div class="ppct" :class="{ muted: task.status === 'queued' }">{{ percent(task) }}</div>
+              <button class="px" aria-label="取消下载" @click="cancelTask(task.id)">
+                <Icon name="close" :size="16" />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="interruptedTasks.length" class="psec">
+          <div class="group-title">
+            <span class="cn">失败</span>
+            <span class="cnt">{{ interruptedTasks.length }}</span>
+            <span class="en">Interrupted</span>
+            <button class="act" @click="retryAll">全部重试</button>
+          </div>
+          <div class="pgrp">
+            <div v-for="task in interruptedTasks" :key="task.id" class="prow tall">
+              <div class="pcv">
+                <img :src="task.track.artwork" alt="" loading="lazy" />
+              </div>
+              <div class="pmain">
+                <div class="ptt truncate">{{ task.track.title }}</div>
+                <div class="pst">
+                  <span class="flag" :class="{ warn: task.status === 'cancelled' }">
+                    <i class="d" />{{ statusLabel(task) }} · {{ statusText(task) }}
+                  </span>
+                </div>
+                <div class="ptt2">
+                  {{ task.track.artist }} · 已缓存 {{ formatSize(task.received) }}
+                </div>
+              </div>
+              <button class="pretry" @click="retry(task)">重试</button>
+              <button class="pmore" aria-label="删除记录" @click="remove(task)">
+                <Icon name="trash" :size="15" />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section v-if="completedTasks.length" class="psec">
+          <div class="group-title">
+            <span class="cn">已完成</span>
+            <span class="cnt">{{ completedTasks.length }} · {{ completedSize }}</span>
+            <span class="en">Offline</span>
+            <button class="act" @click="playAll">全部播放</button>
+          </div>
+          <div class="pgrp">
+            <div v-for="task in completedTasks" :key="task.id" class="prow">
+              <div class="pcv sm">
+                <img :src="task.track.artwork" alt="" loading="lazy" />
+              </div>
+              <div class="pmain">
+                <div class="ptt truncate">
+                  {{ task.track.title }}
+                  <span v-if="qualityTag(task)" class="tag">{{ qualityTag(task) }}</span>
+                </div>
+                <div class="ptt2 truncate">{{ completedMeta(task) }}</div>
+              </div>
+              <button class="ibtn" aria-label="播放" @click="play(task)">
+                <Icon name="play" :size="15" />
+              </button>
+              <button class="pmore" aria-label="删除文件和记录" @click="remove(task)">
+                <Icon name="trash" :size="15" />
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <p class="foot">
+          文件保存在应用专属目录，只能在本应用内播放；卸载应用或在系统设置中清除数据会一并删除。<br />
+          下载中退出应用的任务，下次启动会标记为「上次下载被中断」。
         </p>
-      </div>
-    </section>
+      </template>
 
-    <div v-if="tasks.length" class="task-list">
-      <div v-for="task in tasks" :key="task.id" class="task card">
-        <div class="task-cover">
-          <img :src="task.track.artwork" alt="" loading="lazy" />
-        </div>
-        <div class="task-body">
-          <div class="task-head">
-            <h3>{{ task.track.title }}</h3>
-            <span class="badge" :class="task.status">{{ statusLabel(task) }}</span>
-          </div>
-          <p class="task-artist">{{ task.track.artist }}</p>
-          <div
-            v-if="task.status === 'downloading' || task.status === 'queued'"
-            class="progress"
-            :class="{ indeterminate: task.status === 'downloading' && task.total <= 0 }"
-          >
-            <span :style="{ width: `${Math.round(task.progress * 100)}%` }" />
-          </div>
-          <p class="task-status" :class="{ error: task.status === 'failed' }">
-            {{ statusText(task) }}
-          </p>
-        </div>
-        <div class="task-actions">
-          <button
-            v-if="task.status === 'completed'"
-            class="icon-action"
-            aria-label="播放"
-            @click="play(task)"
-          >
-            <Icon name="play" :size="19" />
-          </button>
-          <button
-            v-if="task.status === 'queued' || task.status === 'downloading'"
-            class="icon-action"
-            aria-label="取消下载"
-            @click="cancelTask(task.id)"
-          >
-            <Icon name="close" :size="18" />
-          </button>
-          <button
-            v-if="task.status === 'failed' || task.status === 'cancelled'"
-            class="icon-action"
-            aria-label="重试"
-            @click="retry(task)"
-          >
-            <Icon name="refresh" :size="18" />
-          </button>
-          <button class="icon-action" aria-label="删除" @click="remove(task)">
-            <Icon name="trash" :size="18" />
-          </button>
-        </div>
+      <div v-else class="empty">
+        <div class="glyph"><Icon name="download" :size="30" /></div>
+        <h3>还没有下载</h3>
+        <p>下载的歌会存到这台设备上，离线也能播放。</p>
+        <button class="btn btn-primary" @click="router.push('/search')">去搜索</button>
       </div>
     </div>
-
-    <div v-else class="empty">
-      <div class="emoji">⬇️</div>
-      <h3>还没有下载歌曲</h3>
-      <p>在任意歌曲右侧点下载按钮，下载完成后就能离线播放。</p>
-      <button class="btn secondary" @click="router.push('/search')">去搜索音乐</button>
-    </div>
-
-    <p class="footnote">
-      下载的文件保存在应用专属目录，只能在本应用内播放。卸载应用或在系统设置中清除数据会一并删除。
-    </p>
   </div>
 </template>
 
 <style scoped>
-.summary {
+.navrow {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
+  padding: 8px var(--pad) 0;
 }
-.summary-icon {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 17px;
-  color: var(--brand);
-  background: var(--brand-soft);
-  flex: 0 0 auto;
+.phead {
+  padding-top: 9px;
 }
-.summary-info h2 {
-  font-size: 16px;
+.headline {
+  margin-top: 7px;
 }
-.summary-info p {
-  margin-top: 4px;
-  font-size: 11.5px;
-  color: var(--muted);
+.trashbtn {
+  position: relative;
 }
-.task-list {
+.trashbtn:disabled {
+  opacity: 0.38;
+}
+.trashbtn .count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--tint-soft);
+  color: var(--tint);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--porcelain);
+}
+
+.sum {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 14px;
+  margin: 19px var(--pad) 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
 }
-.task {
+.sum .cell {
+  flex: 1;
+  position: relative;
+  padding: 15px 0 13px;
+  text-align: center;
+}
+.sum .cell + .cell::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 17px;
+  bottom: 15px;
+  width: 1px;
+  background: var(--line);
+}
+.sum .n {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+.sum .n small {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-4);
+  margin-left: 2px;
+}
+.sum .t {
+  margin-top: 7px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.sum .cell.live .n {
+  color: var(--tint);
+}
+.sum .cell.bad .n {
+  color: var(--cinnabar);
+}
+
+.psec {
+  margin-top: 26px;
+}
+.pgrp {
+  margin: 0 var(--pad);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.prow {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px;
+  position: relative;
+  min-height: 64px;
+  padding: 0 16px;
 }
-.task-cover {
-  width: 50px;
-  height: 50px;
-  border-radius: 13px;
+.prow.tall {
+  min-height: 86px;
+  padding-top: 13px;
+  padding-bottom: 13px;
+}
+.prow + .prow::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--line);
+}
+.pcv {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   overflow: hidden;
-  flex: 0 0 auto;
-  background: var(--brand-soft);
+  flex: none;
+  background: var(--porcelain-2);
 }
-.task-cover img {
+.pcv.sm {
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+}
+.pcv img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
-.task-body {
+.pmain {
   flex: 1;
   min-width: 0;
 }
-.task-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.task-head h3 {
-  flex: 1;
-  min-width: 0;
+.ptt {
   font-size: 13.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.badge {
-  flex: 0 0 auto;
-  padding: 2px 7px;
-  border-radius: 999px;
-  font-size: 9.5px;
   font-weight: 600;
-  color: var(--muted);
-  background: var(--surface-2, rgba(127, 127, 127, 0.12));
+  letter-spacing: 0.005em;
 }
-.badge.downloading {
-  color: var(--brand);
-  background: var(--brand-soft);
-}
-.badge.completed {
-  color: var(--brand);
-  background: var(--brand-soft);
-}
-.badge.failed {
-  color: #e05353;
-  background: rgba(224, 83, 83, 0.12);
-}
-.task-artist {
+.pst {
   margin-top: 3px;
-  font-size: 11px;
-  color: var(--muted);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.progress {
-  position: relative;
-  height: 4px;
-  margin-top: 7px;
-  border-radius: 999px;
-  overflow: hidden;
-  background: var(--brand-soft);
+.ptt2 {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--ink-3);
 }
-.progress span {
+.pbar {
+  height: 3px;
+  margin-top: 9px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--line-2);
+}
+.pbar i {
   display: block;
   height: 100%;
-  border-radius: 999px;
-  background: var(--brand);
-  transition: width 0.25s ease;
+  border-radius: 2px;
+  background: var(--tint);
+  transition: width 0.25s var(--e-out);
 }
-.progress.indeterminate span {
-  width: 35% !important;
-  animation: slide 1.1s ease-in-out infinite;
+.pbar.wait i {
+  background: var(--c300);
 }
-@keyframes slide {
-  0% {
-    transform: translateX(-40%);
-  }
-  100% {
-    transform: translateX(300%);
-  }
+.ppct {
+  width: 36px;
+  flex: none;
+  text-align: right;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
 }
-.task-status {
-  margin-top: 5px;
-  font-size: 10.5px;
-  color: var(--muted-2);
+.ppct.muted {
+  color: var(--ink-4);
 }
-.task-status.error {
-  color: #e05353;
-}
-.task-actions {
+.px {
+  width: 44px;
+  height: 44px;
+  margin-right: -12px;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--ink-4);
 }
-.footnote {
-  margin: 18px 6px 8px;
-  font-size: 10.5px;
+.ibtn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  color: var(--ink-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.ibtn::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+.pmore {
+  width: 30px;
+  height: 44px;
+  margin-right: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--ink-4);
+}
+.pretry {
+  position: relative;
+  height: 30px;
+  padding: 0 13px;
+  border-radius: 15px;
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  flex: none;
+}
+.pretry::after {
+  content: '';
+  position: absolute;
+  inset: -7px -6px;
+}
+.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--cinnabar);
+}
+.flag.warn {
+  color: var(--ink-3);
+}
+.flag .d {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.tag {
+  margin-left: 6px;
+  padding: 1px 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-4);
+  vertical-align: 1px;
+}
+.foot {
+  padding: 22px var(--pad) 0;
+  font-size: 11px;
   line-height: 1.7;
-  color: var(--muted-2);
-  text-align: center;
+  color: var(--ink-4);
+  letter-spacing: 0.01em;
+}
+.empty {
+  padding-top: 96px;
 }
 </style>

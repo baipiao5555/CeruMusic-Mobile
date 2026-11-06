@@ -126,12 +126,16 @@ onMounted(() => {
         </div>
         <div class="hero-hair" />
         <div class="verline">
-          <div class="ver">{{ updateState.latest?.tag || updateState.currentVersion }}</div>
+          <div class="ver">v{{ updateState.currentVersion }}</div>
           <div class="vermeta">
-            <span>当前 {{ updateState.currentVersion }}</span>
+            <span>已安装</span>
             <template v-if="updateState.latest">
               <span class="dotsep">·</span>
-              <span>最新 {{ updateState.latest.tag }}</span>
+              <span>{{
+                updateState.hasUpdate
+                  ? `可更新到 ${updateState.latest.tag}`
+                  : `最新 ${updateState.latest.tag}`
+              }}</span>
             </template>
           </div>
         </div>

@@ -1317,7 +1317,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  max-height: 86vh;
+  max-height: 92vh;
   overflow-y: auto;
   padding-bottom: calc(26px + var(--safe-bottom));
 }

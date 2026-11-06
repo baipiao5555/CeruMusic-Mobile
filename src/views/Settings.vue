@@ -13,6 +13,7 @@ import { libraryState } from '@/core/library'
 import { updateState } from '@/core/updater'
 import type { Track } from '@/core/track'
 import type { AccentColor } from '@/core/settings'
+import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
@@ -33,8 +34,14 @@ async function signIn(): Promise<void> {
   }
 }
 
-function signOut(): void {
-  if (!window.confirm('退出澜音账号？电脑端的登录状态不受影响。')) return
+async function signOut(): Promise<void> {
+  const ok = await confirmAction({
+    title: '退出澜音账号？',
+    body: '电脑端的登录状态不受影响，本机歌单与下载仍会保留。',
+    confirmText: '退出',
+    danger: true
+  })
+  if (!ok) return
   logout()
   notify('已退出登录')
 }
@@ -381,16 +388,28 @@ function applyPick(value: string | number): void {
   }
 }
 
-function clearPlaybackData(): void {
-  if (!window.confirm('清除播放队列与播放记录？')) return
+async function clearPlaybackData(): Promise<void> {
+  const ok = await confirmAction({
+    title: '清除播放数据？',
+    body: '播放队列与播放记录会被清空，无法恢复。',
+    confirmText: '清除',
+    danger: true
+  })
+  if (!ok) return
   clearQueue()
   try {
     localStorage.removeItem('ceru.history.v1')
   } catch {}
 }
 
-function resetSettings(): void {
-  if (!window.confirm('恢复默认设置？')) return
+async function resetSettings(): Promise<void> {
+  const ok = await confirmAction({
+    title: '恢复默认设置？',
+    body: '外观、音质、播放与下载偏好都会回到初始值。',
+    confirmText: '恢复',
+    danger: true
+  })
+  if (!ok) return
   updateSettings({
     theme: 'system',
     quality: '',

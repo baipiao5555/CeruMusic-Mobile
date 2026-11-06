@@ -14,6 +14,7 @@ import {
 } from '@/core/cloud'
 import { libraryState } from '@/core/library'
 import { notify } from '@/core/plugin/manager'
+import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
 const error = ref('')
@@ -75,8 +76,14 @@ async function startLogin(): Promise<void> {
   }
 }
 
-function signOut(): void {
-  if (!window.confirm('退出澜音账号？电脑端的登录状态不受影响。')) return
+async function signOut(): Promise<void> {
+  const ok = await confirmAction({
+    title: '退出澜音账号？',
+    body: '电脑端的登录状态不受影响，已导入到本机的歌单会保留。',
+    confirmText: '退出',
+    danger: true
+  })
+  if (!ok) return
   logout()
   cloudState.playlists = []
   lastSync.value = ''

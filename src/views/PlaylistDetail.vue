@@ -7,6 +7,7 @@ import { deletePlaylist, getPlaylist, renamePlaylist, updatePlaylistTracks } fro
 import { addToQueue, playTracks, setMode } from '@/core/playback/player'
 import { downloadTracks } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
+import { confirmAction } from '@/core/confirm'
 
 const route = useRoute()
 const router = useRouter()
@@ -78,9 +79,15 @@ function playShuffle(): void {
   void playTracks(tracks, Math.floor(Math.random() * tracks.length))
 }
 
-function remove(): void {
+async function remove(): Promise<void> {
   if (!playlist.value) return
-  if (window.confirm(`删除歌单「${playlist.value.name}」？`)) {
+  const ok = await confirmAction({
+    title: `删除歌单「${playlist.value.name}」？`,
+    body: '歌单会被删除，其中的歌曲仍保留在资料库与本地文件里。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (ok) {
     deletePlaylist(playlist.value.id)
     router.replace('/library')
   }
@@ -134,10 +141,16 @@ function batchQueue(): void {
   exitSelection()
 }
 
-function batchRemove(): void {
+async function batchRemove(): Promise<void> {
   if (!playlist.value || !selectedTracks.value.length) return
   const count = selectedTracks.value.length
-  if (!window.confirm(`从「${playlist.value.name}」移除选中的 ${count} 首歌？`)) return
+  const ok = await confirmAction({
+    title: `从歌单移除 ${count} 首歌？`,
+    body: `这些歌曲只会从「${playlist.value.name}」中移出，不会从资料库删除。`,
+    confirmText: '移除',
+    danger: true
+  })
+  if (!ok) return
   const indexes = selectedIndexes.value
   updatePlaylistTracks(
     playlist.value.id,

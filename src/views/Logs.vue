@@ -8,6 +8,7 @@ import { notify } from '@/core/plugin/manager'
 import { pluginState } from '@/core/plugin/manager'
 import { authState } from '@/core/auth'
 import { readNativeDiagnostics } from '@/core/native/backgroundAudio'
+import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
 const route = useRoute()
@@ -150,9 +151,15 @@ async function shareLogs(): Promise<void> {
   notify('当前环境不支持直接分享，日志已复制')
 }
 
-function clearAll(): void {
+async function clearAll(): Promise<void> {
   if (!counts.value.total) return
-  if (!window.confirm('清空全部运行日志？清空后无法恢复。')) return
+  const ok = await confirmAction({
+    title: '清空全部运行日志？',
+    body: '清空后无法恢复，导出过的文件不受影响。',
+    confirmText: '清空',
+    danger: true
+  })
+  if (!ok) return
   clearLogs()
   notify('运行日志已清空')
 }

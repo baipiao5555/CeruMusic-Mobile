@@ -14,6 +14,7 @@ import {
 import { playTrack, playTracks } from '@/core/playback/player'
 import { notify } from '@/core/plugin/manager'
 import { qualityLabel } from '@/core/quality'
+import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
 const summary = computed(() => downloadSummary())
@@ -91,14 +92,26 @@ function retryAll(): void {
 }
 
 async function remove(task: DownloadTask): Promise<void> {
-  const action = task.status === 'completed' ? '删除文件和下载记录' : '移除这条下载记录'
-  if (!window.confirm(`${action}？`)) return
+  const completed = task.status === 'completed'
+  const ok = await confirmAction({
+    title: completed ? '删除文件和下载记录？' : '移除这条下载记录？',
+    body: completed ? '本地文件会被删除，之后需要重新下载。' : '任务会从列表里移除，已下载的文件不受影响。',
+    confirmText: completed ? '删除' : '移除',
+    danger: completed
+  })
+  if (!ok) return
   await removeTask(task.id, true)
 }
 
 async function clearAll(): Promise<void> {
   if (!summary.value.completed) return
-  if (!window.confirm(`删除全部 ${summary.value.completed} 个已下载文件？`)) return
+  const ok = await confirmAction({
+    title: `删除全部 ${summary.value.completed} 个已下载文件？`,
+    body: '本地文件会被清空，之后需要重新下载。',
+    confirmText: '全部删除',
+    danger: true
+  })
+  if (!ok) return
   await clearCompleted()
   notify('已清理下载文件')
 }

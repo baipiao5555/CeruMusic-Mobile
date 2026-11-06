@@ -18,6 +18,7 @@ import {
   selectProvider,
   type PluginDescriptor
 } from '@/core/plugin/manager'
+import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
 const url = ref('')
@@ -225,7 +226,13 @@ async function toggle(plugin: PluginDescriptor): Promise<void> {
 }
 
 async function uninstall(plugin: PluginDescriptor): Promise<void> {
-  if (!window.confirm(`卸载插件「${plugin.name}」？相关配置会一并删除。`)) return
+  const ok = await confirmAction({
+    title: `卸载插件「${plugin.name}」？`,
+    body: '插件文件与它的配置会一并删除，重新安装后需要重新登录该音源。',
+    confirmText: '卸载',
+    danger: true
+  })
+  if (!ok) return
   busy.value = plugin.pluginId
   try {
     await removePlugin(plugin.pluginId)

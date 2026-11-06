@@ -7,6 +7,7 @@ import { SplashScreen } from '@capacitor/splash-screen'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { IonApp } from '@ionic/vue'
 import BottomNav from '@/components/BottomNav.vue'
+import ConfirmSheet from '@/components/ConfirmSheet.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, checkAllPluginUpdates, navigationRequest, notify } from '@/core/plugin/manager'
 import { handleAuthCallback, initAuth } from '@/core/auth'
@@ -325,6 +326,8 @@ watch(navigationRequest, (request) => {
         </div>
       </div>
     </div>
+
+    <ConfirmSheet />
     </div>
   </ion-app>
 </template>

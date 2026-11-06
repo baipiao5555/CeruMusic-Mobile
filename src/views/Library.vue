@@ -15,6 +15,7 @@ import { allImporters, pluginState } from '@/core/plugin/manager'
 import { logState } from '@/core/logs'
 import { downloadState } from '@/core/downloads'
 import { authState, displayName } from '@/core/auth'
+import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
@@ -130,8 +131,14 @@ function submitCreate(): void {
   router.push('/playlist/' + playlist.id)
 }
 
-function removePlaylist(playlist: LocalPlaylist): void {
-  if (window.confirm(`删除歌单「${playlist.name}」？`)) deletePlaylist(playlist.id)
+async function removePlaylist(playlist: LocalPlaylist): Promise<void> {
+  const ok = await confirmAction({
+    title: `删除歌单「${playlist.name}」？`,
+    body: '歌单会被删除，其中的歌曲仍保留在资料库与本地文件里。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (ok) deletePlaylist(playlist.id)
 }
 
 function openImport(): void {

@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
+import OptionSheet from '@/components/OptionSheet.vue'
 import { settingsState, updateSettings } from '@/core/settings'
 import { clearQueue, playerState, setMode, setQuality } from '@/core/playback/player'
 import { notify, pluginState } from '@/core/plugin/manager'
@@ -175,8 +176,9 @@ function onTemplateInput(event: Event): void {
 }
 
 const qualities = computed(() => availableQualities())
-const qualityHint = computed(() => qualityDescription(settingsState.quality))
-const qualityOptions = computed(() => ['', ...qualities.value])
+const qualityHint = computed(() =>
+  settingsState.quality ? qualityDescription(settingsState.quality) : '自动取当前歌曲的最高档'
+)
 const currentQualityLabel = computed(() =>
   settingsState.quality ? qualityLabel(settingsState.quality) : '自动（最高）'
 )
@@ -204,56 +206,179 @@ const lyricOffsetLabel = computed(
 const concurrencyLabel = computed(() => `${settingsState.downloadConcurrency} 个`)
 const runningPlugins = computed(() => pluginState.plugins.filter((plugin) => plugin.running).length)
 
-function selectValue(event: Event): string {
-  return (event.target as HTMLSelectElement).value
-}
+/* ---------- 选择器 ---------- */
+type PickOption = { value: string | number; label: string; desc?: string }
+type PickerKey =
+  | 'theme'
+  | 'quality'
+  | 'mode'
+  | 'speed'
+  | 'lyricScale'
+  | 'lyricOffset'
+  | 'downloadQuality'
+  | 'concurrency'
 
-function chooseQuality(quality: string): void {
-  setQuality(quality)
-}
+const picker = ref<PickerKey | null>(null)
 
-function onQualitySelect(event: Event): void {
-  chooseQuality(selectValue(event))
-}
+const qualityPickerOptions = computed<PickOption[]>(() => [
+  { value: '', label: '自动（最高）', desc: '每次播放都取当前歌曲可用的最高档' },
+  ...qualities.value.map((quality) => ({
+    value: quality,
+    label: qualityLabel(quality),
+    desc: qualityDescription(quality)
+  }))
+])
 
-function onTheme(event: Event): void {
-  const value = selectValue(event)
-  if (value === 'system' || value === 'light' || value === 'dark') updateSettings({ theme: value })
+const downloadPickerOptions = computed<PickOption[]>(() => [
+  { value: '', label: '跟随播放音质', desc: '和上面「默认音质」保持一致' },
+  ...qualities.value.map((quality) => ({
+    value: quality,
+    label: qualityLabel(quality),
+    desc: qualityDescription(quality)
+  }))
+])
+
+const pickerMeta = computed<{
+  title: string
+  sub: string
+  options: PickOption[]
+  value: string | number
+  layout: 'list' | 'chips'
+}>(() => {
+  switch (picker.value) {
+    case 'theme':
+      return {
+        title: '主题',
+        sub: '跟随系统时随手机的深浅色切换',
+        options: themes.map((theme) => ({ value: theme.value, label: theme.label })),
+        value: settingsState.theme,
+        layout: 'list'
+      }
+    case 'quality':
+      return {
+        title: '默认音质',
+        sub: '没有该档位时自动回退',
+        options: qualityPickerOptions.value,
+        value: settingsState.quality,
+        layout: 'list'
+      }
+    case 'downloadQuality':
+      return {
+        title: '下载音质',
+        sub: '离线文件保存的档位',
+        options: downloadPickerOptions.value,
+        value: settingsState.downloadQuality,
+        layout: 'list'
+      }
+    case 'mode':
+      return {
+        title: '播放模式',
+        sub: '播放页底部左侧按钮可快速切换',
+        options: playModes.map((mode) => ({ value: mode.value, label: mode.label })),
+        value: playerState.mode,
+        layout: 'list'
+      }
+    case 'speed':
+      return {
+        title: '播放速度',
+        sub: '不改变音高',
+        options: speedOptions.map((rate) => ({ value: rate, label: `${rate}×` })),
+        value: settingsState.playbackRate,
+        layout: 'list'
+      }
+    case 'lyricScale':
+      return {
+        title: '歌词字号',
+        sub: '只影响歌词页的字号',
+        options: lyricScales.map((scale) => ({
+          value: scale.value,
+          label: `${scale.label} · ${Math.round(scale.value * 100)}%`
+        })),
+        value: settingsState.lyricScale,
+        layout: 'list'
+      }
+    case 'lyricOffset':
+      return {
+        title: '歌词偏移',
+        sub: '正数让歌词延后，负数为提前',
+        options: offsetOptions.map((seconds) => ({
+          value: seconds,
+          label: `${seconds > 0 ? '+' : ''}${seconds.toFixed(1)} 秒`
+        })),
+        value: settingsState.lyricOffsetMs / 1000,
+        layout: 'chips'
+      }
+    case 'concurrency':
+      return {
+        title: '同时下载数量',
+        sub: '同时进行的下载任务上限',
+        options: concurrencies.map((count) => ({ value: count, label: `${count} 个` })),
+        value: settingsState.downloadConcurrency,
+        layout: 'list'
+      }
+    default:
+      return { title: '', sub: '', options: [], value: '', layout: 'list' }
+  }
+})
+
+function openPicker(key: PickerKey): void {
+  picker.value = key
 }
 
 function onAccent(value: AccentColor): void {
   updateSettings({ accent: value })
 }
 
-function onPlayMode(event: Event): void {
-  const value = selectValue(event)
-  if (value === 'order' || value === 'repeat-all' || value === 'repeat-one' || value === 'shuffle') {
-    setMode(value)
+function closePicker(): void {
+  picker.value = null
+}
+
+function applyPick(value: string | number): void {
+  switch (picker.value) {
+    case 'theme':
+      if (value === 'system' || value === 'light' || value === 'dark') {
+        updateSettings({ theme: value })
+      }
+      break
+    case 'quality':
+      setQuality(String(value))
+      break
+    case 'mode':
+      if (
+        value === 'order' ||
+        value === 'repeat-all' ||
+        value === 'repeat-one' ||
+        value === 'shuffle'
+      ) {
+        setMode(value)
+      }
+      break
+    case 'speed': {
+      const rate = Number(value)
+      if (Number.isFinite(rate)) updateSettings({ playbackRate: rate })
+      break
+    }
+    case 'lyricScale': {
+      const scale = Number(value)
+      if (Number.isFinite(scale)) updateSettings({ lyricScale: scale })
+      break
+    }
+    case 'lyricOffset': {
+      const seconds = Number(value)
+      if (Number.isFinite(seconds)) updateSettings({ lyricOffsetMs: Math.round(seconds * 1000) })
+      break
+    }
+    case 'downloadQuality':
+      updateSettings({ downloadQuality: String(value) })
+      break
+    case 'concurrency': {
+      const count = Number(value)
+      if (count === 1 || count === 2 || count === 3) {
+        updateSettings({ downloadConcurrency: count })
+      }
+      break
+    }
   }
-}
-
-function onSpeed(event: Event): void {
-  const rate = Number(selectValue(event))
-  if (Number.isFinite(rate)) updateSettings({ playbackRate: rate })
-}
-
-function onLyricScale(event: Event): void {
-  const scale = Number(selectValue(event))
-  if (Number.isFinite(scale)) updateSettings({ lyricScale: scale })
-}
-
-function onLyricOffset(event: Event): void {
-  const seconds = Number(selectValue(event))
-  if (Number.isFinite(seconds)) updateSettings({ lyricOffsetMs: Math.round(seconds * 1000) })
-}
-
-function onDownloadQuality(event: Event): void {
-  updateSettings({ downloadQuality: selectValue(event) })
-}
-
-function onConcurrency(event: Event): void {
-  const value = Number(selectValue(event))
-  if (value === 1 || value === 2 || value === 3) updateSettings({ downloadConcurrency: value })
 }
 
 function clearPlaybackData(): void {
@@ -366,7 +491,15 @@ function resetSettings(): void {
           <span class="en">Appearance</span>
         </div>
         <div class="pgrp">
-          <div v-if="show('appearance:theme')" class="settingrow pickrow">
+          <div
+            v-if="show('appearance:theme')"
+            class="settingrow pickrow"
+            role="button"
+            tabindex="0"
+            @click="openPicker('theme')"
+            @keydown.enter.prevent="openPicker('theme')"
+            @keydown.space.prevent="openPicker('theme')"
+          >
             <span class="ico"><Icon name="settings" :size="15" /></span>
             <div class="body">
               <div class="lab">主题</div>
@@ -374,11 +507,6 @@ function resetSettings(): void {
             </div>
             <span class="val">{{ themeLabel }}</span>
             <Icon name="chevron-down" :size="13" />
-            <select :value="settingsState.theme" aria-label="主题" @change="onTheme">
-              <option v-for="theme in themes" :key="theme.value" :value="theme.value">
-                {{ theme.label }}
-              </option>
-            </select>
           </div>
 
           <div v-if="show('appearance:accent')" class="settingrow">
@@ -408,7 +536,15 @@ function resetSettings(): void {
           <span class="en">Playback</span>
         </div>
         <div class="pgrp">
-          <div v-if="show('playback:quality')" class="settingrow pickrow tall">
+          <div
+            v-if="show('playback:quality')"
+            class="settingrow pickrow tall"
+            role="button"
+            tabindex="0"
+            @click="openPicker('quality')"
+            @keydown.enter.prevent="openPicker('quality')"
+            @keydown.space.prevent="openPicker('quality')"
+          >
             <span class="ico"><Icon name="volume" :size="15" /></span>
             <div class="body">
               <div class="lab">默认音质</div>
@@ -416,18 +552,17 @@ function resetSettings(): void {
             </div>
             <span class="val">{{ currentQualityLabel }}</span>
             <Icon name="chevron-down" :size="13" />
-            <select
-              :value="settingsState.quality"
-              aria-label="默认音质"
-              @change="onQualitySelect"
-            >
-              <option v-for="quality in qualityOptions" :key="quality" :value="quality">
-                {{ quality ? qualityLabel(quality) : '自动（最高）' }}
-              </option>
-            </select>
           </div>
 
-          <div v-if="show('playback:mode')" class="settingrow pickrow">
+          <div
+            v-if="show('playback:mode')"
+            class="settingrow pickrow"
+            role="button"
+            tabindex="0"
+            @click="openPicker('mode')"
+            @keydown.enter.prevent="openPicker('mode')"
+            @keydown.space.prevent="openPicker('mode')"
+          >
             <span class="ico"><Icon name="repeat" :size="15" /></span>
             <div class="body">
               <div class="lab">播放模式</div>
@@ -435,14 +570,17 @@ function resetSettings(): void {
             </div>
             <span class="val">{{ modeLabel }}</span>
             <Icon name="chevron-down" :size="13" />
-            <select :value="playerState.mode" aria-label="播放模式" @change="onPlayMode">
-              <option v-for="mode in playModes" :key="mode.value" :value="mode.value">
-                {{ mode.label }}
-              </option>
-            </select>
           </div>
 
-          <div v-if="show('playback:speed')" class="settingrow pickrow">
+          <div
+            v-if="show('playback:speed')"
+            class="settingrow pickrow"
+            role="button"
+            tabindex="0"
+            @click="openPicker('speed')"
+            @keydown.enter.prevent="openPicker('speed')"
+            @keydown.space.prevent="openPicker('speed')"
+          >
             <span class="ico"><Icon name="timer" :size="15" /></span>
             <div class="body">
               <div class="lab">播放速度</div>
@@ -450,13 +588,6 @@ function resetSettings(): void {
             </div>
             <span class="val">{{ speedLabel }}</span>
             <Icon name="chevron-down" :size="13" />
-            <select
-              :value="settingsState.playbackRate"
-              aria-label="播放速度"
-              @change="onSpeed"
-            >
-              <option v-for="rate in speedOptions" :key="rate" :value="rate">{{ rate }}×</option>
-            </select>
           </div>
 
           <div v-if="show('playback:keepScreenOn')" class="settingrow">
@@ -547,7 +678,15 @@ function resetSettings(): void {
           <span class="en">Lyrics</span>
         </div>
         <div class="pgrp">
-          <div v-if="show('lyrics:scale')" class="settingrow pickrow">
+          <div
+            v-if="show('lyrics:scale')"
+            class="settingrow pickrow"
+            role="button"
+            tabindex="0"
+            @click="openPicker('lyricScale')"
+            @keydown.enter.prevent="openPicker('lyricScale')"
+            @keydown.space.prevent="openPicker('lyricScale')"
+          >
             <span class="ico"><Icon name="lyrics" :size="15" /></span>
             <div class="body">
               <div class="lab">歌词字号</div>
@@ -555,14 +694,17 @@ function resetSettings(): void {
             </div>
             <span class="val">{{ lyricScaleLabel }}</span>
             <Icon name="chevron-down" :size="13" />
-            <select :value="settingsState.lyricScale" aria-label="歌词字号" @change="onLyricScale">
-              <option v-for="scale in lyricScales" :key="scale.value" :value="scale.value">
-                {{ scale.label }}
-              </option>
-            </select>
           </div>
 
-          <div v-if="show('lyrics:offset')" class="settingrow pickrow">
+          <div
+            v-if="show('lyrics:offset')"
+            class="settingrow pickrow"
+            role="button"
+            tabindex="0"
+            @click="openPicker('lyricOffset')"
+            @keydown.enter.prevent="openPicker('lyricOffset')"
+            @keydown.space.prevent="openPicker('lyricOffset')"
+          >
             <span class="ico"><Icon name="timer" :size="15" /></span>
             <div class="body">
               <div class="lab">歌词偏移</div>
@@ -570,15 +712,6 @@ function resetSettings(): void {
             </div>
             <span class="val">{{ lyricOffsetLabel }}</span>
             <Icon name="chevron-down" :size="13" />
-            <select
-              :value="settingsState.lyricOffsetMs / 1000"
-              aria-label="歌词偏移"
-              @change="onLyricOffset"
-            >
-              <option v-for="ms in offsetOptions" :key="ms" :value="ms">
-                {{ ms > 0 ? '+' : '' }}{{ ms.toFixed(1) }} 秒
-              </option>
-            </select>
           </div>
 
           <div v-if="show('lyrics:show')" class="settingrow">
@@ -658,7 +791,15 @@ function resetSettings(): void {
           <span class="en">Download</span>
         </div>
         <div class="pgrp">
-          <div v-if="show('download:quality')" class="settingrow pickrow">
+          <div
+            v-if="show('download:quality')"
+            class="settingrow pickrow"
+            role="button"
+            tabindex="0"
+            @click="openPicker('downloadQuality')"
+            @keydown.enter.prevent="openPicker('downloadQuality')"
+            @keydown.space.prevent="openPicker('downloadQuality')"
+          >
             <span class="ico"><Icon name="download" :size="15" /></span>
             <div class="body">
               <div class="lab">下载音质</div>
@@ -666,15 +807,6 @@ function resetSettings(): void {
             </div>
             <span class="val">{{ downloadQualityLabel }}</span>
             <Icon name="chevron-down" :size="13" />
-            <select
-              :value="settingsState.downloadQuality"
-              aria-label="下载音质"
-              @change="onDownloadQuality"
-            >
-              <option v-for="quality in qualityOptions" :key="quality" :value="quality">
-                {{ quality ? qualityLabel(quality) : '跟随播放音质' }}
-              </option>
-            </select>
           </div>
 
           <div v-if="show('download:template')" class="settingrow colrow tall">
@@ -696,7 +828,15 @@ function resetSettings(): void {
             <div class="tplpreview">预览 · {{ templatePreview }}</div>
           </div>
 
-          <div v-if="show('download:concurrency')" class="settingrow pickrow">
+          <div
+            v-if="show('download:concurrency')"
+            class="settingrow pickrow"
+            role="button"
+            tabindex="0"
+            @click="openPicker('concurrency')"
+            @keydown.enter.prevent="openPicker('concurrency')"
+            @keydown.space.prevent="openPicker('concurrency')"
+          >
             <span class="ico"><Icon name="queue" :size="15" /></span>
             <div class="body">
               <div class="lab">同时下载数量</div>
@@ -704,15 +844,6 @@ function resetSettings(): void {
             </div>
             <span class="val">{{ concurrencyLabel }}</span>
             <Icon name="chevron-down" :size="13" />
-            <select
-              :value="settingsState.downloadConcurrency"
-              aria-label="同时下载数量"
-              @change="onConcurrency"
-            >
-              <option v-for="count in concurrencies" :key="count" :value="count">
-                {{ count }} 个
-              </option>
-            </select>
           </div>
         </div>
       </section>
@@ -887,6 +1018,17 @@ function resetSettings(): void {
         本应用仅提供插件运行框架与播放功能，不存储、不提供任何音乐源文件。音乐信息由你自行安装的合规插件提供。
       </p>
     </div>
+
+    <OptionSheet
+      :open="picker !== null"
+      :title="pickerMeta.title"
+      :sub="pickerMeta.sub"
+      :options="pickerMeta.options"
+      :value="pickerMeta.value"
+      :layout="pickerMeta.layout"
+      @close="closePicker"
+      @pick="applyPick"
+    />
   </div>
 </template>
 
@@ -1029,30 +1171,23 @@ function resetSettings(): void {
 }
 .pickrow {
   position: relative;
+  cursor: pointer;
+}
+.pickrow:active {
+  background: var(--tint-softer);
+}
+.pickrow:focus-visible {
+  outline: 2px solid var(--tint);
+  outline-offset: -2px;
 }
 .pickrow > .val {
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
 }
-.pickrow select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  border: 0;
-  background: transparent;
-  font-size: 16px;
-  -webkit-appearance: none;
-  appearance: none;
-}
-.pickrow select:focus-visible {
-  opacity: 1;
-  background: var(--tint-softer);
-  color: var(--ink);
-  font-size: 14px;
-  outline: none;
-  padding: 0 14px;
+.pickrow .body .sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dots {
   display: flex;

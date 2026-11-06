@@ -333,6 +333,7 @@ onUnmounted(() => {
     </header>
 
     <div class="p-main">
+      <div class="p-core">
       <div class="p-art">
         <img
           :src="track.artwork || '/default-cover.png'"
@@ -439,6 +440,7 @@ onUnmounted(() => {
           <Icon name="download" :size="20" />
           <span>下载</span>
         </button>
+      </div>
       </div>
 
       <div v-if="settingsState.showLyrics" class="p-lyric" @click="openLyrics">
@@ -803,14 +805,21 @@ onUnmounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 14px var(--pad) calc(18px + var(--safe-bottom));
+  padding: 12px var(--pad) calc(10px + var(--safe-bottom));
+}
+/* 主体（封面/信息/进度/控制）整体垂直居中，剩余高度不被单点吞掉 */
+.p-core {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: auto 0;
 }
 
 .p-art {
   position: relative;
-  width: min(294px, 36vh);
-  height: min(294px, 36vh);
-  margin: 4px auto 0;
+  width: min(320px, 78vw, 34vh);
+  height: min(320px, 78vw, 34vh);
+  margin: 0 auto;
   border-radius: 24px;
   flex: none;
 }
@@ -848,7 +857,7 @@ onUnmounted(() => {
 }
 
 .p-meta {
-  margin-top: 22px;
+  margin-top: clamp(12px, 2.2vh, 22px);
   text-align: center;
 }
 .p-title {
@@ -898,11 +907,7 @@ onUnmounted(() => {
 }
 
 .p-seek {
-  margin-top: 20px;
-}
-.p-main > .p-seek {
-  margin-top: auto;
-  padding-top: 22px;
+  margin-top: clamp(14px, 2.2vh, 24px);
 }
 .p-seek.tight {
   margin-top: 0;
@@ -948,7 +953,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 12px;
+  margin-top: clamp(12px, 2vh, 24px);
 }
 .p-aux,
 .p-skip,
@@ -1009,7 +1014,7 @@ onUnmounted(() => {
 .p-sub {
   display: flex;
   justify-content: space-between;
-  margin-top: 14px;
+  margin-top: clamp(14px, 2vh, 26px);
   padding: 0 2px;
 }
 .p-sub-item {
@@ -1032,8 +1037,9 @@ onUnmounted(() => {
 }
 
 .p-lyric {
-  margin-top: auto;
-  padding-top: 12px;
+  flex: none;
+  margin-top: 0;
+  padding-top: clamp(8px, 1.4vh, 16px);
   text-align: center;
 }
 /* 队列打开时，压暗层的播放信息会与弹层内容重影，先淡出 */

@@ -1243,13 +1243,13 @@ onUnmounted(() => {
 }
 .ly-char {
   color: rgba(255, 255, 255, 0.4);
-  transition: color 0.12s linear;
+  transition: color 0.16s linear, text-shadow 0.24s linear;
 }
-.ly-line.cur .ly-char {
-  color: rgba(255, 255, 255, 0.82);
-}
+/* 唱过的字：青瓷绿 + 微光。不要再加 `.ly-line.cur .ly-char` 这类三级规则去压它，
+   否则 `.ly-char.on`（两级）会被压住，进度永远不变色——这就是之前的老问题。 */
 .ly-char.on {
-  color: #f4faf7;
+  color: #a9e4cf;
+  text-shadow: 0 0 18px rgba(169, 228, 207, 0.36);
 }
 .ly-tr {
   display: block;

@@ -164,10 +164,23 @@ export function wordCharRanges(line: TimedLyricLine): WordCharRange[] {
   return ranges
 }
 
+/** 中日韩字符按 235ms、其余（英文/数字/标点）按 95ms 粗估一个字唱多久。 */
+function estimateSungDuration(text: string): number {
+  let ms = 0
+  for (const char of Array.from(String(text ?? ''))) {
+    if (/\s/.test(char)) continue
+    ms += /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(char) ? 235 : 95
+  }
+  return Math.max(800, ms)
+}
+
 /**
  * 当前应该变色的字数。
  * 有逐字时间就按词推进（每个词内部再按比例补间），没有就按整行线性推进。
- * 行的有效结束时间最长按 15 秒计算，避免缺失行尾时一行拖完整首歌。
+ *
+ * 行级时间里的 `endTimeMs` 往往是「下一行开始」，把间奏也算进去了，
+ * 直接用会让变色一路慢慢爬到下一行、听起来像不跟唱；这里按字数估一个
+ * 演唱时长（并夹在行间隔之内），唱完立即整行点亮。
  */
 export function sungCharCount(line: TimedLyricLine, nowMs: number): number {
   const total = Array.from(String(line.text ?? '')).length
@@ -187,9 +200,9 @@ export function sungCharCount(line: TimedLyricLine, nowMs: number): number {
   }
   const start = line.startTimeMs
   const rawEnd = Number(line.endTimeMs)
-  let end = Number.isFinite(rawEnd) && rawEnd > start ? rawEnd : start + 5000
-  end = Math.min(end, start + 15000)
+  const gap = Number.isFinite(rawEnd) && rawEnd > start ? Math.min(rawEnd - start, 15000) : 5000
+  const sung = Math.min(gap, estimateSungDuration(line.text))
   if (nowMs <= start) return 0
-  if (nowMs >= end) return total
-  return Math.min(total, Math.floor(((nowMs - start) / (end - start)) * total))
+  if (nowMs >= start + sung) return total
+  return Math.min(total, Math.floor(((nowMs - start) / sung) * total))
 }

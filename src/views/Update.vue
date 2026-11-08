@@ -1,19 +1,69 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
+import OptionSheet from '@/components/OptionSheet.vue'
 import {
   checkForUpdate,
   downloadUpdate,
   ignoreVersion,
   installDownloadedUpdate,
   openReleasePage,
+  probeMirrors,
   setAutoCheck,
+  setMirrorAuto,
+  setMirrorBackup,
+  setMirrorPrimary,
   updateState
 } from '@/core/updater'
+import { MIRRORS } from '@/core/update-mirror'
 
 const router = useRouter()
 const REPO_URL = 'https://github.com/baipiao5555/CeruMusic-Mobile'
+
+/** 下载加速：正在挑主用 / 备用线路 */
+const mirrorPicker = ref<'primary' | 'backup' | null>(null)
+
+function speedText(id: string): string {
+  const value = updateState.mirrorSpeed[id]
+  if (value == null) return ''
+  return value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(1)}s`
+}
+
+const mirrorOptions = computed(() =>
+  MIRRORS.map((mirror) => {
+    const speed = speedText(mirror.id)
+    const desc = mirror.id === 'direct' ? '仅在反代全部失败时使用' : speed ? `${mirror.hint} · ${speed}` : mirror.hint
+    return { value: mirror.id, label: mirror.label, desc }
+  })
+)
+
+const mirrorPickMeta = computed(() => ({
+  title: mirrorPicker.value === 'backup' ? '备用下载线路' : '主用下载线路',
+  sub: '下载安装包时先走主用，失败自动换备用',
+  value: mirrorPicker.value === 'backup' ? updateState.mirrorBackup : updateState.mirrorPrimary
+}))
+
+function applyMirrorPick(value: string | number): void {
+  const id = String(value)
+  if (mirrorPicker.value === 'backup') setMirrorBackup(id)
+  else setMirrorPrimary(id)
+  mirrorPicker.value = null
+}
+
+function findLabel(id: string): string {
+  return MIRRORS.find((mirror) => mirror.id === id)?.label ?? '未选择'
+}
+
+const mirrorSummary = computed(() => {
+  if (updateState.probingMirrors) return '正在测试各条反代线路'
+  const entries = MIRRORS.map((mirror) => ({ mirror, ms: updateState.mirrorSpeed[mirror.id] })).filter(
+    (item) => item.ms != null
+  )
+  if (!entries.length) return '尚未测速，默认 ghfast → gh-proxy'
+  const fastest = entries.sort((a, b) => (a.ms as number) - (b.ms as number))[0]
+  return `${entries.length} 条可用 · 最快 ${fastest.mirror.label} ${speedText(fastest.mirror.id)}`
+})
 
 const notes = computed(() =>
   (updateState.latest?.body ?? '')
@@ -59,13 +109,14 @@ const statusTitle = computed(() => {
 })
 
 const statusDetail = computed(() => {
-  if (updateState.checking) return '正在读取 GitHub Release'
+  if (updateState.checking) return '直连不通会自动换反代读取'
   if (updateState.error) return updateState.error
   if (!updateState.latest) return '联网后点右侧按钮再试一次'
   if (updateState.hasUpdate) {
     const published = formatDate(updateState.latest.publishedAt)
     const size = formatSize(updateState.latest.apkSize)
-    return [published && `发布于 ${published}`, size].filter(Boolean).join(' · ')
+    const line = updateState.downloading && updateState.activeMirror ? `线路 ${updateState.activeMirror}` : ''
+    return [published && `发布于 ${published}`, size, line].filter(Boolean).join(' · ')
   }
   return `${lastCheckedText.value} 检查 · 最新 ${updateState.latest.tag}`
 })
@@ -205,6 +256,68 @@ onMounted(() => {
       </template>
 
       <div class="group-title">
+        <span class="cn">下载加速</span>
+        <span class="en">Mirror</span>
+      </div>
+      <div class="pgrp">
+        <div
+          class="settingrow pickrow"
+          role="button"
+          tabindex="0"
+          @click="mirrorPicker = 'primary'"
+          @keydown.enter.prevent="mirrorPicker = 'primary'"
+          @keydown.space.prevent="mirrorPicker = 'primary'"
+        >
+          <span class="ico"><Icon name="download" :size="15" /></span>
+          <div class="body">
+            <div class="lab">主用线路</div>
+            <div class="sub">下载安装包时优先走这条</div>
+          </div>
+          <span class="val">{{ findLabel(updateState.mirrorPrimary) }}</span>
+          <Icon name="chevron-down" :size="13" />
+        </div>
+        <div
+          class="settingrow pickrow"
+          role="button"
+          tabindex="0"
+          @click="mirrorPicker = 'backup'"
+          @keydown.enter.prevent="mirrorPicker = 'backup'"
+          @keydown.space.prevent="mirrorPicker = 'backup'"
+        >
+          <span class="ico"><Icon name="swap" :size="15" /></span>
+          <div class="body">
+            <div class="lab">备用线路</div>
+            <div class="sub">主用失败时自动接上</div>
+          </div>
+          <span class="val">{{ findLabel(updateState.mirrorBackup) }}</span>
+          <Icon name="chevron-down" :size="13" />
+        </div>
+        <div class="settingrow">
+          <span class="ico"><Icon name="timer" :size="15" /></span>
+          <div class="body">
+            <div class="lab">按测速自动排序</div>
+            <div class="sub">测速后把最快的线路放到前面</div>
+          </div>
+          <button
+            class="switch"
+            :class="{ on: updateState.mirrorAuto }"
+            role="switch"
+            :aria-checked="updateState.mirrorAuto"
+            aria-label="按测速自动排序"
+            @click="setMirrorAuto(!updateState.mirrorAuto)"
+          />
+        </div>
+        <button class="settingrow linkrow" :disabled="updateState.probingMirrors" @click="probeMirrors">
+          <span class="ico"><Icon name="refresh" :size="15" /></span>
+          <div class="body">
+            <div class="lab">{{ updateState.probingMirrors ? '正在测速…' : '测速并保存' }}</div>
+            <div class="sub">{{ mirrorSummary }}</div>
+          </div>
+          <Icon name="chevron" :size="14" />
+        </button>
+      </div>
+
+      <div class="group-title">
         <span class="cn">更新设置</span>
         <span class="en">Update</span>
       </div>
@@ -258,8 +371,19 @@ onMounted(() => {
 
       <p class="foot">
         更新包来自本项目的 GitHub Release，使用与当前应用相同的签名覆盖安装，不会清除收藏、歌单和下载记录。
+        下载会先走主用线路，失败自动换备用，最后才回落到直连 GitHub。
       </p>
     </div>
+
+    <OptionSheet
+      :open="mirrorPicker !== null"
+      :title="mirrorPickMeta.title"
+      :sub="mirrorPickMeta.sub"
+      :options="mirrorOptions"
+      :value="mirrorPickMeta.value"
+      @close="mirrorPicker = null"
+      @pick="applyMirrorPick"
+    />
   </div>
 </template>
 

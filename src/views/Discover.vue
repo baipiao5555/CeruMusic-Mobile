@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
@@ -33,6 +33,25 @@ const categories = ref<any[]>([])
 const activeCategory = ref(0)
 const loading = ref(false)
 const error = ref('')
+const scrollEl = ref<HTMLElement | null>(null)
+
+/**
+ * 首页数据缓存：从其它页面返回时不再清空重拉，
+ * 否则每次回首页都会闪一次骨架、并且丢掉滚动位置。
+ */
+const CACHE_TTL = 5 * 60 * 1000
+interface HomeCache {
+  providerId: string
+  charts: any[]
+  playlists: any[]
+  categories: any[]
+  activeCategory: number
+  at: number
+}
+const homeCaches = new Map<string, HomeCache>()
+let lastScrollTop = 0
+let loadingProviderId = ''
+let restoring = false
 
 const history = computed(() => getHistory().slice(0, 8))
 const favorites = computed(() => libraryState.favorites.slice(0, 8))
@@ -107,20 +126,32 @@ async function loadPlaylists(): Promise<void> {
   try {
     const page = await invokeProvider(provider, 'playlists.list', [category.ref, undefined])
     playlists.value = (page?.items ?? []).filter((item: any) => item.ref?.kind === 'playlist')
+    saveCache(provider.providerId)
   } catch (err: any) {
     console.warn('加载歌单失败:', err)
   }
 }
 
-async function load(): Promise<void> {
-  const provider = selected.value
-  charts.value = []
-  playlists.value = []
-  categories.value = []
-  activeCategory.value = 0
-  error.value = ''
-  if (!provider) return
-  loading.value = true
+function applyCache(cache: HomeCache): void {
+  charts.value = cache.charts
+  playlists.value = cache.playlists
+  categories.value = cache.categories
+  activeCategory.value = cache.activeCategory
+}
+
+function saveCache(providerId: string): void {
+  homeCaches.set(providerId, {
+    providerId,
+    charts: charts.value,
+    playlists: playlists.value,
+    categories: categories.value,
+    activeCategory: activeCategory.value,
+    at: Date.now()
+  })
+}
+
+/** 拉一轮数据但不碰 loading 状态：过期缓存用它做静默刷新。 */
+async function fetchAll(provider: ProviderHandle): Promise<void> {
   try {
     if (provider.methods.includes('charts.list')) {
       const chartPage = await invokeProvider(provider, 'charts.list', [])
@@ -128,7 +159,7 @@ async function load(): Promise<void> {
     }
   } catch (err: any) {
     console.warn('加载榜单失败:', err)
-    error.value = '榜单没能加载出来'
+    if (!charts.value.length) error.value = '榜单没能加载出来'
   }
   try {
     if (
@@ -137,7 +168,7 @@ async function load(): Promise<void> {
     ) {
       const res = await invokeProvider(provider, 'playlists.categories', [])
       categories.value = res?.items ?? []
-      const category = categories.value[0]
+      const category = categories.value[activeCategory.value] ?? categories.value[0]
       if (category?.ref) {
         const page = await invokeProvider(provider, 'playlists.list', [category.ref, undefined])
         playlists.value = (page?.items ?? []).filter((item: any) => item.ref?.kind === 'playlist')
@@ -146,7 +177,43 @@ async function load(): Promise<void> {
   } catch (err: any) {
     console.warn('加载歌单失败:', err)
   }
+}
+
+async function load(force = false): Promise<void> {
+  const provider = selected.value
+  if (!provider) {
+    charts.value = []
+    playlists.value = []
+    categories.value = []
+    activeCategory.value = 0
+    error.value = ''
+    loading.value = false
+    return
+  }
+  // 同一音源正在拉数据时直接跳过，避免 onMounted 与 watch 各拉一次
+  if (loading.value && loadingProviderId === provider.providerId && !force) return
+
+  const cached = homeCaches.get(provider.providerId) ?? null
+  if (cached && !force) {
+    applyCache(cached)
+    loading.value = false
+    if (Date.now() - cached.at < CACHE_TTL) return
+    // 过期了也先把旧内容留在屏上，后台悄悄换新
+    void fetchAll(provider).then(() => saveCache(provider.providerId))
+    return
+  }
+
+  charts.value = []
+  playlists.value = []
+  categories.value = []
+  activeCategory.value = 0
+  error.value = ''
+  loading.value = true
+  loadingProviderId = provider.providerId
+  await fetchAll(provider)
   loading.value = false
+  loadingProviderId = ''
+  saveCache(provider.providerId)
 }
 
 function selectCategory(index: number): void {
@@ -191,13 +258,71 @@ function playFavorite(index: number): void {
   void playTracks(favorites.value, index)
 }
 
-onMounted(load)
-watch(selected, load)
+async function restoreScroll(): Promise<void> {
+  const target = lastScrollTop
+  if (target <= 0) return
+  // 进场动画期间容器高度还是 0，赋值会被夹回 0，所以补几帧重试；
+  // 重试期间忽略 onScroll，否则被夹出来的 0 会把记住的位置冲掉。
+  await nextTick()
+  restoring = true
+  let tries = 0
+  const restore = (): void => {
+    const el = scrollEl.value
+    if (!el) {
+      restoring = false
+      return
+    }
+    el.scrollTop = target
+    if (Math.abs(el.scrollTop - target) > 2 && tries++ < 40) {
+      requestAnimationFrame(restore)
+    } else {
+      lastScrollTop = target
+      restoring = false
+    }
+  }
+  restore()
+}
+
+onMounted(async () => {
+  await load()
+  await restoreScroll()
+})
+
+// keep-alive 把页面移出文档时浏览器会把 scrollTop 归零，回到页面时手动放回
+onActivated(() => {
+  void restoreScroll()
+})
+
+function onScroll(): void {
+  if (restoring) return
+  lastScrollTop = scrollEl.value?.scrollTop ?? 0
+}
+
+onBeforeUnmount(() => {
+  // 离场时元素可能已被移出文档、scrollTop 读成 0，别用这个 0 覆盖记住的位置
+  const value = scrollEl.value?.scrollTop ?? 0
+  if (value > 0) lastScrollTop = value
+})
+
+watch(
+  () => selected.value?.providerId,
+  (id) => {
+    if (!id) return
+    const cached = homeCaches.get(id)
+    if (cached) {
+      applyCache(cached)
+      loading.value = false
+      if (Date.now() - cached.at > CACHE_TTL) void load(true)
+      return
+    }
+    void load(true)
+  }
+)
 </script>
 
 <template>
   <div class="screen">
-    <div class="scroll safe-t-lg">
+    <div class="scroll safe-t-lg" ref="scrollEl" @scroll.passive="onScroll">
       <div class="pad">
         <div class="eyebrow">Ceru Music · {{ daypart }}</div>
       </div>
@@ -371,7 +496,7 @@ watch(selected, load)
             <div class="glyph"><Icon name="wifi-off" :size="34" /></div>
             <h3>{{ error }}</h3>
           <p>检查网络后重试，或者换一个音源。</p>
-            <button class="btn btn-ghost btn-sm mt8" @click="load">
+            <button class="btn btn-ghost btn-sm mt8" @click="load(true)">
               <Icon name="refresh" :size="16" /> 重新加载
             </button>
           </div>

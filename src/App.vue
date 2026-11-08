@@ -37,6 +37,8 @@ import { routeDirection } from '@/router/transition'
 const router = useRouter()
 const route = useRoute()
 const showNav = computed(() => route.path !== '/player')
+/** 四个 tab 页常驻内存：返回时不重新挂载、不重新拉数据，滚动位置也自然保留 */
+const tabViewNames = ['Discover', 'Search', 'Playlists', 'Library']
 const nativePlatform = Capacitor.isNativePlatform()
 
 function openToastAction(toast: { id: number; actionTo?: string }): void {
@@ -286,7 +288,9 @@ watch(navigationRequest, (request) => {
               : 'page-forward'
         "
       >
-        <component :is="Component" />
+        <keep-alive :include="tabViewNames">
+          <component :is="Component" />
+        </keep-alive>
       </transition>
     </router-view>
     <div v-if="showNav" class="dock">

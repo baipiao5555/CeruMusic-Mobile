@@ -365,6 +365,22 @@ onUnmounted(() => {
         歌词来源：{{ playerState.lyricSource }}
       </div>
 
+      <div v-if="settingsState.showLyrics" class="p-lyric" @click="openLyrics">
+        <div class="p-lyric-body">
+          <template v-if="playerState.lyrics.length">
+            <div class="p-lyric-cur">
+              {{ lyricCurrent?.text || '♪' }}
+            </div>
+            <div class="p-lyric-next">
+              {{ playerState.lyrics[playerState.activeLyric + 1]?.text || ' ' }}
+            </div>
+          </template>
+          <div v-else class="p-lyric-cur dim">
+            {{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词 · 点这里在线匹配' }}
+          </div>
+        </div>
+      </div>
+
       <div class="p-seek">
         <input
           class="p-range"
@@ -443,23 +459,6 @@ onUnmounted(() => {
           <Icon name="download" :size="20" />
           <span>下载</span>
         </button>
-      </div>
-
-      <div v-if="settingsState.showLyrics" class="p-lyric" @click="openLyrics">
-        <div class="p-grab" />
-        <div class="p-lyric-body">
-          <template v-if="playerState.lyrics.length">
-            <div class="p-lyric-cur">
-              {{ lyricCurrent?.text || '♪' }}
-            </div>
-            <div class="p-lyric-next">
-              {{ playerState.lyrics[playerState.activeLyric + 1]?.text || ' ' }}
-            </div>
-          </template>
-          <div v-else class="p-lyric-cur dim">
-            {{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词 · 点这里在线匹配' }}
-          </div>
-        </div>
       </div>
       </div>
 
@@ -1066,19 +1065,22 @@ onUnmounted(() => {
 
 .p-lyric {
   flex: none;
-  margin-top: clamp(16px, 3.4vh, 34px);
+  margin-top: clamp(10px, 1.8vh, 20px);
   padding: 0 2px;
   text-align: center;
   cursor: pointer;
 }
-/* 歌词行数固定（当前 1 行 + 下一句 1 行），长句省略，
-   这样任何长度的歌词都不会把播放页撑开或压到底部 */
+/* 歌词放在歌名下方、进度条上方；行数固定（当前最多 2 行 + 下一句 1 行），
+   长句换行/省略都不会改变页面高度 */
 .p-lyric-body {
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 3px;
   min-height: 65px;
+}
+.p-lyric + .p-seek {
+  margin-top: clamp(10px, 1.6vh, 18px);
 }
 /* 矮屏（≤700px，例如 360×640）收紧节奏，保证整页不溢出 */
 @media (max-height: 700px) {
@@ -1125,13 +1127,6 @@ onUnmounted(() => {
 .player.q-open .p-lyric {
   opacity: 0;
   transition: opacity 0.16s var(--e-out);
-}
-.p-grab {
-  width: 34px;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 0 auto 9px;
 }
 .p-lyric-cur {
   font-family: var(--serif);

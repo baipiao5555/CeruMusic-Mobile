@@ -825,8 +825,8 @@ onUnmounted(() => {
 
 .p-art {
   position: relative;
-  width: min(340px, 80vw, calc(33vh - 6px));
-  height: min(340px, 80vw, calc(33vh - 6px));
+  width: min(360px, 82vw, calc(37vh - 6px));
+  height: min(360px, 82vw, calc(37vh - 6px));
   margin: 0 auto;
   border-radius: 24px;
   flex: none;
@@ -961,7 +961,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: clamp(12px, 2vh, 24px);
+  margin-top: clamp(14px, 2.8vh, 32px);
 }
 .p-aux,
 .p-skip,
@@ -1041,7 +1041,7 @@ onUnmounted(() => {
 .p-sub {
   display: flex;
   justify-content: space-between;
-  margin-top: clamp(14px, 2vh, 26px);
+  margin-top: clamp(14px, 2.8vh, 32px);
   padding: 0 2px;
 }
 .p-sub-item {
@@ -1065,7 +1065,7 @@ onUnmounted(() => {
 
 .p-lyric {
   flex: none;
-  margin-top: clamp(10px, 1.8vh, 20px);
+  margin-top: clamp(10px, 2.2vh, 24px);
   padding: 0 2px;
   text-align: center;
   cursor: pointer;
@@ -1080,7 +1080,7 @@ onUnmounted(() => {
   min-height: 65px;
 }
 .p-lyric + .p-seek {
-  margin-top: clamp(10px, 1.6vh, 18px);
+  margin-top: clamp(10px, 2vh, 22px);
 }
 /* 矮屏（≤700px，例如 360×640）收紧节奏，保证整页不溢出 */
 @media (max-height: 700px) {

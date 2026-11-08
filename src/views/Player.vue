@@ -660,6 +660,7 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <div class="ps-body">
         <div class="ps-label">播放速度</div>
         <div class="chip-row wrap">
           <button
@@ -736,10 +737,13 @@ onUnmounted(() => {
           </button>
         </div>
         <p class="ps-hint">{{ sleepLabel }}</p>
+        </div>
 
-        <button class="btn btn-primary btn-block mt16" @click="downloadCurrent">
-          <Icon name="download" :size="17" /> 下载当前歌曲
-        </button>
+        <div class="ps-foot">
+          <button class="btn btn-primary btn-block" @click="downloadCurrent">
+            <Icon name="download" :size="17" /> 下载当前歌曲
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1398,25 +1402,43 @@ onUnmounted(() => {
   height: 30px;
 }
 
-/* 播放设置 sheet */
+/* 播放设置 sheet：头固定、中间滚动、下载按钮常驻底部 */
 .ps {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.ps-body {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding-bottom: calc(26px + var(--safe-bottom));
+  padding-bottom: 6px;
+}
+.ps-foot {
+  flex: none;
+  padding: 10px var(--pad) calc(16px + var(--safe-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--line-2);
 }
 .ps > .ps-label,
 .ps > .ps-hint,
 .ps > .ps-row,
 .ps > .btn-block,
-.ps > .ps-actions {
+.ps > .ps-actions,
+.ps-body > .ps-label,
+.ps-body > .ps-hint,
+.ps-body > .ps-row {
   margin-left: var(--pad);
   margin-right: var(--pad);
 }
-.ps > .chip-row {
+.ps > .chip-row,
+.ps-body > .chip-row {
   padding: 0 var(--pad);
 }
 .ps-label {

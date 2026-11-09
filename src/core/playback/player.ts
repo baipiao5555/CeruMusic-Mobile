@@ -60,6 +60,15 @@ export const playerState = reactive({
 let audio: HTMLAudioElement | null = null
 let resolveToken = 0
 let startPending = false
+/**
+ * 新音源已经设进 <audio>、但它的 metadata 还没到时为 true。
+ *
+ * 这段时间里 audio.currentTime 还停在上一首的位置（Chrome 在 metadata 到达前
+ * 不会把时间轴切过去），谁读它谁就拿到旧进度：时钟会把旧位置写回 playerState，
+ * 随后的 loadedmetadata 又拿这个旧位置去 seek，于是新歌一开口就从旧歌的进度开始。
+ * 所以加载期间一律不读也不写进度，只认 startPlayback 给的目标位置。
+ */
+let awaitingLoad = false
 let pendingStartSeek = 0
 let reloadRequired = false
 let blobUrl: string | null = null
@@ -78,6 +87,7 @@ function clearLoadTimer(): void {
 /** Stops the shared audio element and drops its current source. */
 function detachAudioSource(): void {
   if (!audio) return
+  awaitingLoad = false
   audio.pause()
   audio.removeAttribute('src')
   audio.load()
@@ -161,7 +171,13 @@ export function savePlaybackState(): void {
     saveTimer = null
   }
   // timeupdate can be throttled in the background; read the element directly.
-  if (audio && !startPending && audio.getAttribute('src') && Number.isFinite(audio.currentTime)) {
+  if (
+    audio &&
+    !startPending &&
+    !awaitingLoad &&
+    audio.getAttribute('src') &&
+    Number.isFinite(audio.currentTime)
+  ) {
     playerState.currentTime = audio.currentTime
   }
   writePlayerState()
@@ -190,6 +206,7 @@ export function restorePlayer(): void {
     audio!.pause()
     audio!.removeAttribute('src')
     audio!.load()
+    awaitingLoad = false
     if (currentTrack()) {
       attachMediaSession(currentTrack()!)
       void loadLyrics(currentTrack()!)
@@ -212,7 +229,12 @@ function tickClock(): void {
   clockRaf = null
   if (!audio || !playerState.playing) return
   const now = performance.now()
-  const media = Number.isFinite(audio.currentTime) ? audio.currentTime : playerState.currentTime
+  if (awaitingLoad) {
+    // 新音源还没就位：audio.currentTime 仍是上一首的位置，别写回界面。
+    updateActiveLyric()
+    clockRaf = requestAnimationFrame(tickClock)
+    return
+  }  const media = Number.isFinite(audio.currentTime) ? audio.currentTime : playerState.currentTime
   if (media !== clockMedia) {
     clockMedia = media
     clockAt = now
@@ -273,7 +295,7 @@ export function initPlayer(): void {
   })
   audio.addEventListener('timeupdate', () => {
     // Ignore progress from the previous track while a new source is loading.
-    if (!audio || startPending || !audio.getAttribute('src')) return
+    if (!audio || startPending || awaitingLoad || !audio.getAttribute('src')) return
     playerState.currentTime = audio.currentTime
     // 暂停/后台时 rAF 时钟不跑，这里补一次高亮，保证 seek 后歌词立刻跟上。
     updateActiveLyric()
@@ -296,8 +318,11 @@ export function initPlayer(): void {
   })
   audio.addEventListener('playing', startClock)
   audio.addEventListener('ended', stopClock)
+  audio.addEventListener('error', () => {
+    awaitingLoad = false
+  })
   audio.addEventListener('durationchange', () => {
-    if (!audio) return
+    if (!audio || awaitingLoad) return
     playerState.duration = Number.isFinite(audio.duration) ? audio.duration : playerState.duration
   })
   audio.addEventListener('loadedmetadata', () => {
@@ -307,11 +332,6 @@ export function initPlayer(): void {
       : currentTrack()?.durationMs
         ? currentTrack()!.durationMs / 1000
         : 0
-    if (playerState.currentTime > 0.5) {
-      try {
-        audio.currentTime = playerState.currentTime
-      } catch {}
-    }
   })
   audio.addEventListener('waiting', () => {
     playerState.loading = true
@@ -485,6 +505,8 @@ async function startPlayback(
   playerState.loading = true
   playerState.error = ''
   playerState.currentTime = seekTo
+  // 从这里开始到新源 metadata 到达，进度条只认 seekTo，不许读旧的 audio.currentTime。
+  awaitingLoad = true
   clearLoadTimer()
   loadTimer = setTimeout(() => {
     if (token !== resolveToken || !playerState.loading) return
@@ -510,17 +532,22 @@ async function startPlayback(
     if (url.startsWith('blob:')) blobUrl = url
     audio!.src = url
     const sourceUrl = audio!.src
-    if (seekTo > 0) {
-      audio!.addEventListener(
-        'loadedmetadata',
-        () => {
+    // 新音源的 metadata 一到就解除时间轴锁定；要续播的位置也在这里落下去。
+    audio!.addEventListener(
+      'loadedmetadata',
+      () => {
+        // 连点多个音源时，只有最后一次 startPlayback 注册的监听可以落位置。
+        if (token !== resolveToken) return
+        awaitingLoad = false
+        if (seekTo > 0) {
           try {
             audio!.currentTime = seekTo
           } catch {}
-        },
-        { once: true }
-      )
-    }
+        }
+        resetClock()
+      },
+      { once: true }
+    )
     await audio!.play()
     if (token !== resolveToken) {
       // Pause was pressed while the source was resolving. Don't touch a

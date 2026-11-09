@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '@/components/Icon.vue'
@@ -15,17 +15,42 @@ import { libraryState } from '@/core/library'
 import {
   clearSearchHistory,
   highlightParts,
+  matchScore,
+  normalizeText,
   rankTracks,
   rememberSearch,
   rememberTracks,
   restoreSearchHistory,
   searchHistory,
-  suggestTracks
+  searchLyricCatalog,
+  suggestTracks,
+  type LyricCandidate
 } from '@/core/search'
+import { matchCloudLyrics } from '@/core/lyrics/cloud'
 
 /** 一次搜索最多取多少条。 */
 const RESULT_LIMIT = 30
 const SUGGEST_LIMIT = 6
+
+/** 搜索方式：按歌名（默认）还是按一句歌词找歌。 */
+const MODE_KEY = 'ceru.search.mode.v1'
+type SearchMode = 'name' | 'lyric'
+const mode = ref<SearchMode>(localStorage.getItem(MODE_KEY) === 'lyric' ? 'lyric' : 'name')
+const lyricHits = ref<Record<string, string>>({})
+const lyricProgress = ref({ done: 0, total: 0 })
+/** 歌词库认出来了、但当前音源搜不到的歌，用来解释「为什么是空的」。 */
+const lyricMissing = ref<string[]>([])
+
+function setMode(next: SearchMode): void {
+  if (mode.value === next) return
+  mode.value = next
+  localStorage.setItem(MODE_KEY, next)
+  lyricHits.value = {}
+  lyricProgress.value = { done: 0, total: 0 }
+  lyricMissing.value = []
+  error.value = ''
+  if (query.value.trim()) void runSearch()
+}
 
 const route = useRoute()
 const providers = computed(() => allProviders())
@@ -102,7 +127,10 @@ const playlistGroups = computed(() => {
 
 /** 音源明确回「没有结果」是中性态，别拿它当报错。 */
 const noResult = computed(
-  () => !loading.value && !results.value.length && error.value === '没有找到相关歌曲'
+  () =>
+    !loading.value &&
+    !results.value.length &&
+    (error.value === '没有找到相关歌曲' || error.value === '没有找到包含这句歌词的歌')
 )
 
 /** 真错误：没装音源、音源不支持、请求抛错。 */
@@ -112,6 +140,7 @@ const failureVisible = computed(
     !results.value.length &&
     Boolean(error.value) &&
     error.value !== '没有找到相关歌曲' &&
+    error.value !== '没有找到包含这句歌词的歌' &&
     providers.value.length > 0
 )
 
@@ -185,6 +214,149 @@ function fallbackQueries(text: string): string[] {
     .slice(0, 2)
 }
 
+/**
+ * 按歌词找歌：音源只认歌名/歌手，所以先用歌词片段里的词搜出候选，
+ * 再逐个比对云端歌词（QQ / 网易云 / LrcLib），只留真正包含这句的歌。
+ */
+function lyricSearchTerms(snippet: string): string[] {
+  const cleaned = snippet.replace(/[、，。,.!！?？~～…:：;；"'“”‘’()（）\[\]【】]/g, ' ').trim()
+  const tokens = cleaned.split(/\s+/).filter((item) => item.length >= 2)
+  const longest = tokens.sort((a, b) => b.length - a.length)[0] ?? cleaned
+  const terms = [longest]
+  if (longest.length > 6) terms.push(longest.slice(0, 6))
+  if (longest.length > 10) terms.push(longest.slice(0, 10))
+  return [...new Set(terms.filter((item) => item.length >= 2))].slice(0, 2)
+}
+
+function lyricLineFor(results: Array<{ text: string }>, snippet: string): string {
+  const needle = normalizeText(snippet)
+  if (!needle) return ''
+  for (const line of results) {
+    const plain = String(line.text ?? '').replace(/\[[^\]]*\]/g, '').trim()
+    if (!plain) continue
+    if (normalizeText(plain).includes(needle)) return plain
+  }
+  return ''
+}
+
+async function providerCandidates(provider: ProviderHandle, text: string): Promise<Track[]> {
+  const page = await invokeProvider(provider, 'tracks.search', [
+    { query: text, kinds: ['track'], filters: {}, limit: 8 }
+  ])
+  return (page?.items ?? [])
+    .map((item: any) => toTrack(item, provider))
+    .filter((track: Track) => Boolean(track.id))
+}
+
+/** 歌词库里查到了歌名，再回音源找这首；歌手对上会加分，避免撞到同名翻唱。 */
+function pickBestMatch(tracks: Track[], candidate: LyricCandidate): Track | null {
+  const artist = normalizeText(candidate.artist.split(' / ')[0] ?? '')
+  let best: { track: Track; score: number } | null = null
+  for (const track of tracks) {
+    let score = matchScore(track, candidate.title)
+    if (score < 0) continue
+    if (artist && normalizeText(track.artist).includes(artist)) score += 14
+    if (!best || score > best.score) best = { track, score }
+  }
+  return best && best.score >= 84 ? best.track : null
+}
+
+/**
+ * 按歌词找歌：先问歌词库（QQ 的歌词检索直接返回含这句的歌），拿到歌名/歌手后
+ * 回当前音源找可播放的曲目；歌词库不可用或没命中时，退回「拿歌词里的词当关键词」的老办法。
+ */
+async function searchByLyric(
+  provider: ProviderHandle,
+  snippet: string,
+  seq: number
+): Promise<{ tracks: Track[]; lines: Record<string, string>; missing: string[] }> {
+  const hits: Track[] = []
+  const lines: Record<string, string> = {}
+  const seen = new Set<string>()
+  const resolved = new Set<string>()
+  const push = (track: Track, line: string): void => {
+    const key = `${track.providerId}:${track.id}`
+    if (seen.has(key)) return
+    seen.add(key)
+    hits.push(track)
+    if (line) lines[key] = line
+  }
+
+  const catalog = await searchLyricCatalog(snippet).catch(() => [] as LyricCandidate[])
+  if (seq !== requestSeq) return { tracks: [], lines: {}, missing: [] }
+  const picks = catalog.slice(0, 6)
+  lyricProgress.value = { done: 0, total: picks.length }
+
+  let cursor = 0
+  const resolveOne = async (candidate: LyricCandidate): Promise<void> => {
+    const first = candidate.artist ? `${candidate.title} ${candidate.artist.split(' / ')[0]}` : candidate.title
+    let track: Track | null = null
+    for (const text of [first, candidate.title]) {
+      if (track || seq !== requestSeq) break
+      try {
+        track = pickBestMatch(await providerCandidates(provider, text), candidate)
+      } catch {}
+      if (text === candidate.title) break
+    }
+    if (track) {
+      resolved.add(`${candidate.title}|${candidate.artist}`)
+      let line = candidate.line
+      try {
+        const cloud = await matchCloudLyrics(track)
+        const confirmed = cloud ? lyricLineFor(cloud.lines, snippet) : ''
+        if (confirmed) line = confirmed
+      } catch {}
+      push(track, line)
+    }
+    lyricProgress.value = { done: lyricProgress.value.done + 1, total: picks.length }
+  }
+  const worker = async (): Promise<void> => {
+    while (cursor < picks.length) {
+      const candidate = picks[cursor++]
+      if (seq !== requestSeq) return
+      await resolveOne(candidate)
+    }
+  }
+  await Promise.all(Array.from({ length: 3 }, worker))
+
+  if (!hits.length && seq === requestSeq) {
+    // 歌词库没直给：把歌词里的词当关键词搜一遍，再用云端歌词逐首核对
+    const pool = new Map<string, Track>()
+    for (const term of lyricSearchTerms(snippet)) {
+      if (seq !== requestSeq) break
+      try {
+        for (const track of await providerCandidates(provider, term)) {
+          const key = `${track.providerId}:${track.id}`
+          if (!pool.has(key)) pool.set(key, track)
+        }
+      } catch {}
+    }
+    const candidates = [...pool.values()].slice(0, 10)
+    let index = 0
+    lyricProgress.value = { done: 0, total: candidates.length }
+    const verify = async (): Promise<void> => {
+      while (index < candidates.length) {
+        const track = candidates[index++]
+        if (seq !== requestSeq) return
+        try {
+          const found = await matchCloudLyrics(track)
+          const line = found ? lyricLineFor(found.lines, snippet) : ''
+          if (line) push(track, line)
+        } catch {}
+        lyricProgress.value = { done: lyricProgress.value.done + 1, total: candidates.length }
+      }
+    }
+    await Promise.all(Array.from({ length: 4 }, verify))
+  }
+
+  const missing = catalog
+    .filter((item) => !resolved.has(`${item.title}|${item.artist}`))
+    .map((item) => (item.artist ? `${item.title} · ${item.artist}` : item.title))
+    .slice(0, 4)
+
+  return { tracks: hits, lines, missing }
+}
+
 async function runSearch(): Promise<void> {
   const provider = selected.value
   const text = query.value.trim()
@@ -211,7 +383,26 @@ async function runSearch(): Promise<void> {
   searched.value = true
   error.value = ''
   relaxedQuery.value = ''
+  lyricHits.value = {}
+  lyricProgress.value = { done: 0, total: 0 }
+  lyricMissing.value = []
   try {
+    if (mode.value === 'lyric') {
+      const found = await searchByLyric(provider, text, seq)
+      if (seq !== requestSeq) return
+      results.value = found.tracks
+      appliedQuery.value = text
+      lyricHits.value = found.lines
+      lyricMissing.value = found.missing
+      rememberTracks(found.tracks)
+      if (found.tracks.length) {
+        rememberSearch(text)
+        error.value = ''
+      } else {
+        error.value = '没有找到包含这句歌词的歌'
+      }
+      return
+    }
     let tracks = await fetchTracks(provider, text)
     let used = text
     if (!tracks.length) {
@@ -339,19 +530,29 @@ onMounted(() => {
 
       <div class="findrow pad mt16">
         <div class="finder">
-          <form class="searchfield" :class="{ focus: focused }" @submit.prevent="submitSearch">
+          <form class="searchfield" :class="{ focus: focused, lyric: mode === 'lyric' }" @submit.prevent="submitSearch">
             <Icon name="search" :size="17" />
             <input
               ref="inputRef"
               v-model="query"
               type="search"
               enterkeyhint="search"
-              placeholder="输入歌名或歌手"
+              :placeholder="mode === 'lyric' ? '输入一句歌词，例如：雨一直下' : '输入歌名或歌手'"
               autocomplete="off"
               @input="onInput"
               @focus="onFocus"
               @blur="onBlur"
             />
+            <button
+              type="button"
+              class="modetog"
+              :class="{ on: mode === 'lyric' }"
+              :aria-label="mode === 'lyric' ? '切换为按歌名搜索' : '切换为按歌词搜索'"
+              @mousedown.prevent="setMode(mode === 'lyric' ? 'name' : 'lyric')"
+            >
+              <Icon :name="mode === 'lyric' ? 'lyrics' : 'music'" :size="13" />
+              <span>{{ mode === 'lyric' ? '歌词' : '歌名' }}</span>
+            </button>
             <button v-if="query" type="button" class="clearbtn" aria-label="清空" @mousedown.prevent="reset">
               <Icon name="close" :size="13" />
             </button>
@@ -460,9 +661,25 @@ onMounted(() => {
       </div>
 
       <div v-else-if="noResult" class="empty">
-        <div class="glyph"><Icon name="search" :size="34" /></div>
-        <h3>没有找到「{{ query.trim() }}」</h3>
-        <p>换个关键词，或换一个音源再试。只留歌名往往更准。</p>
+        <div class="glyph"><Icon :name="mode === 'lyric' ? 'lyrics' : 'search'" :size="34" /></div>
+        <h3>
+          {{
+            mode === 'lyric'
+              ? lyricMissing.length
+                ? '歌词库里有，音源里没有'
+                : '没有歌匹配这句歌词'
+              : `没有找到「${query.trim()}」`
+          }}
+        </h3>
+        <p v-if="mode === 'lyric' && lyricMissing.length">换个音源，或者切回歌名搜索再找找看。</p>
+        <p v-else-if="mode === 'lyric'">换一段更短、更独特的歌词试试，比如副歌第一句。</p>
+        <p v-else>换个关键词，或换一个音源再试。只留歌名往往更准。</p>
+        <div v-if="mode === 'lyric' && lyricMissing.length" class="lyr-miss">
+          <p class="meta">歌词库里是这几首，但当前音源搜不到：</p>
+          <ul>
+            <li v-for="item in lyricMissing" :key="item">{{ item }}</li>
+          </ul>
+        </div>
         <div class="row g8 mt8">
           <button class="btn btn-ghost btn-sm" @click="reset">改搜</button>
           <button
@@ -479,9 +696,12 @@ onMounted(() => {
       <template v-if="results.length">
         <div class="section-head mt24">
           <div class="st">
-            <h2>搜索结果</h2>
+            <h2>{{ mode === 'lyric' ? '歌词命中' : '搜索结果' }}</h2>
             <span class="idx">{{ results.length }}</span>
             <span v-if="loading" class="meta">搜索中…</span>
+            <span v-else-if="mode === 'lyric' && lyricMissing.length" class="meta">
+              另有 {{ lyricMissing.length }} 首只在歌词库里
+            </span>
           </div>
           <button class="btn btn-primary btn-sm" @click="playAll">
             <Icon name="play" :size="13" /> 播放全部
@@ -506,16 +726,23 @@ onMounted(() => {
         </div>
 
         <div v-if="tab === 'songs'" class="pad mt4">
-          <SongRow
-            v-for="(track, index) in results"
-            :key="track.providerId + track.id"
-            :track="track"
-            :index="index"
-            :queue="results"
-            :query="appliedQuery"
-            show-index
-            @play="play(index)"
-          />
+          <p v-if="mode === 'lyric' && loading && lyricProgress.total" class="meta lyr-progress">
+            正在比对歌词 {{ lyricProgress.done }} / {{ lyricProgress.total }}
+          </p>
+          <template v-for="(track, index) in results" :key="track.providerId + track.id">
+            <SongRow
+              :track="track"
+              :index="index"
+              :queue="results"
+              :query="appliedQuery"
+              show-index
+              @play="play(index)"
+            />
+            <p v-if="mode === 'lyric' && lyricHits[track.providerId + ':' + track.id]" class="lyr-hit">
+              <Icon name="lyrics" :size="12" />
+              <span>{{ lyricHits[track.providerId + ':' + track.id] }}</span>
+            </p>
+          </template>
         </div>
 
         <div v-else-if="tab === 'artists'" class="pad mt4">
@@ -612,6 +839,67 @@ onMounted(() => {
   border-radius: 50%;
   color: var(--ink-4);
   background: var(--porcelain-2);
+}
+/* 搜索框里的「歌名 / 歌词」切换 */
+.modetog {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  height: 26px;
+  padding: 0 9px 0 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--ink-3);
+  background: var(--porcelain-2);
+  transition: background 0.18s var(--e-out), color 0.18s var(--e-out);
+}
+.modetog.on {
+  color: #fff;
+  background: var(--tint);
+}
+.modetog:active {
+  transform: scale(0.96);
+}
+.lyr-progress {
+  margin: 2px 0 6px;
+}
+/* 每条结果下面那句命中的歌词 */
+.lyr-hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 14px 10px 60px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-4);
+}
+.lyr-hit span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lyr-hit :deep(svg) {
+  flex: none;
+  opacity: 0.7;
+}
+.lyr-miss {
+  width: 100%;
+  margin: 4px 0 2px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--porcelain-2);
+  text-align: left;
+}
+.lyr-miss ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-3);
 }
 .findgo {
   flex: none;

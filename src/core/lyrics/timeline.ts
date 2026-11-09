@@ -79,6 +79,43 @@ export function shiftTimedLyrics<T extends TimedLyricLine>(lines: T[], offsetMs:
   })
 }
 
+/** 单个字符大致唱多久：中日韩 235ms、空白 1ms、其余 95ms。 */
+function charWeight(char: string): number {
+  if (/\s/.test(char)) return 1
+  return /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(char) ? 235 : 95
+}
+
+/**
+ * 没有字级时间时，把整行按字数均摊成逐字时间，交给系统歌词 / Lyricon 做逐字填充。
+ *
+ * 共享出去的那条歌词条本身不会做补间：只给行级时间的话，能看到的永远只有
+ * 「整行换行」，和播放页里的逐字进度看起来不是一个东西。这里直接生成字级时间，
+ * 让同一份歌词在系统歌词、锁屏、灵动岛上也能跟着唱。
+ */
+export function estimateLyricWords(
+  text: string,
+  start: number,
+  end: number
+): Array<{ start: number; end: number; text: string }> {
+  const chars = Array.from(String(text ?? ''))
+  if (!chars.length) return []
+  const gap = Number.isFinite(end) && end > start ? Math.min(end - start, 15000) : 5000
+  const sung = Math.max(300, Math.min(gap, estimateSungDuration(text)))
+  const weights = chars.map(charWeight)
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1
+  const words: Array<{ start: number; end: number; text: string }> = []
+  let acc = 0
+  for (let index = 0; index < chars.length; index += 1) {
+    const from = Math.round((acc / totalWeight) * sung)
+    acc += weights[index]
+    const to = Math.round((acc / totalWeight) * sung)
+    const wordStart = start + from
+    const wordEnd = start + Math.max(from + 1, to)
+    words.push({ start: wordStart, end: wordEnd, text: chars[index] })
+  }
+  return words
+}
+
 /** 传给原生（Lyricon / 系统歌词）的行结构，键名要和 MediaPlaybackService 对齐。 */
 export interface NativeLyricLine {
   start: number
@@ -100,6 +137,9 @@ export function toNativeLyricLines(lines: TimedLyricLine[], offsetMs = 0): Nativ
       .sort((left, right) => left.startTimeMs - right.startTimeMs),
     offsetMs
   )
+  // Intent extra 走 Binder，超过 ~1MB 会直接抛 TransactionTooLarge；
+  // 预估出来的逐字时间只是锦上添花，超过预算就退回整行进度。
+  let wordBudget = 5000
   return ordered.map((line, index) => {
     const start = Math.max(0, Math.round(line.startTimeMs))
     const rawEnd = Number(line.endTimeMs)
@@ -111,13 +151,21 @@ export function toNativeLyricLines(lines: TimedLyricLine[], offsetMs = 0): Nativ
         : nextStart > start
           ? nextStart
           : start + 5000
-    const words = line.words?.length
-      ? line.words.map((word) => ({
-          start: Math.max(0, Math.round(word.startTimeMs)),
-          end: Math.max(Math.round(word.startTimeMs), Math.round(word.endTimeMs)),
-          text: word.text
-        }))
-      : undefined
+    let words: Array<{ start: number; end: number; text: string }> | undefined
+    if (line.words?.length) {
+      words = line.words.map((word) => ({
+        start: Math.max(0, Math.round(word.startTimeMs)),
+        end: Math.max(Math.round(word.startTimeMs), Math.round(word.endTimeMs)),
+        text: word.text
+      }))
+      wordBudget -= words.length
+    } else if (wordBudget > 0) {
+      const estimated = estimateLyricWords(line.text, start, end)
+      if (estimated.length && estimated.length <= wordBudget) {
+        words = estimated
+        wordBudget -= estimated.length
+      }
+    }
     return {
       start,
       end,

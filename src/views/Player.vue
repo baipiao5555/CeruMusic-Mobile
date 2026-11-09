@@ -368,8 +368,18 @@ onUnmounted(() => {
       <div v-if="settingsState.showLyrics" class="p-lyric" @click="openLyrics">
         <div class="p-lyric-body">
           <template v-if="playerState.lyrics.length">
-            <div class="p-lyric-cur">
-              {{ lyricCurrent?.text || '♪' }}
+            <div class="p-lyric-slot">
+              <transition name="ly-swap" mode="out-in">
+                <div class="p-lyric-cur" :key="playerState.activeLyric">
+                  <span
+                    v-for="(ch, index) in lyricChars(lyricCurrent?.text || '♪')"
+                    :key="index"
+                    class="pl-char"
+                    :class="{ on: index < activeLineCharCount }"
+                    >{{ ch }}</span
+                  >
+                </div>
+              </transition>
             </div>
             <div class="p-lyric-next">
               {{ playerState.lyrics[playerState.activeLyric + 1]?.text || ' ' }}
@@ -1132,21 +1142,49 @@ onUnmounted(() => {
   opacity: 0;
   transition: opacity 0.16s var(--e-out);
 }
+/* 换行时旧行先淡出、新行再淡入，slot 用 min-height 占住位置避免下一行跳一下 */
+.p-lyric-slot {
+  min-height: 22px;
+}
 .p-lyric-cur {
   font-family: var(--serif);
   font-size: 15.5px;
   line-height: 22px;
   max-height: 44px;
   color: rgba(255, 255, 255, 0.94);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  /* 逐字 span 会被 -webkit-box 拉成一个个盒子、把换行打乱，
+     所以这里用普通块级 + max-height 截两行，不再用 -webkit-line-clamp。 */
+  display: block;
   overflow: hidden;
 }
 .p-lyric-cur.dim {
   color: rgba(255, 255, 255, 0.5);
   font-size: 13px;
   line-height: 22px;
+}
+/* 唱过的字逐字点亮（与全屏歌词同一套配色） */
+.pl-char {
+  color: rgba(255, 255, 255, 0.56);
+  transition: color 0.16s linear, text-shadow 0.24s linear;
+}
+.pl-char.on {
+  color: #a9e4cf;
+  text-shadow: 0 0 12px rgba(169, 228, 207, 0.32);
+}
+/* 换行时淡入上移，避免整块歌词忽然跳变 */
+.ly-swap-enter-active {
+  transition: opacity 0.24s var(--e-out), transform 0.24s var(--e-out);
+}
+.ly-swap-leave-active {
+  transition: opacity 0.16s linear, transform 0.16s linear;
+}
+.ly-swap-enter-from {
+  opacity: 0;
+  transform: translateY(7px);
+}
+.ly-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
 }
 .p-lyric-next {
   font-size: 12.5px;

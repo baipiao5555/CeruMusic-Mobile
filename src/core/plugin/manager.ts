@@ -5,6 +5,7 @@ import { requestRemote } from './network'
 import { idb, sha256Hex } from '../storage/idb'
 import { toTrack, type Track } from '../track'
 import { logEvent } from '../logs'
+import { inspectLxPlugin } from './lx'
 
 interface PluginProviderInfo {
   id: string
@@ -35,6 +36,7 @@ export interface PluginDescriptor {
   commands: any[]
   playlistImporters: any[]
   sourceUrl?: string
+  format?: 'lx'
 }
 
 interface PluginRecord {
@@ -193,7 +195,8 @@ function descriptorFor(record: PluginRecord, host?: PluginHost): PluginDescripto
     homeSections: manifest.contributes?.homeSections ?? [],
     commands: manifest.contributes?.commands ?? [],
     playlistImporters: manifest.contributes?.playlistImporters ?? [],
-    sourceUrl: record.sourceUrl
+    sourceUrl: record.sourceUrl,
+    format: manifest.format
   }
 }
 
@@ -254,13 +257,17 @@ function providerHandle(
   }
 }
 
-export function allProviders(): ProviderHandle[] {
+export function allProviders(includeAlternatives = false): ProviderHandle[] {
   const result: ProviderHandle[] = []
   for (const plugin of pluginState.plugins) {
     if (!plugin.running) continue
     for (const provider of plugin.providers) {
       const owner = pluginState.selectedSourcePlugin[provider.id]
-      if (owner && owner !== plugin.pluginId) continue
+      const ownerRunning = owner && pluginState.plugins.some(
+        (item) => item.pluginId === owner && item.running &&
+          item.providers.some((candidate) => candidate.id === provider.id)
+      )
+      if (!includeAlternatives && ownerRunning && owner !== plugin.pluginId) continue
       result.push(providerHandle(plugin, provider))
     }
   }
@@ -394,6 +401,16 @@ export async function initPlugins(): Promise<void> {
   if (pluginState.initialized) return
   pluginState.initialized = true
   try {
+    let selectedProvider = pluginState.selectedProvider
+    try {
+      const selected = JSON.parse(localStorage.getItem('ceru.selectedSourcePlugin') || '{}')
+      if (selected && typeof selected === 'object' && !Array.isArray(selected)) {
+        pluginState.selectedSourcePlugin = Object.fromEntries(
+          Object.entries(selected).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+        )
+      }
+      selectedProvider = localStorage.getItem('ceru.selectedProvider') || ''
+    } catch {}
     const list = await idb.all<PluginRecord>('plugins')
     for (const record of list) records.set(record.pluginId, record)
     refresh()
@@ -404,6 +421,9 @@ export async function initPlugins(): Promise<void> {
       } catch (error) {
         console.warn('恢复插件失败:', error)
       }
+    }
+    if (allProviders().some((provider) => provider.providerId === selectedProvider)) {
+      pluginState.selectedProvider = selectedProvider
     }
     pluginState.loading = false
   } catch (error) {
@@ -416,9 +436,8 @@ export async function installPlugin(
   code: string,
   options: { enable?: boolean; grantDeclared?: boolean; sourceUrl?: string } = {}
 ): Promise<PluginDescriptor> {
-  const parsed = readPluginArtifact(code)
-  const manifest = parsed.header.manifest
-  if (manifest.manifestVersion !== 2) throw new Error('只支持澜音 v2 插件')
+  const manifest = inspectPlugin(code)
+  if (manifest.format !== 'lx' && manifest.manifestVersion !== 2) throw new Error('只支持澜音 v2 插件或洛雪音源')
   const pluginId = (await sha256Hex(manifest.id)).slice(0, 32)
   const existing = records.get(pluginId)
   const declarations = manifest.permissions ?? []
@@ -445,7 +464,18 @@ export async function installPlugin(
   }
   await save(record)
   refresh()
-  if (options.enable !== false) await enablePlugin(pluginId)
+  if (options.enable !== false) {
+    try {
+      await enablePlugin(pluginId)
+    } catch (error) {
+      if (existing) {
+        await save(existing)
+        refresh()
+        if (existing.enabled) await enablePlugin(pluginId).catch(() => undefined)
+      }
+      throw error
+    }
+  }
   return descriptorFor(record, hosts.get(pluginId))
 }
 
@@ -469,6 +499,7 @@ export async function checkPluginUpdate(
   if (!record.sourceUrl) throw new Error('这个插件不是从链接安装的，无法自动检查更新')
   const code = await fetchPluginCode(record.sourceUrl)
   const manifest = inspectPlugin(code)
+  if (manifest.id !== record.manifest.id) throw new Error('更新文件与已安装音源不一致')
   const previousVersion = String(record.manifest.version ?? '')
   const version = String(manifest.version ?? '')
   if (comparePluginVersions(version, previousVersion) <= 0) {
@@ -585,7 +616,13 @@ export async function fetchPluginCode(url: string): Promise<string> {
 }
 
 export function inspectPlugin(code: string): any {
-  return readPluginArtifact(code).header.manifest
+  try {
+    return readPluginArtifact(code).header.manifest
+  } catch (error) {
+    const manifest = inspectLxPlugin(code)
+    if (manifest) return manifest
+    throw error
+  }
 }
 
 export async function installDemoPlugin(): Promise<PluginDescriptor> {
@@ -630,6 +667,7 @@ export async function enablePlugin(pluginId: string): Promise<void> {
     throw error
   }
   hosts.set(pluginId, host)
+  if (record.manifest.format === 'lx') record.manifest = host.getManifest()
   record.enabled = true
   record.loadError = undefined
   await save(record)
@@ -680,9 +718,11 @@ export async function invokeProvider(
   return host.invokeProvider(provider.providerId, method, args)
 }
 
-export function selectProvider(providerId: string): void {
+export function selectProvider(providerId: string, pluginId?: string): void {
   pluginState.selectedProvider = providerId
+  if (pluginId) pluginState.selectedSourcePlugin[providerId] = pluginId
   try {
     localStorage.setItem('ceru.selectedProvider', providerId)
+    localStorage.setItem('ceru.selectedSourcePlugin', JSON.stringify(pluginState.selectedSourcePlugin))
   } catch {}
 }

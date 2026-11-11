@@ -5,7 +5,7 @@ import type { Track } from '../track'
 
 export function providerForTrack(track: Track): ProviderHandle | undefined {
   return (
-    allProviders().find(
+    allProviders(true).find(
       (provider) =>
         provider.providerId === track.providerId && provider.pluginId === track.pluginId
     ) ?? allProviders().find((provider) => provider.providerId === track.providerId)

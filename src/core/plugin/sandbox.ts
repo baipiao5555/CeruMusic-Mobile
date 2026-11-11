@@ -14,6 +14,7 @@ interface PendingCall {
 }
 
 let catalogPromise: Promise<any> | undefined
+let workerRuntimePromise: Promise<string[]> | undefined
 
 function loadCatalog(): Promise<any> {
   catalogPromise ??= fetch('/plugin-runtime/catalog.json').then((response) => {
@@ -21,6 +22,20 @@ function loadCatalog(): Promise<any> {
     return response.json()
   })
   return catalogPromise
+}
+
+function loadWorkerRuntime(): Promise<string[]> {
+  workerRuntimePromise ??= Promise.all(
+    ['node-globals.js', 'sandbox.js'].map(async (file) => {
+      const response = await fetch(`/plugin-runtime/${file}`)
+      if (!response.ok) throw new Error('插件运行时加载失败')
+      return response.text()
+    })
+  ).catch((error) => {
+    workerRuntimePromise = undefined
+    throw error
+  })
+  return workerRuntimePromise
 }
 
 function randomId(): string {
@@ -54,17 +69,9 @@ function cloneValue(value: any): any {
   return copy
 }
 
-function buildFrameDocument(entryCode: string): string {
-  const payload = encodeBase64Utf8(JSON.stringify({ entry: entryCode }))
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
-<body>
-<script>
+const nodeGlobalsBootstrap = `
 (function () {
-  // node-globals.js expects a bare Node realm. In a browser iframe its
-  // Object.assign override list includes read-only globals (window) and
-  // bridge-only shims (parent, addEventListener, timers, crypto). Keep the
-  // useful polyfills and let the browser provide the rest.
+  // Preserve browser primitives while loading the official Node polyfills.
   var originalAssign = Object.assign;
   var skip = {
     window: 1, self: 1, parent: 1, addEventListener: 1,
@@ -85,7 +92,14 @@ function buildFrameDocument(entryCode: string): string {
     return target;
   };
   globalThis.__restoreAssign = function () { Object.assign = originalAssign; };
-})();
+})();`
+
+function buildFrameDocument(entryCode: string): string {
+  const payload = encodeBase64Utf8(JSON.stringify({ entry: entryCode }))
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
+<body>
+<script>${nodeGlobalsBootstrap}
 </script>
 <script src="/plugin-runtime/node-globals.js"></script>
 <script>globalThis.__restoreAssign && globalThis.__restoreAssign();</script>
@@ -107,9 +121,77 @@ function buildFrameDocument(entryCode: string): string {
 </body></html>`
 }
 
+function buildWorkerDocument(entryCode: string, runtime: string[]): string {
+  const workerCode = `
+(function () {
+  var send = globalThis.postMessage.bind(globalThis);
+  var listen = globalThis.addEventListener.bind(globalThis);
+  // Opaque workers lack secure-context-only randomUUID, but retain the CSPRNG.
+  if (!globalThis.crypto.randomUUID) globalThis.crypto.randomUUID = function () {
+    var bytes = crypto.getRandomValues(new Uint8Array(16));
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    var hex = Array.from(bytes, function (byte) { return byte.toString(16).padStart(2, "0"); }).join("");
+    return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join("-");
+  };
+  var bridge = Object.freeze({ postMessage: function (message) { send(message); } });
+  globalThis.parent = bridge;
+  globalThis.window = {
+    addEventListener: function (type, listener) {
+      listen(type, type === "message"
+        ? function (event) { listener({ source: bridge, data: event.data }); }
+        : listener);
+    }
+  };
+})();
+${nodeGlobalsBootstrap}
+${runtime[0]}
+globalThis.__restoreAssign();
+${runtime[1]}
+globalThis.__ceruStart((0, eval)("(" + ${JSON.stringify(entryCode)} + ")"));
+`
+  const payload = encodeBase64Utf8(workerCode)
+  // A Blob worker inherits its creator's CSP and has no navigable Window/DOM.
+  return `<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'; worker-src blob:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+</head><body><script>
+(function () {
+  var worker;
+  var url;
+  function fail(error) {
+    if (worker) worker.terminate();
+    if (url) URL.revokeObjectURL(url);
+    parent.postMessage({ type: "failed", data: { message: String(error.message || error) } }, "*");
+  }
+  try {
+    var binary = atob("${payload}");
+    var bytes = Uint8Array.from(binary, function (char) { return char.charCodeAt(0); });
+    url = URL.createObjectURL(new Blob([bytes], { type: "text/javascript" }));
+    worker = new Worker(url);
+    worker.addEventListener("message", function (event) {
+      URL.revokeObjectURL(url);
+      parent.postMessage(event.data, "*");
+    });
+    worker.addEventListener("error", function (event) {
+      event.preventDefault();
+      fail(event);
+    });
+    window.addEventListener("message", function (event) {
+      if (event.source === parent) worker.postMessage(event.data);
+    });
+    window.addEventListener("pagehide", function () {
+      worker.terminate();
+      URL.revokeObjectURL(url);
+    });
+  } catch (error) { fail(error); }
+})();
+</script></body></html>`
+}
+
 /**
  * Runs a plugin logic module inside a sandboxed iframe using the official
- * Ceru runtime bundle. Mirrors the Node worker protocol used by the desktop app.
+ * Ceru runtime bundle; LX code runs in a CSP-restricted worker behind the iframe.
  */
 export class IframePluginSandbox {
   private iframe?: HTMLIFrameElement
@@ -137,7 +219,9 @@ export class IframePluginSandbox {
     iframe.tabIndex = -1
     iframe.style.cssText =
       'position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;border:0;opacity:0;pointer-events:none'
-    iframe.srcdoc = buildFrameDocument(entryCode)
+    iframe.srcdoc = manifest.format === 'lx'
+      ? buildWorkerDocument(entryCode, await loadWorkerRuntime())
+      : buildFrameDocument(entryCode)
     this.iframe = iframe
 
     await new Promise<void>((resolve, reject) => {
@@ -252,6 +336,7 @@ export class IframePluginSandbox {
       }
       const finish = () => {
         clearTimeout(timer)
+        this.pending.delete(id)
         signal?.removeEventListener('abort', cancel)
       }
       const timer = setTimeout(cancel, 120_000)

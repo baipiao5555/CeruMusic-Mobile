@@ -7,6 +7,7 @@ interface SecureHttpPlugin {
     headers?: Record<string, string>
     body?: string
     timeoutMs?: number
+    responseType?: 'arraybuffer'
   }): Promise<{ status: number; headers: Record<string, string>; body: string }>
 }
 
@@ -20,9 +21,10 @@ export interface HttpRequestInput {
   timeoutMs?: number
   /** Web fetch referrer; native callers should set the Referer header instead. */
   referrer?: string
-  responseType?: 'text' | 'json'
+  responseType?: 'text' | 'json' | 'arraybuffer'
   /** Skip JSON sniffing and return the response body as text. */
   raw?: boolean
+  signal?: AbortSignal
 }
 
 export interface HttpResponse {
@@ -66,10 +68,11 @@ function isBlockedIPv4([a, b]: number[]): boolean {
 }
 
 function isBlockedHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '')
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '')
   if (!host) return true
-  if (host === 'localhost' || host.endsWith('.localhost')) return true
-  if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.home.arpa')) return true
+  if (['localhost', 'local', 'internal', 'home.arpa'].some(
+    (suffix) => host === suffix || host.endsWith(`.${suffix}`)
+  )) return true
   // Bare numeric hosts are accepted by browsers as IPv4 integers (e.g. 2130706433).
   if (/^\d+$/.test(host)) return true
   if (/^0x[0-9a-f]+$/i.test(host)) return true
@@ -78,12 +81,13 @@ function isBlockedHost(hostname: string): boolean {
   if (host.includes(':')) {
     if (host === '::' || host === '::1') return true
     if (/^f[cd]/.test(host)) return true
-    if (/^fe[89ab]/.test(host)) return true
+    if (/^fe[89a-f]/.test(host)) return true
     if (/^ff/.test(host)) return true
-    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)
+    // URL canonicalizes mapped IPv4 tails to hexadecimal, including dotted input.
+    const mapped = host.match(/^::ffff:([0-9a-f]{1,4}):[0-9a-f]{1,4}$/)
     if (mapped) {
-      const parsed = parseIPv4(mapped[1])
-      if (parsed && isBlockedIPv4(parsed)) return true
+      const prefix = parseInt(mapped[1], 16)
+      return isBlockedIPv4([prefix >>> 8, prefix & 255])
     }
   }
   return false
@@ -134,15 +138,24 @@ async function nativeRequest(input: HttpRequestInput, url: URL): Promise<HttpRes
     method: (input.method ?? 'GET').toUpperCase(),
     headers: sanitizeHeaders(input.headers),
     body: input.body,
-    timeoutMs: Math.min(60_000, Math.max(1_000, input.timeoutMs ?? 30_000))
+    timeoutMs: Math.min(60_000, Math.max(1_000, input.timeoutMs ?? 30_000)),
+    responseType: input.responseType === 'arraybuffer' ? 'arraybuffer' : undefined
   })
   const body = String(response.body ?? '')
-  if (body.length > MAX_BODY_BYTES) throw new Error('响应内容过大')
+  if (body.length > (input.responseType === 'arraybuffer' ? Math.ceil(MAX_BODY_BYTES / 3) * 4 : MAX_BODY_BYTES)) {
+    throw new Error('响应内容过大')
+  }
   const headers: Record<string, string> = {}
   for (const [key, value] of Object.entries(response.headers ?? {})) {
     headers[key.toLowerCase()] = String(value)
   }
-  return { status: Number(response.status) || 0, headers, body: input.raw ? body : parseBody(body) }
+  let data: any = input.raw ? body : parseBody(body)
+  if (input.responseType === 'arraybuffer') {
+    const binary = atob(body)
+    if (binary.length > MAX_BODY_BYTES) throw new Error('响应内容过大')
+    data = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+  }
+  return { status: Number(response.status) || 0, headers, body: data }
 }
 
 async function webRequest(input: HttpRequestInput, initialUrl: URL): Promise<HttpResponse> {
@@ -151,6 +164,9 @@ async function webRequest(input: HttpRequestInput, initialUrl: URL): Promise<Htt
   let headers = sanitizeHeaders(input.headers)
   let body = input.body
   const controller = new AbortController()
+  const abort = () => controller.abort()
+  input.signal?.addEventListener('abort', abort, { once: true })
+  if (input.signal?.aborted) controller.abort()
   const timer = setTimeout(() => controller.abort(), Math.min(60_000, Math.max(1_000, input.timeoutMs ?? 30_000)))
   try {
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
@@ -183,22 +199,31 @@ async function webRequest(input: HttpRequestInput, initialUrl: URL): Promise<Htt
       }
       const length = Number(response.headers.get('content-length') ?? 0)
       if (length > MAX_BODY_BYTES) throw new Error('响应内容过大')
-      const text = await response.text()
-      if (text.length > MAX_BODY_BYTES) throw new Error('响应内容过大')
+      const data = input.responseType === 'arraybuffer'
+        ? new Uint8Array(await response.arrayBuffer())
+        : await response.text()
+      if (data.length > MAX_BODY_BYTES) throw new Error('响应内容过大')
       const responseHeaders: Record<string, string> = {}
       response.headers.forEach((value, key) => {
         responseHeaders[key.toLowerCase()] = value
       })
-      return { status: response.status, headers: responseHeaders, body: input.raw ? text : parseBody(text) }
+      return {
+        status: response.status,
+        headers: responseHeaders,
+        body: typeof data === 'string' && !input.raw ? parseBody(data) : data
+      }
     }
     throw new Error('网络请求失败')
   } finally {
     clearTimeout(timer)
+    input.signal?.removeEventListener('abort', abort)
   }
 }
 
 export async function requestRemote(input: HttpRequestInput): Promise<HttpResponse> {
+  input.signal?.throwIfAborted()
   const url = validateRemoteUrl(input.url)
-  if (Capacitor.isNativePlatform()) return nativeRequest(input, url)
-  return webRequest(input, url)
+  const response = Capacitor.isNativePlatform() ? await nativeRequest(input, url) : await webRequest(input, url)
+  input.signal?.throwIfAborted()
+  return response
 }

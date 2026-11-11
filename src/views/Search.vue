@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
@@ -30,7 +30,7 @@ import { matchCloudLyrics } from '@/core/lyrics/cloud'
 
 /** 一次搜索最多取多少条。 */
 const RESULT_LIMIT = 30
-const SUGGEST_LIMIT = 6
+const SUGGEST_LIMIT = 10
 
 /** 搜索方式：按歌名（默认）还是按一句歌词找歌。 */
 const MODE_KEY = 'ceru.search.mode.v1'
@@ -43,6 +43,7 @@ const lyricMissing = ref<string[]>([])
 
 function setMode(next: SearchMode): void {
   if (mode.value === next) return
+  cancelSuggestions()
   mode.value = next
   localStorage.setItem(MODE_KEY, next)
   lyricHits.value = {}
@@ -57,6 +58,9 @@ const providers = computed(() => allProviders())
 const selected = computed(
   () => providers.value.find((item) => item.providerId === pluginState.selectedProvider) ?? providers.value[0]
 )
+const providerKey = computed(() =>
+  selected.value ? `${selected.value.pluginId}:${selected.value.providerId}` : ''
+)
 
 const query = ref(String(route.query.q ?? ''))
 /** 当前结果对应的关键词（缩词兜底时会和输入框不一致），高亮按它走。 */
@@ -70,27 +74,50 @@ const inputRef = ref<HTMLInputElement>()
 
 const focused = ref(false)
 const suggestOpen = ref(false)
+const composing = ref(false)
+const remoteSuggestions = ref<Track[]>([])
+let suggestSeq = 0
+let suggestTimer: ReturnType<typeof setTimeout> | undefined
 
 /** 输入太慢/太快都可能有旧请求后到，用序号丢弃过期响应。 */
 let requestSeq = 0
+let searchedProviderKey = ''
+let resumeSubmittedSearch = false
 
 const libraryTracks = computed(() => [
   ...libraryState.favorites,
   ...libraryState.playlists.flatMap((playlist) => playlist.tracks)
 ])
 
-const suggestions = computed(() => suggestTracks(query.value, libraryTracks.value, SUGGEST_LIMIT))
+const suggestions = computed(() => {
+  const needle = normalizeText(query.value)
+  if (!needle || mode.value !== 'name') return []
+  const local = suggestTracks(query.value, libraryTracks.value, Infinity).filter(
+    (track) => !selected.value ||
+      (track.pluginId === selected.value.pluginId && track.providerId === selected.value.providerId)
+  )
+  const seen = new Set<string>()
+  return [...remoteSuggestions.value, ...local]
+    .filter((track) => {
+      const title = normalizeText(track.title)
+      if (!title.includes(needle) || seen.has(title)) return false
+      seen.add(title)
+      return true
+    })
+    .sort((a, b) => matchScore(b, query.value) - matchScore(a, query.value))
+    .slice(0, SUGGEST_LIMIT)
+})
 
-/** 输入时只做本地联想（不联网、不自动搜索），点「搜索」或回车才真正搜。 */
 const showSuggest = computed(
-  () => suggestOpen.value && focused.value && Boolean(query.value.trim())
+  () => suggestOpen.value && focused.value && !composing.value &&
+    mode.value === 'name' && Boolean(query.value.trim())
 )
 
 const historyVisible = computed(() => !query.value.trim() && searchHistory.items.length > 0)
 
 /** 音源零结果时，退回本地索引，至少让用户看到「打一个字就能找到」的歌。 */
 const localMatches = computed(() => {
-  if (loading.value || results.value.length || !searched.value || !query.value.trim()) return []
+  if (mode.value === 'lyric' || loading.value || results.value.length || !searched.value || !query.value.trim()) return []
   return suggestTracks(query.value, libraryTracks.value, 12)
 })
 
@@ -101,7 +128,9 @@ const tab = ref<'songs' | 'artists' | 'playlists'>('songs')
 
 /** 换音源建议：换到下一个已启用的音源。 */
 const otherProvider = computed(() =>
-  providers.value.find((item) => item.providerId !== selected.value?.providerId)
+  providers.value.find((item) =>
+    item.providerId !== selected.value?.providerId || item.pluginId !== selected.value?.pluginId
+  )
 )
 
 /** 结果里出现过的歌手，按曲目数排序。 */
@@ -169,33 +198,84 @@ function nextHotBatch(): void {
   hotBatch.value += 1
 }
 
-function onInput(): void {
-  // 只更新本地联想，不自动联网搜索：搜不搜由用户按「搜索」/回车决定。
+function cancelSuggestions(): void {
+  suggestSeq += 1
+  clearTimeout(suggestTimer)
+  suggestTimer = undefined
+  remoteSuggestions.value = []
+}
+
+function scheduleSuggestions(): void {
+  cancelSuggestions()
+  const provider = selected.value
+  const text = query.value.trim()
+  const key = providerKey.value
+  if (route.path !== '/search' || !showSuggest.value || !normalizeText(text) ||
+    !provider?.methods.includes('tracks.search')) return
+  const seq = suggestSeq
+  suggestTimer = setTimeout(async () => {
+    suggestTimer = undefined
+    try {
+      const tracks = await fetchTracks(provider, text)
+      if (seq !== suggestSeq || key !== providerKey.value ||
+        text !== query.value.trim() || !showSuggest.value) return
+      remoteSuggestions.value = tracks
+    } catch {
+      // A failed suggestion request leaves local matches and explicit search available.
+    }
+  }, 300)
+}
+
+function onInput(event?: Event): void {
+  requestSeq += 1
+  loading.value = false
+  lyricProgress.value = { done: 0, total: 0 }
+  if (composing.value || (event as InputEvent | undefined)?.isComposing) {
+    cancelSuggestions()
+    return
+  }
+  if (!query.value.trim()) {
+    reset()
+    return
+  }
   suggestOpen.value = true
+  scheduleSuggestions()
+}
+
+function onCompositionStart(): void {
+  composing.value = true
+  requestSeq += 1
+  loading.value = false
+  cancelSuggestions()
+}
+
+function onCompositionEnd(): void {
+  composing.value = false
+  onInput()
 }
 
 function onFocus(): void {
   focused.value = true
   suggestOpen.value = true
+  scheduleSuggestions()
 }
 
-function onBlur(): void {
+function onBlur(event: FocusEvent): void {
+  if ((event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) return
   focused.value = false
   suggestOpen.value = false
+  cancelSuggestions()
 }
 
-async function fetchTracks(provider: ProviderHandle, text: string): Promise<Track[]> {
+async function fetchTracks(provider: ProviderHandle, text: string, limit = RESULT_LIMIT): Promise<Track[]> {
   const page = await invokeProvider(provider, 'tracks.search', [
-    { query: text, kinds: ['track'], filters: {}, limit: RESULT_LIMIT }
+    { query: text, kinds: ['track'], filters: {}, limit }
   ])
   const items = (page?.items ?? []).filter((item: any) => {
     const kind = item?.ref?.kind
     return Boolean(item?.ref?.id) && (!kind || kind === 'track' || kind === 'song')
   })
-  return rankTracks(
-    items.map((item: any) => toTrack(item, provider)),
-    text
-  )
+  return items.map((item: any) => toTrack(item, provider))
 }
 
 /**
@@ -240,12 +320,7 @@ function lyricLineFor(results: Array<{ text: string }>, snippet: string): string
 }
 
 async function providerCandidates(provider: ProviderHandle, text: string): Promise<Track[]> {
-  const page = await invokeProvider(provider, 'tracks.search', [
-    { query: text, kinds: ['track'], filters: {}, limit: 8 }
-  ])
-  return (page?.items ?? [])
-    .map((item: any) => toTrack(item, provider))
-    .filter((track: Track) => Boolean(track.id))
+  return fetchTracks(provider, text, 8)
 }
 
 /** 歌词库里查到了歌名，再回音源找这首；歌手对上会加分，避免撞到同名翻唱。 */
@@ -308,7 +383,9 @@ async function searchByLyric(
       } catch {}
       push(track, line)
     }
-    lyricProgress.value = { done: lyricProgress.value.done + 1, total: picks.length }
+    if (seq === requestSeq) {
+      lyricProgress.value = { done: lyricProgress.value.done + 1, total: picks.length }
+    }
   }
   const worker = async (): Promise<void> => {
     while (cursor < picks.length) {
@@ -331,6 +408,7 @@ async function searchByLyric(
         }
       } catch {}
     }
+    if (seq !== requestSeq) return { tracks: [], lines: {}, missing: [] }
     const candidates = [...pool.values()].slice(0, 10)
     let index = 0
     lyricProgress.value = { done: 0, total: candidates.length }
@@ -343,7 +421,9 @@ async function searchByLyric(
           const line = found ? lyricLineFor(found.lines, snippet) : ''
           if (line) push(track, line)
         } catch {}
-        lyricProgress.value = { done: lyricProgress.value.done + 1, total: candidates.length }
+        if (seq === requestSeq) {
+          lyricProgress.value = { done: lyricProgress.value.done + 1, total: candidates.length }
+        }
       }
     }
     await Promise.all(Array.from({ length: 4 }, verify))
@@ -358,14 +438,21 @@ async function searchByLyric(
 }
 
 async function runSearch(): Promise<void> {
+  cancelSuggestions()
+  const seq = ++requestSeq
   const provider = selected.value
   const text = query.value.trim()
-  suggestOpen.value = false
-  if (!provider) {
-    error.value = '请先安装并启用音源插件'
+  if (searchedProviderKey !== providerKey.value) {
     results.value = []
-    return
+    appliedQuery.value = ''
   }
+  searchedProviderKey = providerKey.value
+  resumeSubmittedSearch = false
+  suggestOpen.value = false
+  loading.value = false
+  lyricHits.value = {}
+  lyricProgress.value = { done: 0, total: 0 }
+  lyricMissing.value = []
   if (!text) {
     results.value = []
     appliedQuery.value = ''
@@ -374,18 +461,18 @@ async function runSearch(): Promise<void> {
     searched.value = false
     return
   }
-  if (!provider.methods.includes('tracks.search')) {
-    error.value = '当前音源不支持搜索'
+  if (!provider || !provider.methods.includes('tracks.search')) {
+    error.value = provider ? '当前音源不支持搜索' : '请先安装并启用音源插件'
+    results.value = []
+    appliedQuery.value = ''
+    relaxedQuery.value = ''
+    searched.value = true
     return
   }
-  const seq = ++requestSeq
   loading.value = true
   searched.value = true
   error.value = ''
   relaxedQuery.value = ''
-  lyricHits.value = {}
-  lyricProgress.value = { done: 0, total: 0 }
-  lyricMissing.value = []
   try {
     if (mode.value === 'lyric') {
       const found = await searchByLyric(provider, text, seq)
@@ -403,12 +490,12 @@ async function runSearch(): Promise<void> {
       }
       return
     }
-    let tracks = await fetchTracks(provider, text)
+    let tracks = rankTracks(await fetchTracks(provider, text), text)
     let used = text
     if (!tracks.length) {
       for (const candidate of fallbackQueries(text)) {
         if (seq !== requestSeq) return
-        const relaxed = await fetchTracks(provider, candidate)
+        const relaxed = rankTracks(await fetchTracks(provider, candidate), candidate)
         if (relaxed.length) {
           tracks = relaxed
           used = candidate
@@ -437,6 +524,7 @@ async function runSearch(): Promise<void> {
 }
 
 function submitSearch(): void {
+  if (composing.value) return
   void runSearch()
 }
 
@@ -450,13 +538,14 @@ function pickSuggestion(track: Track): void {
   const text = track.title?.trim() || query.value
   query.value = text
   suggestOpen.value = false
-  rememberSearch(text)
   inputRef.value?.blur()
   void runSearch()
 }
 
 function reset(): void {
+  cancelSuggestions()
   requestSeq += 1
+  resumeSubmittedSearch = false
   query.value = ''
   results.value = []
   appliedQuery.value = ''
@@ -464,15 +553,27 @@ function reset(): void {
   error.value = ''
   searched.value = false
   loading.value = false
+  lyricHits.value = {}
+  lyricProgress.value = { done: 0, total: 0 }
+  lyricMissing.value = []
   suggestOpen.value = false
   tab.value = 'songs'
   nextTick(() => inputRef.value?.focus())
 }
 
-function choose(providerId: string): void {
-  selectProvider(providerId)
-  if (query.value.trim()) void runSearch()
+function choose(provider: ProviderHandle): void {
+  selectProvider(provider.providerId, provider.pluginId)
 }
+
+watch(
+  providerKey,
+  () => {
+    cancelSuggestions()
+    if (route.path !== '/search') return
+    if (searched.value || loading.value) void runSearch()
+    else scheduleSuggestions()
+  }
+)
 
 function play(index: number): void {
   void playTracks(results.value, index)
@@ -492,6 +593,7 @@ restoreSearchHistory()
 watch(
   () => route.query.q,
   (value) => {
+    if (route.path !== '/search') return
     const text = typeof value === 'string' ? value.trim() : ''
     if (!text || text === query.value) return
     query.value = text
@@ -504,6 +606,28 @@ onMounted(() => {
   if (query.value.trim()) void runSearch()
   else nextTick(() => inputRef.value?.focus())
 })
+
+function stopPendingSearch(): void {
+  cancelSuggestions()
+  requestSeq += 1
+  loading.value = false
+  lyricProgress.value = { done: 0, total: 0 }
+  composing.value = false
+  focused.value = false
+  suggestOpen.value = false
+}
+
+onActivated(() => {
+  if (route.path !== '/search') return
+  if (resumeSubmittedSearch || (searched.value && searchedProviderKey !== providerKey.value)) {
+    void runSearch()
+  }
+})
+onDeactivated(() => {
+  resumeSubmittedSearch = loading.value
+  stopPendingSearch()
+})
+onBeforeUnmount(stopPendingSearch)
 </script>
 
 <template>
@@ -529,7 +653,7 @@ onMounted(() => {
       </div>
 
       <div class="findrow pad mt16">
-        <div class="finder">
+        <div class="finder" @focusout="onBlur">
           <form class="searchfield" :class="{ focus: focused, lyric: mode === 'lyric' }" @submit.prevent="submitSearch">
             <Icon name="search" :size="17" />
             <input
@@ -540,36 +664,39 @@ onMounted(() => {
               :placeholder="mode === 'lyric' ? '输入一句歌词，例如：雨一直下' : '输入歌名或歌手'"
               autocomplete="off"
               @input="onInput"
+              @compositionstart="onCompositionStart"
+              @compositionend="onCompositionEnd"
               @focus="onFocus"
-              @blur="onBlur"
             />
             <button
               type="button"
               class="modetog"
               :class="{ on: mode === 'lyric' }"
               :aria-label="mode === 'lyric' ? '切换为按歌名搜索' : '切换为按歌词搜索'"
-              @mousedown.prevent="setMode(mode === 'lyric' ? 'name' : 'lyric')"
+              @mousedown.prevent
+              @click="setMode(mode === 'lyric' ? 'name' : 'lyric')"
             >
               <Icon :name="mode === 'lyric' ? 'lyrics' : 'music'" :size="13" />
               <span>{{ mode === 'lyric' ? '歌词' : '歌名' }}</span>
             </button>
-            <button v-if="query" type="button" class="clearbtn" aria-label="清空" @mousedown.prevent="reset">
+            <button v-if="query" type="button" class="clearbtn" aria-label="清空" @mousedown.prevent @click="reset">
               <Icon name="close" :size="13" />
             </button>
           </form>
 
           <div v-if="showSuggest" class="suggest">
-            <button type="button" class="srow direct" @mousedown.prevent="submitSearch">
+            <button type="button" class="srow direct" @mousedown.prevent @click="submitSearch">
               <Icon name="search" :size="16" />
               <span class="sname">搜索「{{ query.trim() }}」</span>
               <Icon name="chevron" :size="15" class="sgo" />
             </button>
             <button
               v-for="track in suggestions"
-              :key="track.providerId + track.id"
+              :key="track.pluginId + ':' + track.providerId + ':' + track.id"
               type="button"
               class="srow"
-              @mousedown.prevent="pickSuggestion(track)"
+              @mousedown.prevent
+              @click="pickSuggestion(track)"
             >
               <Icon name="music" :size="16" />
               <span class="sname">
@@ -589,12 +716,12 @@ onMounted(() => {
         <div class="chip-row">
           <button
             v-for="provider in providers"
-            :key="provider.providerId + provider.pluginId"
+            :key="provider.pluginId + ':' + provider.providerId"
             class="chip"
-            :class="{ active: selected?.providerId === provider.providerId }"
-            @click="choose(provider.providerId)"
+            :class="{ active: selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId }"
+            @click="choose(provider)"
           >
-            <span v-if="selected?.providerId === provider.providerId" class="dot" />
+            <span v-if="selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId" class="dot" />
             {{ provider.name }}
           </button>
         </div>
@@ -685,7 +812,7 @@ onMounted(() => {
           <button
             v-if="otherProvider"
             class="btn btn-tint btn-sm"
-            @click="choose(otherProvider.providerId)"
+            @click="choose(otherProvider)"
           >
             换到 {{ otherProvider.name }}
           </button>
@@ -794,7 +921,7 @@ onMounted(() => {
         <div class="pad mt4">
           <SongRow
             v-for="(track, index) in localMatches"
-            :key="track.providerId + track.id"
+            :key="track.pluginId + ':' + track.providerId + ':' + track.id"
             :track="track"
             :index="index"
             :queue="localMatches"
@@ -808,7 +935,6 @@ onMounted(() => {
         <div class="empty">
           <div class="glyph"><Icon name="discover" :size="34" /></div>
           <h3>想听点什么？</h3>
-          <p>输入歌名或歌手，点「搜索」或按回车；输入时会先提示你收藏和歌单里的同名歌。</p>
         </div>
       </div>
     </div>

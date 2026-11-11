@@ -52,7 +52,7 @@ const index = new Map<string, Track>()
 export function rememberTracks(tracks: Track[]): void {
   for (const track of tracks) {
     if (!track?.id) continue
-    const key = `${track.providerId}:${track.id}`
+    const key = `${track.pluginId}:${track.providerId}:${track.id}`
     index.delete(key)
     index.set(key, track)
   }
@@ -164,7 +164,7 @@ export function suggestTracks(query: string, extra: Track[] = [], limit = 8): Tr
   const pool = new Map<string, Track>()
   for (const track of [...extra, ...indexedTracks()]) {
     if (!track?.id) continue
-    const key = `${track.providerId}:${track.id}`
+    const key = `${track.pluginId}:${track.providerId}:${track.id}`
     if (!pool.has(key)) pool.set(key, track)
   }
   const scored: Array<{ track: Track; rank: number; position: number }> = []

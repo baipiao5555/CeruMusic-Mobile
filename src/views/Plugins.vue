@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import {
   enablePlugin,
+  allProviders,
   disablePlugin,
   fetchPluginCode,
   getPluginConfig,
@@ -32,6 +33,9 @@ const configValues = ref<Record<string, any>>({})
 const expanded = ref('')
 
 const installed = computed(() => pluginState.plugins)
+const activeSource = computed(() =>
+  allProviders().find((item) => item.providerId === pluginState.selectedProvider)
+)
 
 /** 已安装插件提供的在线音源（每个 provider 一张 monogram 卡）。 */
 const sources = computed(() =>
@@ -44,8 +48,8 @@ function toggleDetails(pluginId: string): void {
   expanded.value = expanded.value === pluginId ? '' : pluginId
 }
 
-function useSource(providerId: string): void {
-  selectProvider(providerId)
+function useSource(providerId: string, pluginId: string): void {
+  selectProvider(providerId, pluginId)
 }
 
 function manifestPermissions(manifest: any): any[] {
@@ -294,10 +298,10 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
         <div class="subglow" aria-hidden="true" />
         <div class="subin">
           <div class="eb">SUBSCRIPTION</div>
-          <h3>从链接订阅</h3>
+          <h3>从链接添加音源</h3>
           <p class="fine">
             <Icon name="info" :size="12" />
-            <span>安装前逐条确认权限 · 仅接受 HTTPS 源</span>
+            <span>澜音 v2 / 洛雪 LX · 公网 HTTP(S) 链接</span>
           </p>
           <div class="urlrow">
             <Icon name="plugin" :size="14" class="uico" />
@@ -348,14 +352,15 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
           v-for="item in sources"
           :key="item.plugin.pluginId + ':' + item.provider.id"
           class="tile"
-          :class="{ cur: pluginState.selectedProvider === item.provider.id }"
-          @click="useSource(item.provider.id)"
+          :class="{ cur: activeSource?.providerId === item.provider.id && activeSource?.pluginId === item.plugin.pluginId }"
+          :disabled="!item.plugin.running"
+          @click="useSource(item.provider.id, item.plugin.pluginId)"
         >
           <span class="mono">{{ item.provider.name.slice(0, 1) }}</span>
           <span class="tname truncate">{{ item.provider.name }}</span>
           <span class="tv num">v{{ item.plugin.version }} · {{ item.provider.methods.length }} 接口</span>
           <span class="ta">
-            <template v-if="pluginState.selectedProvider === item.provider.id">
+            <template v-if="activeSource?.providerId === item.provider.id && activeSource?.pluginId === item.plugin.pluginId">
               <Icon name="check" :size="11" /> 使用中
             </template>
             <template v-else>+ 设为当前</template>
@@ -384,7 +389,7 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
       <div v-else-if="!installed.length" class="empty">
         <div class="glyph"><Icon name="plugin" :size="34" /></div>
         <h3>还没有安装插件</h3>
-        <p>澜音通过 v2 插件获取音乐信息。可以从链接、文件或内置示例开始。</p>
+        <p>支持澜音 v2 插件和洛雪 LX 音源。</p>
       </div>
 
       <div v-else class="pad">
@@ -438,6 +443,7 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
                 <span class="badge" :class="{ on: plugin.running }">
                   {{ plugin.running ? '运行中' : '已停用' }}
                 </span>
+                <span v-if="plugin.format === 'lx'" class="badge">洛雪 LX</span>
               </div>
               <div class="pacts">
                 <button
@@ -474,7 +480,7 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
             <Icon name="info" :size="12" />
             <span>关于插件</span>
           </div>
-          手机版沿用澜音 v2 插件协议，插件在独立沙箱（iframe）中运行，只能通过受控桥接访问网络、存储和播放器。
+          澜音 v2 插件和洛雪 LX 音源均在独立沙箱中运行。洛雪音源的歌曲目录由应用提供，播放地址由音源解析。
           出于安全考虑，插件网络请求仅允许访问公网 HTTP(S) 地址，不能访问本机或局域网。
           从链接安装的插件会记录更新地址，应用启动时自动检查新版本（6 小时内只查一次，可在设置里关掉），
           也可以点上面的「检查更新」立刻检查。从文件安装的插件没有更新地址，需要重新从链接安装一次才能自动更新。
@@ -491,6 +497,7 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
           <div class="f1">
             <div class="sh-title truncate">安装 {{ pending.manifest.name }}？</div>
             <div class="sh-sub num">
+              {{ pending.manifest.format === 'lx' ? '洛雪 LX' : '澜音 v2' }} ·
               v{{ pending.manifest.version }} · {{ pending.manifest.author || '未知作者' }}
             </div>
           </div>

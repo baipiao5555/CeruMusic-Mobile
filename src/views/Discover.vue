@@ -26,6 +26,9 @@ const providers = computed(() => allProviders())
 const selected = computed(
   () => providers.value.find((item) => item.providerId === pluginState.selectedProvider) ?? providers.value[0]
 )
+const providerKey = computed(() =>
+  selected.value ? `${selected.value.pluginId}:${selected.value.providerId}` : ''
+)
 
 const charts = ref<any[]>([])
 const playlists = ref<any[]>([])
@@ -50,7 +53,9 @@ interface HomeCache {
 }
 const homeCaches = new Map<string, HomeCache>()
 let lastScrollTop = 0
-let loadingProviderId = ''
+let loadingProviderKey = ''
+let requestSeq = 0
+let playlistRequestSeq = 0
 let restoring = false
 
 const history = computed(() => getHistory().slice(0, 8))
@@ -115,18 +120,21 @@ function countOf(entity: any): string {
 }
 
 function choose(provider: ProviderHandle): void {
-  selectProvider(provider.providerId)
+  selectProvider(provider.providerId, provider.pluginId)
 }
 
 async function loadPlaylists(): Promise<void> {
   const provider = selected.value
   if (!provider) return
+  const key = providerKey.value
+  const seq = ++playlistRequestSeq
   const category = categories.value[activeCategory.value]
   if (!category?.ref) return
   try {
     const page = await invokeProvider(provider, 'playlists.list', [category.ref, undefined])
+    if (seq !== playlistRequestSeq || key !== providerKey.value) return
     playlists.value = (page?.items ?? []).filter((item: any) => item.ref?.kind === 'playlist')
-    saveCache(provider.providerId)
+    saveCache(key)
   } catch (err: any) {
     console.warn('加载歌单失败:', err)
   }
@@ -139,9 +147,9 @@ function applyCache(cache: HomeCache): void {
   activeCategory.value = cache.activeCategory
 }
 
-function saveCache(providerId: string): void {
-  homeCaches.set(providerId, {
-    providerId,
+function saveCache(key: string): void {
+  homeCaches.set(key, {
+    providerId: selected.value?.providerId ?? '',
     charts: charts.value,
     playlists: playlists.value,
     categories: categories.value,
@@ -151,26 +159,33 @@ function saveCache(providerId: string): void {
 }
 
 /** 拉一轮数据但不碰 loading 状态：过期缓存用它做静默刷新。 */
-async function fetchAll(provider: ProviderHandle): Promise<void> {
+async function fetchAll(provider: ProviderHandle, seq: number): Promise<void> {
   try {
     if (provider.methods.includes('charts.list')) {
       const chartPage = await invokeProvider(provider, 'charts.list', [])
+      if (seq !== requestSeq) return
       charts.value = chartPage?.items ?? []
     }
   } catch (err: any) {
+    if (seq !== requestSeq) return
     console.warn('加载榜单失败:', err)
     if (!charts.value.length) error.value = '榜单没能加载出来'
   }
+  if (seq !== requestSeq) return
   try {
     if (
       provider.methods.includes('playlists.categories') &&
       provider.methods.includes('playlists.list')
     ) {
       const res = await invokeProvider(provider, 'playlists.categories', [])
+      if (seq !== requestSeq) return
       categories.value = res?.items ?? []
-      const category = categories.value[activeCategory.value] ?? categories.value[0]
+      if (!categories.value[activeCategory.value]) activeCategory.value = 0
+      const category = categories.value[activeCategory.value]
       if (category?.ref) {
+        const playlistSeq = ++playlistRequestSeq
         const page = await invokeProvider(provider, 'playlists.list', [category.ref, undefined])
+        if (seq !== requestSeq || playlistSeq !== playlistRequestSeq) return
         playlists.value = (page?.items ?? []).filter((item: any) => item.ref?.kind === 'playlist')
       }
     }
@@ -181,6 +196,12 @@ async function fetchAll(provider: ProviderHandle): Promise<void> {
 
 async function load(force = false): Promise<void> {
   const provider = selected.value
+  const key = providerKey.value
+  // Cached and empty-provider transitions must also invalidate older requests.
+  if (loading.value && loadingProviderKey === key && !force) return
+  const seq = ++requestSeq
+  playlistRequestSeq += 1
+  error.value = ''
   if (!provider) {
     charts.value = []
     playlists.value = []
@@ -188,18 +209,19 @@ async function load(force = false): Promise<void> {
     activeCategory.value = 0
     error.value = ''
     loading.value = false
+    loadingProviderKey = ''
     return
   }
-  // 同一音源正在拉数据时直接跳过，避免 onMounted 与 watch 各拉一次
-  if (loading.value && loadingProviderId === provider.providerId && !force) return
 
-  const cached = homeCaches.get(provider.providerId) ?? null
+  const cached = homeCaches.get(key) ?? null
   if (cached && !force) {
     applyCache(cached)
     loading.value = false
     if (Date.now() - cached.at < CACHE_TTL) return
     // 过期了也先把旧内容留在屏上，后台悄悄换新
-    void fetchAll(provider).then(() => saveCache(provider.providerId))
+    void fetchAll(provider, seq).then(() => {
+      if (seq === requestSeq) saveCache(key)
+    })
     return
   }
 
@@ -209,11 +231,12 @@ async function load(force = false): Promise<void> {
   activeCategory.value = 0
   error.value = ''
   loading.value = true
-  loadingProviderId = provider.providerId
-  await fetchAll(provider)
+  loadingProviderKey = key
+  await fetchAll(provider, seq)
+  if (seq !== requestSeq) return
   loading.value = false
-  loadingProviderId = ''
-  saveCache(provider.providerId)
+  loadingProviderKey = ''
+  saveCache(key)
 }
 
 function selectCategory(index: number): void {
@@ -304,20 +327,7 @@ onBeforeUnmount(() => {
   if (value > 0) lastScrollTop = value
 })
 
-watch(
-  () => selected.value?.providerId,
-  (id) => {
-    if (!id) return
-    const cached = homeCaches.get(id)
-    if (cached) {
-      applyCache(cached)
-      loading.value = false
-      if (Date.now() - cached.at > CACHE_TTL) void load(true)
-      return
-    }
-    void load(true)
-  }
-)
+watch(providerKey, () => void load())
 </script>
 
 <template>
@@ -385,9 +395,9 @@ watch(
           <span class="src-lab">音源</span>
           <button
             v-for="provider in providers"
-            :key="provider.providerId + provider.pluginId"
+            :key="provider.pluginId + ':' + provider.providerId"
             class="chip"
-            :class="{ active: selected?.providerId === provider.providerId }"
+            :class="{ active: selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId }"
             @click="choose(provider)"
           >
             <span class="dot" />{{ provider.name }}

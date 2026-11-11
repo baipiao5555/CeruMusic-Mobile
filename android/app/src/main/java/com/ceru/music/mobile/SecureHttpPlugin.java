@@ -10,6 +10,7 @@ import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.util.Base64;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -43,9 +44,10 @@ public class SecureHttpPlugin extends Plugin {
         String body = call.getString("body");
         JSObject headers = call.getObject("headers", new JSObject());
         long timeout = Math.max(1000, Math.min(60000, call.getLong("timeoutMs", 30000L)));
+        boolean binaryResponse = "arraybuffer".equals(call.getString("responseType"));
         executor.execute(() -> {
             try {
-                JSObject response = perform(url, method, headers, body, timeout);
+                JSObject response = perform(url, method, headers, body, timeout, binaryResponse);
                 call.resolve(response);
             } catch (Exception error) {
                 call.reject(error.getMessage() == null ? "网络请求失败" : error.getMessage());
@@ -58,7 +60,8 @@ public class SecureHttpPlugin extends Plugin {
             String initialMethod,
             JSObject headers,
             String body,
-            long timeout
+            long timeout,
+            boolean binaryResponse
     ) throws Exception {
         String currentUrl = initialUrl;
         String method = initialMethod;
@@ -100,11 +103,13 @@ public class SecureHttpPlugin extends Plugin {
             }
 
             InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-            String text = stream == null ? "" : readLimited(stream);
+            byte[] bytes = stream == null ? new byte[0] : readLimited(stream);
 
             JSObject response = new JSObject();
             response.put("status", status);
-            response.put("body", text);
+            response.put("body", binaryResponse
+                    ? Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    : new String(bytes, StandardCharsets.UTF_8));
             JSObject responseHeaders = new JSObject();
             for (Map.Entry<String, List<String>> entry : connection.getHeaderFields().entrySet()) {
                 if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) continue;
@@ -261,7 +266,7 @@ public class SecureHttpPlugin extends Plugin {
         return false;
     }
 
-    private static String readLimited(InputStream stream) throws Exception {
+    private static byte[] readLimited(InputStream stream) throws Exception {
         try (InputStream input = stream; ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
             int read;
@@ -271,7 +276,7 @@ public class SecureHttpPlugin extends Plugin {
                 if (total > MAX_BODY_BYTES) throw new Exception("响应内容过大");
                 output.write(buffer, 0, read);
             }
-            return output.toString(StandardCharsets.UTF_8.name());
+            return output.toByteArray();
         }
     }
 

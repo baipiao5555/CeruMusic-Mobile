@@ -2,6 +2,14 @@ import { PluginCore, readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
 import { IframePluginSandbox } from './sandbox'
 import { requestRemote, validateRemoteUrl } from './network'
 import { idb } from '../storage/idb'
+import { createLxArtifact, inspectLxPlugin, lxLyrics, lxProviders } from './lx'
+import { lxMusicInfo, searchLxCatalog } from './lx-catalog'
+import { selectPlaybackQuality } from '../quality'
+
+const LX_RPC_METHODS = new Set([
+  'http.request', 'operations.cancel', 'ui.toast',
+  'permissions.query', 'permissions.request', 'permissions.getGranted', 'permissions.requestGroup'
+])
 
 export interface PermissionDeclaration {
   key: string
@@ -91,6 +99,7 @@ export class PluginHost {
   private actionIds = new Set<string>()
   private controllers = new Map<string, Set<AbortController>>()
   private disposed = false
+  private lxReady = false
   private config: Record<string, any> = {}
 
   constructor(state: PluginHostState) {
@@ -137,8 +146,22 @@ export class PluginHost {
   }
 
   async ensureReady(): Promise<void> {
-    if (this.core) return
+    if (this.core || this.lxReady) return
     if (!this.code) throw new Error('插件文件为空')
+    const lxManifest = this.manifest.format === 'lx' ? inspectLxPlugin(this.code) : null
+    if (lxManifest) {
+      this.manifest = lxManifest
+      this.sandbox = new IframePluginSandbox(
+        (method, data) => this.rpc(method, data),
+        (type, data) => this.handleSandboxEvent(type, data)
+      )
+      await this.sandbox.start(createLxArtifact(this.code, lxManifest))
+      if (!this.manifest.contributes.providers.length) {
+        throw new Error('洛雪音源没有声明可用的音乐平台')
+      }
+      this.lxReady = true
+      return
+    }
     const parsed = readPluginArtifact(this.code)
     if (parsed.header.manifest.manifestVersion !== 2) throw new Error('只支持澜音 v2 插件')
     this.artifact = parsed.artifact
@@ -176,6 +199,21 @@ export class PluginHost {
 
   private handleSandboxEvent(type: string, data: any): void {
     if (this.disposed) return
+    if (this.manifest.format === 'lx' && !['lx-inited', 'log', 'notify'].includes(type)) return
+    if (type === 'lx-inited' && this.manifest.format === 'lx') {
+      if (this.lxReady) return
+      const providers = lxProviders(data?.sources)
+      this.manifest.contributes.providers = providers
+      for (const provider of providers) {
+        this.providerMethods.set(provider.id, new Set([
+          'tracks.search',
+          'tracks.resolve',
+          ...(provider.actions.includes('lyric') ? ['tracks.lyrics'] : []),
+          ...(provider.actions.includes('pic') ? ['tracks.artwork'] : [])
+        ]))
+      }
+      return
+    }
     if (type === 'log') {
       const level = data?.level ?? 'info'
       const prefix = `[插件 ${this.manifest?.name ?? this.pluginId}]`
@@ -288,6 +326,9 @@ export class PluginHost {
 
   private async rpc(method: string, data: any = {}): Promise<any> {
     if (this.disposed) throw new Error('插件已停止')
+    if (this.manifest.format === 'lx' && !LX_RPC_METHODS.has(method)) {
+      throw new Error('洛雪音源无权调用宿主接口: ' + method)
+    }
 
     if (method === 'permissions.query') return { status: this.status(data.key) }
     if (method === 'permissions.request') return { status: await this.requestPermission(data.key) }
@@ -333,7 +374,10 @@ export class PluginHost {
           method: data.method,
           headers: data.headers,
           body: data.body,
-          timeoutMs: data.timeoutMs
+          timeoutMs: data.timeoutMs,
+          raw: data.raw === true,
+          responseType: data.responseType === 'arraybuffer' ? 'arraybuffer' : undefined,
+          signal: controller.signal
         })
       } finally {
         clearTimeout(timer)
@@ -470,6 +514,7 @@ export class PluginHost {
 
   async invokeProvider(providerId: string, method: string, args: any[] = []): Promise<any> {
     await this.ensureReady()
+    if (this.lxReady) return this.invokeLxProvider(providerId, method, args)
     if (!this.core) throw new Error('插件未启动')
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 60_000)
@@ -482,6 +527,56 @@ export class PluginHost {
     } finally {
       clearTimeout(timer)
     }
+  }
+
+  private async invokeLxProvider(providerId: string, method: string, args: any[]): Promise<any> {
+    if (!this.providerMethods.get(providerId)?.has(method)) throw new Error('洛雪音源不支持该操作')
+    const provider = this.manifest.contributes.providers.find((item: any) => item.id === providerId)
+    if (method === 'tracks.search') {
+      if (this.status('network') !== 'granted') throw new Error('插件未获得网络访问权限')
+      const query = args[0] ?? {}
+      const result = await searchLxCatalog(providerId, String(query.query ?? ''), Number(query.cursor) || 1, query.limit)
+      for (const item of result.items) {
+        item.metadata.qualities = item.metadata.qualities.filter(
+          (quality: string) => provider.qualities.includes(quality)
+        )
+      }
+      return result
+    }
+    const actions: Record<string, string> = {
+      'tracks.resolve': 'musicUrl', 'tracks.lyrics': 'lyric', 'tracks.artwork': 'pic'
+    }
+    const musicInfo = lxMusicInfo(args[0], providerId)
+    const trackQualities = musicInfo.types.map((item: any) => item?.type).filter(
+      (quality: any) => typeof quality === 'string' && quality
+    )
+    const available = trackQualities.length
+      ? provider.qualities.filter((quality: string) => trackQualities.includes(quality))
+      : provider.qualities
+    if (method === 'tracks.resolve' && !available.length) {
+      throw new Error('歌曲与当前洛雪音源没有共同支持的音质，请切换音源')
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 60_000)
+    let result: any
+    try {
+      result = await this.sandbox!.invoke('action', 'lx-request', '', [{
+        source: providerId,
+        action: actions[method],
+        info: {
+          musicInfo,
+          type: selectPlaybackQuality(provider.qualities, available, args[1] ?? '')
+        }
+      }], controller.signal)
+    } finally {
+      clearTimeout(timer)
+    }
+    if (method === 'tracks.lyrics') return lxLyrics(result)
+    const url = typeof result === 'string' ? result : result?.url
+    if (!url) throw new Error(result?.error?.message || result?.error || '洛雪音源没有返回有效地址')
+    validateRemoteUrl(url)
+    if (method === 'tracks.artwork') return { url }
+    return { ok: true, url, requestHeaders: result?.headers ?? result?.requestHeaders }
   }
 
   getManifest(): any {
@@ -572,5 +667,6 @@ export class PluginHost {
     await this.core?.dispose().catch(() => undefined)
     this.sandbox?.dispose()
     this.core = undefined
+    this.lxReady = false
   }
 }

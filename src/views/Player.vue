@@ -337,7 +337,7 @@ onUnmounted(() => {
 
     <div class="p-main">
       <div class="p-core">
-      <div class="p-art">
+      <div class="p-art" :class="{ rotating: playerState.playing && !playerState.loading }">
         <img
           :src="track.artwork || '/default-cover.png'"
           alt=""
@@ -842,14 +842,14 @@ onUnmounted(() => {
   width: min(360px, 82vw, calc(37vh - 6px));
   height: min(360px, 82vw, calc(37vh - 6px));
   margin: 0 auto;
-  border-radius: 24px;
+  border-radius: 50%;
   flex: none;
 }
 .p-art::after {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 24px;
+  border-radius: 50%;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 24px 60px rgba(0, 0, 0, 0.5);
   pointer-events: none;
 }
@@ -857,8 +857,23 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 24px;
+  border-radius: 50%;
   display: block;
+  animation: artwork-turn 24s linear infinite;
+  animation-play-state: paused;
+}
+.p-art.rotating img {
+  animation-play-state: running;
+}
+@keyframes artwork-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .p-art img {
+    animation: none;
+  }
 }
 .p-art::before {
   content: '';
@@ -871,8 +886,10 @@ onUnmounted(() => {
 }
 .p-art-badge {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: auto;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
   gap: 4px;

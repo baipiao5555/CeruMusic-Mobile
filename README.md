@@ -5,7 +5,7 @@
 - 仓库：https://github.com/baipiao5555/CeruMusic-Mobile
 - 下载：https://github.com/baipiao5555/CeruMusic-Mobile/releases
 
-澜音本身只提供插件运行框架和播放器，不存储、不提供任何音乐文件。歌曲搜索、歌词、播放地址都由你自行安装的合规 v2 插件提供。
+澜音本身只提供插件运行框架和播放器，不存储、不提供任何音乐文件。支持自行安装澜音 v2 插件或洛雪 LX 音源；LX 模式由应用查询歌曲目录，播放地址由音源脚本解析。
 
 ## 截图
 
@@ -19,11 +19,13 @@
 
 ## 功能
 
-- 澜音 v2 单文件插件：从链接、本地文件安装，支持启用/停用、卸载、配置、签名校验；从链接安装的插件会自动检查更新
+- 音源：从链接或本地文件安装澜音 v2 插件、洛雪 LX 脚本，支持启用/停用、卸载和链接更新；v2 插件继续支持配置与签名校验
+- 洛雪兼容：按脚本实际声明提供酷我、酷狗、QQ、网易云、咪咕平台，保留歌曲 ID、音质哈希、歌词和封面信息；同平台可选择具体插件，已有歌曲仍优先使用原插件
 - 发现页：插件提供的榜单与推荐歌单
-- 搜索：输入时给出本地联想，回车/点搜索才联网；支持相关度排序、命中高亮、搜索历史、搜不到时缩词重试与本地歌曲兜底
+- 搜索：输入时防抖联网联想包含关键词的歌名，去重后最多 10 条，并保留本地补充；回车/点搜索展示正式结果，支持排序、高亮、搜索历史、缩词重试与本地兜底
 - 歌单导入：通过插件提供的导入器，把 QQ音乐、网易云音乐、酷狗、酷我、咪咕等平台的歌单导入到本地
 - 播放：队列、上一首/下一首、随机/单曲循环/列表循环、进度拖动
+- 播放封面：圆形封面随播放旋转，暂停与缓冲时停在当前角度；开启系统减少动态效果时不旋转
 - 音质：自动选择当前歌曲可用的最高音质，也可手动选择标准、超高、无损、高清臻音、全景环绕、超清母带等插件支持的档位
 - 歌词：逐行高亮，点击歌词跳转
 - 云歌词：插件没有歌词时，自动从 LrcLib / QQ音乐 / 网易云 匹配同步歌词与翻译；播放页也可以手动触发匹配
@@ -63,7 +65,7 @@ android/            Capacitor Android 工程 + 前台媒体服务 + 下载/安�
 public/plugin-runtime/  构建时从 @shiqianjiang/ceru-plugin-core 复制（不纳入版本库）
 ```
 
-插件运行方式与桌面端一致：官方 `sandbox.js` 在 `sandbox="allow-scripts"` 的 iframe 中执行，通过 `postMessage` 与 Host 通信；Host 负责权限、HTTP、存储、播放器等受控能力。插件 JavaScript 不进入主界面上下文。
+v2 插件继续使用官方 `sandbox.js` 与隔离 iframe。洛雪脚本在受限 Worker 中执行，不能访问主界面、修改宿主设置或直接发起网络请求；两者通过 `postMessage` 与 Host 通信，由 Host 检查权限和网络地址。
 
 ## 构建
 
@@ -80,6 +82,13 @@ gradlew.bat assembleRelease
 插件运行时资源位于 npm 包内，`npm run dev` / `npm run build` 前会由 `prepare:plugin-runtime` 自动复制到 `public/plugin-runtime/`，不需要手动提交。
 
 产物：`android/app/build/outputs/apk/release/app-release.apk`
+
+Windows 下若 JDK 报 `Unable to establish loopback connection`，可在本次 PowerShell 会话中指定已存在的短临时目录，再重试 Gradle 构建：
+
+```powershell
+New-Item -ItemType Directory -Force 'D:/LX/.vite/jdk-tmp' | Out-Null
+$env:JAVA_TOOL_OPTIONS = "$env:JAVA_TOOL_OPTIONS -Djdk.net.unixdomain.tmpdir=D:/LX/.vite/jdk-tmp -Djava.io.tmpdir=D:/LX/.vite/jdk-tmp".Trim()
+```
 
 ## 发版与跟随上游
 
@@ -110,14 +119,32 @@ npm run build:only     # 只构建 Web 资源
 
 Android 签名配置在 `android/keystore.properties`（已加入 .gitignore）。首次构建前需要自行生成 keystore，或删除 `app/build.gradle` 中的 `signingConfig` 使用 debug 签名。
 
+### 回归检查
+
+启动开发服务后，可在 PowerShell 中运行：
+
+```powershell
+$env:CERU_TEST_URL = 'http://127.0.0.1:5180'
+node scripts/test-ui-races.mjs
+node scripts/test-search-suggestions.mjs
+node scripts/test-search-live.mjs
+node scripts/test-player-artwork.mjs
+node scripts/test-lx-catalog.mjs
+node scripts/test-lx-quality.mjs
+node scripts/test-lx-plugin.mjs
+node scripts/test-network-policy.mjs
+```
+
+浏览器测试使用本机 Chrome，可用 `CHROME_PATH` 指定路径。洛雪回归使用受控测试脚本和拦截的网络响应，不下载或执行第三方音源。
+
 ## 插件安全策略
 
-- 仅接受澜音 v2 单文件产物（`exports.manifest` / `exports.activate`）
-- 安装时静态读取清单，不执行插件代码
+- 接受澜音 v2 单文件产物（`exports.manifest` / `exports.activate`）和带元信息的洛雪 LX 脚本
+- 安装预览静态读取清单或脚本头，确认启用后才在隔离环境执行代码
 - 权限在安装确认页展示；插件首次使用未授权能力时会再次请求
 - 插件网络请求仅允许 `http`/`https` 公网地址；明确拒绝 localhost、回环、私有与保留地址
 - 响应体限制 16 MB，请求超时 60 秒，重定向最多 5 次
-- 插件逻辑运行在独立 iframe 中，无法访问主界面 DOM 或本地数据
+- 插件逻辑与主界面隔离；洛雪 Worker 禁止直接联网，宿主桥接仅开放网络、权限查询和提示等必要接口
 - 下载器对每一跳重定向都重新解析域名并做同样的公网校验，跨域重定向会丢弃 Authorization、Cookie 等敏感请求头
 - 应用内更新只从本仓库 GitHub Release 的 HTTPS 地址下载 APK，同样经过下载器的逐跳校验；安装时通过 FileProvider 把文件交给系统安装器，不接受任意路径
 - 账号 token 只保存在本机 localStorage，登录密码始终在系统浏览器中由认证服务处理，应用不会接触密码

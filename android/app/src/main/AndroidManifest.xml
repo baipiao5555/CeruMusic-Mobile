@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -20,7 +20,7 @@
         <!-- Lyricon provider discovery -->
         <meta-data android:name="lyricon_module" android:value="true" />
         <meta-data android:name="lyricon_module_author" android:value="CeruMusic Mobile" />
-        <meta-data android:name="lyricon_module_description" android:value="澜音歌词共享" />
+        <meta-data android:name="lyricon_module_description" android:value="婢滈煶姝岃瘝鍏变韩" />
         <meta-data android:name="lyricon_module_tags" android:resource="@array/lyricon_module_tags" />
 
         <activity
@@ -36,7 +36,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 澜音账号登录回调：cerumusic://oauth/callback -->
+            <!-- 婢滈煶璐﹀彿鐧诲綍鍥炶皟锛歝erumusic://oauth/callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -70,5 +70,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Android 16 实时更新：把常驻通知提升为灵动岛卡片（普通权限，自动授予） -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>
+

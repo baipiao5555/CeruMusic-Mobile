@@ -157,6 +157,8 @@ public class MediaPlaybackService extends Service {
     private boolean islandCompat = false;
     /** 上一次写进媒体标题的歌词行，用来避免每帧都重建通知。 */
     private String islandLine = "";
+    /** 岛歌词那张实时更新通知；媒体卡片仍归 NOTIFICATION_ID 所有。 */
+    private IslandLyricNotifier islandNotifier;
     private LyriconProvider lyriconProvider;
     private long lyricGeneration = 0;
     /** 上一次成功同步给 Lyricon 的播放状态与位置。 */
@@ -211,7 +213,10 @@ public class MediaPlaybackService extends Service {
                 String line = lyricAt(currentPosition());
                 if (!line.equals(islandLine)) {
                     islandLine = line;
-                    updateMetadata();
+                    if (islandNotifier != null) {
+                        islandNotifier.update(line, title, artist, artwork, playing, currentPosition(), duration);
+                        recordDiagnostic("island", "line→" + line);
+                    }
                 }
             }
             mainHandler.postDelayed(this, LYRICON_TICK_MS);
@@ -227,6 +232,7 @@ public class MediaPlaybackService extends Service {
     public void onCreate() {
         super.onCreate();
         createChannel();
+        islandNotifier = new IslandLyricNotifier(this);
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CeruMusic:Playback");
@@ -312,7 +318,7 @@ public class MediaPlaybackService extends Service {
                         islandCompat = nextCompat;
                         islandLine = "";
                         recordDiagnostic("island", "compat " + (islandCompat ? "on" : "off"));
-                        updateMetadata();
+                        refreshIsland();
                     }
                 }
             }
@@ -358,6 +364,7 @@ public class MediaPlaybackService extends Service {
                 islandCompat = nextIslandCompat;
                 islandLine = "";
                 recordDiagnostic("island", "compat " + (islandCompat ? "on" : "off"));
+                refreshIsland();
             }
             playing = intent.getBooleanExtra("playing", playing);
             long next = intent.getLongExtra("position", currentPosition());
@@ -437,6 +444,21 @@ public class MediaPlaybackService extends Service {
             text = line.text;
         }
         return text == null ? "" : text;
+    }
+
+    /**
+     * 岛歌词开关、歌词负载或曲目变化后，把当前行刷新到实时通知上。
+     * 关掉开关或没有歌词时撤掉这张卡片。
+     */
+    private void refreshIsland() {
+        if (islandNotifier == null) return;
+        if (!islandCompat) {
+            islandNotifier.hide();
+            return;
+        }
+        String line = lyricAt(currentPosition());
+        islandLine = line;
+        islandNotifier.update(line, title, artist, artwork, playing, currentPosition(), duration);
     }
 
     private void updateTicker() {
@@ -642,6 +664,7 @@ public class MediaPlaybackService extends Service {
         updateMetadata();
         updatePlaybackState();
         refreshNotification();
+        refreshIsland();
     }
 
     private void ensureLyricon() {
@@ -901,13 +924,6 @@ public class MediaPlaybackService extends Service {
         if (mediaSession == null) return;
         String displayTitle = title;
         String displayAlbum = album;
-        if (islandCompat && lyricsEnabled && playing) {
-            String line = lyricAt(currentPosition());
-            if (!line.isEmpty()) {
-                displayTitle = line;
-                displayAlbum = title;
-            }
-        }
         MediaMetadata.Builder metadata = new MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, displayTitle)
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
@@ -1090,6 +1106,7 @@ public class MediaPlaybackService extends Service {
     @Override
     public void onDestroy() {
         mainHandler.removeCallbacks(progressTicker);
+        if (islandNotifier != null) islandNotifier.hide();
         destroyLyricon();
         artworkExecutor.shutdownNow();
         try {

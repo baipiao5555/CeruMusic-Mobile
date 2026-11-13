@@ -747,7 +747,7 @@ async function resetSettings(): Promise<void> {
             <span class="ico"><Icon name="lyrics" :size="15" /></span>
             <div class="body">
               <div class="lab">岛歌词兼容</div>
-              <div class="sub">把当前歌词写进媒体标题，给系统岛用</div>
+              <div class="sub">把歌词发成实时通知，交给系统岛显示</div>
             </div>
             <button
               class="switch"

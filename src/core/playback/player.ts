@@ -966,6 +966,54 @@ function normalizePluginLyrics(document: any): LyricLine[] {
   })
 }
 
+/** 歌名比较用的宽松形态：去掉空格、标点与常见后缀。 */
+function lyricTitleKey(text: string): string {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/[（(][^）)]*[）)]/g, '')
+    .replace(/\s*-\s*.*$/, '')
+    .replace(/[\s\-_/\\()[\]{}（）【】「」《》"'’“”·.,，。!！?？:：;；&+~`|]/g, '')
+}
+
+/**
+ * 导入歌单里的曲目 ref 可能只是重建出来的（缺少插件内部的额外字段），
+ * 直接取歌词会拿空。这里用歌名+歌手再搜一次，拿搜索结果里的完整 ref 重试。
+ */
+async function lyricsBySearch(provider: ProviderHandle, track: Track): Promise<LyricLine[]> {
+  if (!provider.methods.includes('tracks.search') || !provider.methods.includes('tracks.lyrics')) {
+    return []
+  }
+  const query = `${track.title} ${track.artist}`.trim()
+  if (!query) return []
+  const wanted = lyricTitleKey(track.title)
+  let items: any[] = []
+  try {
+    const result = await invokeProvider(provider, 'tracks.search', [
+      { query, kinds: ['track'], filters: {}, limit: 10 }
+    ])
+    items = Array.isArray(result?.items) ? result.items : []
+  } catch {
+    return []
+  }
+  for (const item of items.slice(0, 8)) {
+    if (item?.ref?.kind !== 'track') continue
+    let candidate: Track
+    try {
+      candidate = toTrack(item, provider)
+    } catch {
+      continue
+    }
+    // 只认歌名一致的，避免把同歌手的另一首歌的歌词贴上来。
+    if (!wanted || lyricTitleKey(candidate.title) !== wanted) continue
+    try {
+      const document = await invokeProvider(provider, 'tracks.lyrics', [candidate.ref])
+      const lines = normalizePluginLyrics(document)
+      if (lines.length) return lines
+    } catch {}
+  }
+  return []
+}
+
 async function loadLyrics(track: Track): Promise<void> {
   const provider = providerForTrack(track)
   playerState.lyricsLoading = true
@@ -992,8 +1040,44 @@ async function loadLyrics(track: Track): Promise<void> {
           updateActiveLyric()
           return
         }
-      } catch {
-        // Fall through to the cloud lyric sources.
+        const recovered = await lyricsBySearch(provider, track)
+        if (currentTrack()?.id !== track.id) return
+        if (recovered.length) {
+          playerState.lyrics = recovered
+          playerState.lyricSource = 'plugin'
+          logEvent(
+            'info',
+            'LYRIC',
+            `歌词已加载：${recovered.length} 行`,
+            `source=plugin(按歌名重搜)；原 ref 取词为空`
+          )
+          syncBackgroundLyrics(track, playerState.lyrics)
+          updateActiveLyric()
+          return
+        }
+        logEvent(
+          'warn',
+          'LYRIC',
+          '插件没给歌词，改试云端歌词',
+          `provider=${provider.providerId}；ref.id=${String((track.ref as any)?.id ?? '')}`
+        )
+      } catch (error) {
+        logEvent(
+          'warn',
+          'LYRIC',
+          '插件取词失败，改试云端歌词',
+          `${error instanceof Error ? error.message : String(error)}；provider=${provider.providerId}`
+        )
+        const recovered = await lyricsBySearch(provider, track)
+        if (currentTrack()?.id !== track.id) return
+        if (recovered.length) {
+          playerState.lyrics = recovered
+          playerState.lyricSource = 'plugin'
+          logEvent('info', 'LYRIC', `歌词已加载：${recovered.length} 行`, 'source=plugin(按歌名重搜)')
+          syncBackgroundLyrics(track, playerState.lyrics)
+          updateActiveLyric()
+          return
+        }
       }
     }
 
@@ -1012,7 +1096,16 @@ async function loadLyrics(track: Track): Promise<void> {
         )
         syncBackgroundLyrics(track, playerState.lyrics)
         updateActiveLyric()
+      } else {
+        logEvent(
+          'warn',
+          'LYRIC',
+          '这句也没找到同步歌词',
+          `${track.title} / ${track.artist}；歌词共享会保持空白`
+        )
       }
+    } else {
+      logEvent('warn', 'LYRIC', '云端歌词已关闭，且插件没有给出歌词', `${track.title} / ${track.artist}`)
     }
   } finally {
     if (currentTrack()?.id === track.id) playerState.lyricsLoading = false

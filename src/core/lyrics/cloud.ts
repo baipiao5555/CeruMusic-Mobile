@@ -139,13 +139,18 @@ function toLyricLines(parsed: ParsedLine[], translationText?: string): LyricLine
   })
 }
 
+/** 导入歌单里歌手常被写成占位词，这时只能靠歌名匹配。 */
+const PLACEHOLDER_ARTIST = /^(未知歌手|未知艺术家|未知|群星|various artists|unknown( artist)?|n\/a|-+)$/i
+
 function scoreCandidate(track: Track, candidate: Candidate, lines: LyricLine[]): number {
   const titleScore = similarity(track.title, candidate.title)
   const artistScore = similarity(track.artist, candidate.artist)
   if (titleScore < 0.35) return Number.NEGATIVE_INFINITY
-  if (track.artist && candidate.artist && artistScore < 0.25) return Number.NEGATIVE_INFINITY
+  const artistKnown = Boolean(track.artist && !PLACEHOLDER_ARTIST.test(track.artist.trim()))
+  if (artistKnown && candidate.artist && artistScore < 0.25) return Number.NEGATIVE_INFINITY
 
-  let score = titleScore * 50 + artistScore * 30
+  // 没有可用歌手时按歌名单项记分（满 80），否则歌名+歌手各占一份。
+  let score = artistKnown ? titleScore * 50 + artistScore * 30 : titleScore * 80
   if (
     track.album &&
     candidate.album &&

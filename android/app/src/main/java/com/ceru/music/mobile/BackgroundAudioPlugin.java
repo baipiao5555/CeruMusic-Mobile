@@ -51,6 +51,10 @@ public class BackgroundAudioPlugin extends Plugin {
         intent.putExtra("id", call.getString("id", ""));
         intent.putExtra("position", doubleToLong(call, "position"));
         intent.putExtra("duration", doubleToLong(call, "duration"));
+        // 开关可能在播放中途改变，进度同步顺便带上，下一拍就生效。
+        if (call.hasOption("islandCompat")) {
+            intent.putExtra("islandCompat", call.getBoolean("islandCompat", false));
+        }
         context.startService(intent);
         call.resolve();
     }

@@ -12,6 +12,8 @@ interface BackgroundAudioOptions {
   artwork: string
   playing: boolean
   pauseOnNoisy: boolean
+  /** 把当前歌词行写进媒体标题，给不读 Lyricon 的系统岛用。 */
+  islandCompat: boolean
   position: number
   duration: number
 }
@@ -19,7 +21,12 @@ interface BackgroundAudioOptions {
 interface BackgroundAudioPlugin {
   start(options: BackgroundAudioOptions): Promise<void>
   update(options: BackgroundAudioOptions): Promise<void>
-  progress(options: { id: string; position: number; duration: number }): Promise<void>
+  progress(options: {
+    id: string
+    position: number
+    duration: number
+    islandCompat?: boolean
+  }): Promise<void>
   seek(options: { id: string; position: number; duration: number }): Promise<void>
   diagnostics(): Promise<{ entries: string[] }>
   lyrics(options: { payload: string }): Promise<void>
@@ -36,7 +43,8 @@ const isNativePlatform = Capacitor.isNativePlatform()
 /** 最近一次同步给原生的曲目标识，进度/seek 都带着它，原生据此判断换歌。 */
 let activeSongKey = ''
 
-function trackKey(track: Track): string {
+function trackKey(track: Track | undefined): string {
+  if (!track) return ''
   return `${track.pluginId ?? ''}:${track.providerId ?? ''}:${track.id ?? ''}`
 }
 
@@ -55,6 +63,7 @@ function optionsFor(
     artwork: /^https?:\/\//i.test(track.artwork || '') ? track.artwork : '',
     playing,
     pauseOnNoisy: settingsState.playOnHeadset,
+    islandCompat: settingsState.islandCompat,
     position: Math.max(0, Math.round(positionMs)),
     duration: Math.max(0, Math.round(durationMs))
   }
@@ -90,7 +99,8 @@ export function syncBackgroundProgress(positionMs: number, durationMs: number): 
   void BackgroundAudio.progress({
     id: activeSongKey,
     position: Math.max(0, Math.round(positionMs)),
-    duration: Math.max(0, Math.round(durationMs))
+    duration: Math.max(0, Math.round(durationMs)),
+    islandCompat: settingsState.islandCompat
   }).catch(() => undefined)
 }
 
@@ -142,7 +152,9 @@ export function syncBackgroundLyrics(
         ? prepared[prepared.length - 1].end
         : 0
   const payload = JSON.stringify({
-    id: track?.id ?? '',
+    // 必须和 MediaSession 的 mediaId 完全一致，否则系统 UI 无法把歌词
+    // 绑到正在播放的那张播放卡上（v2.6.7 改成 trackKey 后两边不一致）。
+    id: trackKey(track),
     title: track?.title ?? '',
     artist: track?.artist ?? '',
     album: track?.album ?? '',

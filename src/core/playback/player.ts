@@ -144,6 +144,21 @@ export function currentTrack(): Track | undefined {
   return playerState.queue[playerState.index]
 }
 
+/**
+ * 设置里切换「岛歌词兼容」后，让原生按新开关重算媒体标题。
+ * 播放中靠进度同步就能生效，这里补的是暂停状态下的那一次。
+ */
+export function refreshBackgroundMetadata(): void {
+  const track = currentTrack()
+  if (!track) return
+  syncBackgroundAudio(
+    track,
+    playerState.playing,
+    playerState.currentTime * 1000,
+    playerState.duration * 1000
+  )
+}
+
 function writePlayerState(): void {
   try {
     localStorage.setItem(

@@ -150,6 +150,13 @@ public class MediaPlaybackService extends Service {
     private String colorOsLyric;
     private boolean lyricsEnabled = true;
     private boolean lyricsTranslation = true;
+    /**
+     * 岛歌词兼容：有些系统岛/车机不读 Lyricon，只认媒体信息里的标题。
+     * 打开后把当前歌词行写进标题，歌名挪到专辑位。
+     */
+    private boolean islandCompat = false;
+    /** 上一次写进媒体标题的歌词行，用来避免每帧都重建通知。 */
+    private String islandLine = "";
     private LyriconProvider lyriconProvider;
     private long lyricGeneration = 0;
     /** 上一次成功同步给 Lyricon 的播放状态与位置。 */
@@ -200,6 +207,13 @@ public class MediaPlaybackService extends Service {
         public void run() {
             if (!playing || !lyricsEnabled || lyricLines.isEmpty()) return;
             pushLyriconState(false);
+            if (islandCompat) {
+                String line = lyricAt(currentPosition());
+                if (!line.equals(islandLine)) {
+                    islandLine = line;
+                    updateMetadata();
+                }
+            }
             mainHandler.postDelayed(this, LYRICON_TICK_MS);
         }
     };
@@ -292,6 +306,15 @@ public class MediaPlaybackService extends Service {
                     recordDiagnostic("progress", message);
                 }
                 if (intent.hasExtra("duration")) duration = intent.getLongExtra("duration", duration);
+                if (intent.hasExtra("islandCompat")) {
+                    boolean nextCompat = intent.getBooleanExtra("islandCompat", islandCompat);
+                    if (nextCompat != islandCompat) {
+                        islandCompat = nextCompat;
+                        islandLine = "";
+                        recordDiagnostic("island", "compat " + (islandCompat ? "on" : "off"));
+                        updateMetadata();
+                    }
+                }
             }
             updatePlaybackState();
             return START_STICKY;
@@ -330,6 +353,12 @@ public class MediaPlaybackService extends Service {
             if (intent.hasExtra("duration")) duration = intent.getLongExtra("duration", duration);
             if (intent.hasExtra("artwork")) updateArtwork(intent.getStringExtra("artwork"));
             pauseOnNoisy = intent.getBooleanExtra("pauseOnNoisy", pauseOnNoisy);
+            boolean nextIslandCompat = intent.getBooleanExtra("islandCompat", islandCompat);
+            if (nextIslandCompat != islandCompat) {
+                islandCompat = nextIslandCompat;
+                islandLine = "";
+                recordDiagnostic("island", "compat " + (islandCompat ? "on" : "off"));
+            }
             playing = intent.getBooleanExtra("playing", playing);
             long next = intent.getLongExtra("position", currentPosition());
             long nativePos = currentPosition();
@@ -397,6 +426,17 @@ public class MediaPlaybackService extends Service {
         long value = position + elapsed;
         if (duration > 0) value = Math.min(value, duration);
         return value;
+    }
+
+    /** 当前位置对应的歌词行；还没唱到第一句时返回空串。 */
+    private String lyricAt(long pos) {
+        String text = "";
+        for (int i = 0; i < lyricLines.size(); i++) {
+            LyricLineData line = lyricLines.get(i);
+            if (line.start > pos) break;
+            text = line.text;
+        }
+        return text == null ? "" : text;
     }
 
     private void updateTicker() {
@@ -532,8 +572,14 @@ public class MediaPlaybackService extends Service {
             lyricsEnabled = data.optBoolean("enabled", true);
             lyricsTranslation = data.optBoolean("translation", true);
             String nextId = data.optString("id", "");
-            if (!nextId.equals(mediaId)) lyricGeneration += 1;
-            mediaId = nextId;
+            // 歌词负载里的 id 必须和播放卡（MediaSession）用的是同一个标识。
+            // 以前这里直接覆盖 mediaId，换歌后两边一改一改地抖动，
+            // 系统 UI 就把歌词绑到了上一张卡片上，表现为「不上岛」。
+            if (!nextId.isEmpty() && !nextId.equals(mediaId)) {
+                recordDiagnostic("lyrics", "id drift " + mediaId + " -> " + nextId);
+                lyricGeneration += 1;
+                mediaId = nextId;
+            }
             title = data.optString("title", title);
             artist = data.optString("artist", artist);
             album = data.optString("album", "");
@@ -709,7 +755,8 @@ public class MediaPlaybackService extends Service {
             player.setSong(song);
             recordDiagnostic("lyricon", "setSong lines=" + lines.size()
                     + " words=" + countWords()
-                    + " id=" + song.getId() + " duration=" + song.getDuration());
+                    + " id=" + song.getId() + " mediaId=" + mediaId
+                    + " duration=" + song.getDuration());
             try {
                 player.setPositionUpdateInterval((int) LYRICON_TICK_MS);
             } catch (Throwable ignored) {
@@ -852,10 +899,19 @@ public class MediaPlaybackService extends Service {
 
     private void updateMetadata() {
         if (mediaSession == null) return;
+        String displayTitle = title;
+        String displayAlbum = album;
+        if (islandCompat && lyricsEnabled && playing) {
+            String line = lyricAt(currentPosition());
+            if (!line.isEmpty()) {
+                displayTitle = line;
+                displayAlbum = title;
+            }
+        }
         MediaMetadata.Builder metadata = new MediaMetadata.Builder()
-                .putString(MediaMetadata.METADATA_KEY_TITLE, title)
+                .putString(MediaMetadata.METADATA_KEY_TITLE, displayTitle)
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
-                .putString(MediaMetadata.METADATA_KEY_ALBUM, album)
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, displayAlbum)
                 .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, mediaId)
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, duration);
         if (lyricsEnabled && colorOsLyric != null) {

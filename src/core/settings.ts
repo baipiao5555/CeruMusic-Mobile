@@ -46,6 +46,8 @@ export interface AppSettings {
   pluginAutoUpdate: boolean
   /** Keep played audio on disk so replaying a song costs no traffic. */
   playbackCache: boolean
+  /** Put the current lyric line into the media title for ROM islands that ignore Lyricon. */
+  islandCompat: boolean
   /** Empty means follow the playback quality. */
   downloadQuality: string
   /** How many downloads run at the same time (1-3). */
@@ -78,6 +80,7 @@ export const settingsState = reactive<AppSettings>({
   verboseLogs: true,
   pluginAutoUpdate: true,
   playbackCache: true,
+  islandCompat: false,
   downloadQuality: '',
   downloadConcurrency: 2,
   version: 2

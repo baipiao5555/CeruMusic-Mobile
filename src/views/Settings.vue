@@ -4,7 +4,13 @@ import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import OptionSheet from '@/components/OptionSheet.vue'
 import { settingsState, updateSettings } from '@/core/settings'
-import { clearQueue, playerState, setMode, setQuality } from '@/core/playback/player'
+import {
+  clearQueue,
+  playerState,
+  refreshBackgroundMetadata,
+  setMode,
+  setQuality
+} from '@/core/playback/player'
 import { notify, pluginState } from '@/core/plugin/manager'
 import { availableQualities, qualityDescription, qualityLabel } from '@/core/quality'
 import { authState, displayName, login, logout } from '@/core/auth'
@@ -89,6 +95,7 @@ const ROW_TERMS: Record<string, string> = {
   'playback:keepScreenOn': '播放时保持亮屏 亮屏 屏幕',
   'playback:cache': '播放缓存 缓存 流量 离线 重听',
   'playback:cacheClear': '清理播放缓存 缓存 清理 删除 占用',
+  'playback:island': '岛歌词 歌词 岛 灵动 锁屏 车载 媒体标题 兼容',
   'playback:headset': '耳机拔出时暂停 耳机 暂停',
   'playback:fallback': '播放失败自动切换音源 音源 失败 切换',
   'playback:swipePlayer': '播放页左右滑动切歌 手势 滑动 切歌',
@@ -183,6 +190,12 @@ async function clearCache(): Promise<void> {
   await clearAudioCache()
   cacheBytes.value = 0
   notify('播放缓存已清理')
+}
+
+/** 岛歌词兼容会影响媒体标题，切换后立刻让原生重算一次。 */
+function toggleIslandCompat(): void {
+  updateSettings({ islandCompat: !settingsState.islandCompat })
+  refreshBackgroundMetadata()
 }
 
 onMounted(() => {
@@ -728,6 +741,22 @@ async function resetSettings(): Promise<void> {
               <div class="sub">{{ cacheSizeLabel }}</div>
             </div>
             <button class="btn btn-ghost btn-sm" @click="clearCache">清理</button>
+          </div>
+
+          <div v-if="show('playback:island')" class="settingrow">
+            <span class="ico"><Icon name="lyrics" :size="15" /></span>
+            <div class="body">
+              <div class="lab">岛歌词兼容</div>
+              <div class="sub">把当前歌词写进媒体标题，给系统岛用</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.islandCompat }"
+              role="switch"
+              :aria-checked="settingsState.islandCompat"
+              aria-label="岛歌词兼容"
+              @click="toggleIslandCompat"
+            />
           </div>
 
           <div v-if="show('playback:headset')" class="settingrow">

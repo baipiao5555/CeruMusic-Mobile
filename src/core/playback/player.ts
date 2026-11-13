@@ -527,6 +527,16 @@ async function startPlayback(
   playerState.activeLyric = -1
   syncBackgroundLyrics(track, [])
   attachMediaSession(track)
+  logEvent(
+    'info',
+    'PLAYER',
+    `开始播放：${track.title}${track.artist ? ' · ' + track.artist : ''}`,
+    `provider=${track.providerId}；plugin=${track.pluginId ?? ''}；ref.kind=${String(
+      (track.ref as any)?.kind ?? ''
+    )}；ref.id=${String((track.ref as any)?.id ?? '')}；seek=${seekTo}；duration=${Math.round(
+      (track.durationMs ?? 0) / 1000
+    )}s`
+  )
   void loadLyrics(track)
   try {
     const url = await resolvePlaybackUrl(track)
@@ -1023,7 +1033,9 @@ async function loadLyrics(track: Track): Promise<void> {
   try {
     if (provider) {
       try {
+        const started = Date.now()
         const document = await invokeProvider(provider, 'tracks.lyrics', [track.ref])
+        const cost = Date.now() - started
         if (currentTrack()?.id !== track.id) return
         const lines = normalizePluginLyrics(document)
         if (lines.length) {
@@ -1034,7 +1046,7 @@ async function loadLyrics(track: Track): Promise<void> {
             'info',
             'LYRIC',
             `歌词已加载：${lines.length} 行`,
-            `${lines[0].startTimeMs}ms → ${lastLine.endTimeMs ?? lastLine.startTimeMs}ms；source=plugin`
+            `${lines[0].startTimeMs}ms → ${lastLine.endTimeMs ?? lastLine.startTimeMs}ms；source=plugin；耗时 ${cost}ms`
           )
           syncBackgroundLyrics(track, playerState.lyrics)
           updateActiveLyric()
@@ -1079,6 +1091,13 @@ async function loadLyrics(track: Track): Promise<void> {
           return
         }
       }
+    } else {
+      logEvent(
+        'warn',
+        'LYRIC',
+        '这首歌没有可用的音源插件，直接走云端歌词',
+        `provider=${track.providerId}；plugin=${track.pluginId ?? ''}`
+      )
     }
 
     if (settingsState.cloudLyrics) {

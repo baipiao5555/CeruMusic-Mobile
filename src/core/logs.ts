@@ -12,7 +12,7 @@ export interface LogEntry {
 }
 
 const STORAGE_KEY = 'ceru.logs.v1'
-const MAX_ENTRIES = 1000
+const MAX_ENTRIES = 3000
 const MAX_DETAIL = 4000
 
 export const logState = reactive({
@@ -83,7 +83,7 @@ function trim(): void {
   }
   while (
     logState.entries.length > MAX_ENTRIES ||
-    (totalChars > 1_200_000 && logState.entries.length > 1)
+    (totalChars > 2_500_000 && logState.entries.length > 1)
   ) {
     const removed = logState.entries.shift()
     if (!removed) break

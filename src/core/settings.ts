@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 import { registerHostHooks } from './plugin/manager'
-import { setLoggingEnabled, setVerboseConsoleCapture } from './logs'
+import { logEvent, setLoggingEnabled, setVerboseConsoleCapture } from './logs'
 
 export type AccentColor = 'green' | 'blue' | 'purple' | 'orange'
 
@@ -75,7 +75,7 @@ export const settingsState = reactive<AppSettings>({
   systemLyrics: true,
   systemLyricsTranslation: true,
   logsEnabled: true,
-  verboseLogs: false,
+  verboseLogs: true,
   pluginAutoUpdate: true,
   playbackCache: true,
   downloadQuality: '',
@@ -127,6 +127,28 @@ export function updateSettings(patch: Partial<AppSettings>): void {
   if (patch.fontFamily !== undefined) applyFontFamily()
   if (logsChanged) applyLoggingEnabled()
   if (verboseChanged) applyVerboseLogs()
+  try {
+    const changed = Object.entries(patch)
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join('，')
+    logEvent('info', 'SETTINGS', `设置已更新：${changed}`, fontProbe())
+  } catch {}
+}
+
+/** 记录当前字体令牌，用来判断「选了字体但界面没变」到底卡在哪一层。 */
+function fontProbe(): string {
+  try {
+    const style = getComputedStyle(document.documentElement)
+    const body = document.body ? getComputedStyle(document.body).fontFamily : 'no-body'
+    return [
+      `fontFamily=${settingsState.fontFamily}`,
+      `--sans=${style.getPropertyValue('--sans').trim().slice(0, 90)}`,
+      `--serif=${style.getPropertyValue('--serif').trim().slice(0, 90)}`,
+      `body=${body.slice(0, 90)}`
+    ].join('；')
+  } catch {
+    return ''
+  }
 }
 
 export function applyLoggingEnabled(): void {
@@ -190,8 +212,12 @@ function applyLyricScale(): void {
  * 所以手机上即便没有里面列的具体字体，观感也一定跟系统默认不同，
  * 不会出现「选了没反应」。
  */
+// 跟随系统：只留平台自带的通用名，绝不引用随包内置的字体，
+// 这样「系统默认」在任何机型上都是手机本来的 UI 字体。
 const SANS_STACK =
-  "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif"
+  "system-ui, -apple-system, 'Roboto', 'Noto Sans SC', 'Noto Sans CJK SC', 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei', sans-serif"
+const SYSTEM_SERIF_STACK =
+  "Georgia, 'Times New Roman', 'Songti SC', STSong, SimSun, serif"
 const SERIF_STACK =
   "'Ceru Serif', Georgia, 'Times New Roman', 'Songti SC', STSong, 'Source Han Serif SC', 'Noto Serif SC', 'Noto Serif CJK SC', SimSun, serif"
 const KAI_STACK =
@@ -202,7 +228,7 @@ const MONO_STACK =
   "'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Mono', Consolas, 'Noto Sans Mono CJK SC', monospace"
 
 const FONT_STACKS: Record<AppFont, { sans: string; serif: string }> = {
-  system: { sans: SANS_STACK, serif: SERIF_STACK },
+  system: { sans: SANS_STACK, serif: SYSTEM_SERIF_STACK },
   wenkai: { sans: KAI_STACK, serif: KAI_STACK },
   smiley: { sans: SMILEY_STACK, serif: SMILEY_STACK },
   serif: { sans: SERIF_STACK, serif: SERIF_STACK },

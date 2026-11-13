@@ -581,13 +581,16 @@ public class MediaPlaybackService extends Service {
                         + " last=" + (lyricLines.isEmpty() ? 0 : lyricLines.get(lyricLines.size() - 1).end)
                         + " enabled=" + lyricsEnabled);
             }
-        } catch (Exception ignored) {
+        } catch (Exception error) {
+            recordDiagnostic("lyrics", "parse failed: " + error);
         }
 
         if (lyricsEnabled && !lyricLines.isEmpty()) {
             publishLyriconSong();
             colorOsLyric = buildColorOsLyric();
         } else {
+            recordDiagnostic("lyrics", "cleared: enabled=" + lyricsEnabled
+                    + " lines=" + lyricLines.size());
             clearLyriconSong();
         }
         updateMetadata();
@@ -614,8 +617,10 @@ public class MediaPlaybackService extends Service {
             provider.setAutoSync(true);
             provider.register();
             lyriconProvider = provider;
-        } catch (Throwable ignored) {
+            recordDiagnostic("lyricon", "provider ready");
+        } catch (Throwable error) {
             lyriconProvider = null;
+            recordDiagnostic("lyricon", "provider unavailable: " + error);
         }
     }
 
@@ -668,7 +673,10 @@ public class MediaPlaybackService extends Service {
             return;
         }
         ensureLyricon();
-        if (lyriconProvider == null) return;
+        if (lyriconProvider == null) {
+            recordDiagnostic("lyricon", "skip publish: no provider");
+            return;
+        }
         try {
             List<RichLyricLine> lines = new ArrayList<>(lyricLines.size());
             for (LyricLineData line : lyricLines) {
@@ -712,7 +720,8 @@ public class MediaPlaybackService extends Service {
             pushLyriconState(true);
             mainHandler.removeCallbacks(lyricTicker);
             if (playing) mainHandler.post(lyricTicker);
-        } catch (Throwable ignored) {
+        } catch (Throwable error) {
+            recordDiagnostic("lyricon", "publish failed: " + error);
         }
     }
 

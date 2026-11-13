@@ -1,6 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import type { Track } from '../playback/player'
 import { settingsState } from '../settings'
+import { logEvent } from '../logs'
 import { toNativeLyricLines, type TimedLyricWord } from '../lyrics/timeline'
 
 interface BackgroundAudioOptions {
@@ -150,7 +151,25 @@ export function syncBackgroundLyrics(
     translation: settingsState.systemLyricsTranslation,
     lines: prepared.slice(0, 500)
   })
-  void BackgroundAudio.lyrics({ payload }).catch(() => undefined)
+  const wordCount = prepared.reduce((sum, line) => sum + (line.words?.length ?? 0), 0)
+  logEvent(
+    'info',
+    'LYRIC',
+    `下发系统歌词：${prepared.length} 行 / ${wordCount} 字 · 共享${settingsState.systemLyrics ? '开' : '关'}`,
+    `${track?.title ?? '无曲目'} · ${track?.artist ?? ''} · duration=${duration} · ${(
+      payload.length / 1024
+    ).toFixed(1)}KB`
+  )
+  void BackgroundAudio.lyrics({ payload })
+    .then(() => logEvent('info', 'LYRIC', '系统已接收歌词负载'))
+    .catch((error: unknown) =>
+      logEvent(
+        'warn',
+        'LYRIC',
+        '系统歌词下发失败',
+        error instanceof Error ? error.message : String(error)
+      )
+    )
 }
 
 export function stopBackgroundAudio(): void {

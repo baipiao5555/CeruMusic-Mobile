@@ -217,6 +217,7 @@ public class MediaPlaybackService extends Service {
                         islandNotifier.update(line, title, artist, artwork, playing, currentPosition(), duration);
                         recordDiagnostic("island", "line→" + line);
                     }
+                    refreshNotification();
                 }
             }
             mainHandler.postDelayed(this, LYRICON_TICK_MS);
@@ -559,6 +560,17 @@ public class MediaPlaybackService extends Service {
                 );
 
         if (artwork != null) builder.setLargeIcon(artwork);
+
+        // 媒体卡片本身也带上当前歌词：系统岛通常优先展示这条媒体卡片，
+        // API 36 起 shortCriticalText 就是卡片/岛上的主文案。
+        if (islandCompat && lyricsEnabled && playing && Build.VERSION.SDK_INT >= 36) {
+            try {
+                String line = lyricAt(currentPosition());
+                if (!line.isEmpty()) builder.setShortCriticalText(line);
+            } catch (Throwable ignored) {
+            }
+        }
+
         if (duration > 0) {
             int progress = (int) Math.min(
                     1000L,

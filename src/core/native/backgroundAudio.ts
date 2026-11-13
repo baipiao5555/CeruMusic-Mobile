@@ -4,6 +4,8 @@ import { settingsState } from '../settings'
 import { toNativeLyricLines, type TimedLyricWord } from '../lyrics/timeline'
 
 interface BackgroundAudioOptions {
+  /** 曲目标识：原生侧靠它判断「换歌了」，换歌时允许进度倒退。 */
+  id: string
   title: string
   artist: string
   artwork: string
@@ -16,8 +18,8 @@ interface BackgroundAudioOptions {
 interface BackgroundAudioPlugin {
   start(options: BackgroundAudioOptions): Promise<void>
   update(options: BackgroundAudioOptions): Promise<void>
-  progress(options: { position: number; duration: number }): Promise<void>
-  seek(options: { position: number; duration: number }): Promise<void>
+  progress(options: { id: string; position: number; duration: number }): Promise<void>
+  seek(options: { id: string; position: number; duration: number }): Promise<void>
   diagnostics(): Promise<{ entries: string[] }>
   lyrics(options: { payload: string }): Promise<void>
   stop(): Promise<void>
@@ -30,13 +32,22 @@ interface BackgroundAudioPlugin {
 const BackgroundAudio = registerPlugin<BackgroundAudioPlugin>('BackgroundAudio')
 const isNativePlatform = Capacitor.isNativePlatform()
 
+/** 最近一次同步给原生的曲目标识，进度/seek 都带着它，原生据此判断换歌。 */
+let activeSongKey = ''
+
+function trackKey(track: Track): string {
+  return `${track.pluginId ?? ''}:${track.providerId ?? ''}:${track.id ?? ''}`
+}
+
 function optionsFor(
   track: Track,
   playing: boolean,
   positionMs: number,
   durationMs: number
 ): BackgroundAudioOptions {
+  activeSongKey = trackKey(track)
   return {
+    id: activeSongKey,
     title: track.title || '澜音',
     artist: track.artist || '',
     // Only remote images can be fetched by the native media service.
@@ -76,6 +87,7 @@ export function startBackgroundAudio(
 export function syncBackgroundProgress(positionMs: number, durationMs: number): void {
   if (!isNativePlatform) return
   void BackgroundAudio.progress({
+    id: activeSongKey,
     position: Math.max(0, Math.round(positionMs)),
     duration: Math.max(0, Math.round(durationMs))
   }).catch(() => undefined)
@@ -85,6 +97,7 @@ export function syncBackgroundProgress(positionMs: number, durationMs: number): 
 export function seekBackgroundAudio(positionMs: number, durationMs: number): void {
   if (!isNativePlatform) return
   void BackgroundAudio.seek({
+    id: activeSongKey,
     position: Math.max(0, Math.round(positionMs)),
     duration: Math.max(0, Math.round(durationMs))
   }).catch(() => undefined)

@@ -48,6 +48,7 @@ public class BackgroundAudioPlugin extends Plugin {
         Context context = getContext();
         Intent intent = new Intent(context, MediaPlaybackService.class)
                 .setAction(MediaPlaybackService.ACTION_PROGRESS);
+        intent.putExtra("id", call.getString("id", ""));
         intent.putExtra("position", doubleToLong(call, "position"));
         intent.putExtra("duration", doubleToLong(call, "duration"));
         context.startService(intent);
@@ -59,6 +60,7 @@ public class BackgroundAudioPlugin extends Plugin {
         Context context = getContext();
         Intent intent = new Intent(context, MediaPlaybackService.class)
                 .setAction(MediaPlaybackService.ACTION_SEEK);
+        intent.putExtra("id", call.getString("id", ""));
         intent.putExtra("position", doubleToLong(call, "position"));
         intent.putExtra("duration", doubleToLong(call, "duration"));
         context.startService(intent);
@@ -101,6 +103,7 @@ public class BackgroundAudioPlugin extends Plugin {
         intent.putExtra("artwork", call.getString("artwork", ""));
         intent.putExtra("pauseOnNoisy", call.getBoolean("pauseOnNoisy", true));
         intent.putExtra("playing", call.getBoolean("playing", false));
+        intent.putExtra("id", call.getString("id", ""));
         intent.putExtra("position", doubleToLong(call, "position"));
         intent.putExtra("duration", doubleToLong(call, "duration"));
         if (foreground) {

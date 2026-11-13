@@ -16,6 +16,7 @@ import { registerDownloadHostHooks } from '@/core/downloadHost'
 import { checkForUpdate, updateState } from '@/core/updater'
 import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, refreshBackgroundLyrics, applyPlaybackRate, savePlaybackState } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
+import { runBackGuard } from '@/core/native/backGuard'
 import {
   applyNavigationBar,
   applySystemInsets,
@@ -143,6 +144,7 @@ function handleBackNavigation(): void {
     mask.click()
     return
   }
+  if (runBackGuard()) return
   if (ROOT_PATHS.includes(route.path)) {
     if (appExiting) return
     appExiting = true

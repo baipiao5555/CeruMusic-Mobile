@@ -4,11 +4,16 @@ import { setLoggingEnabled, setVerboseConsoleCapture } from './logs'
 
 export type AccentColor = 'green' | 'blue' | 'purple' | 'orange'
 
+/** 歌词用的字体族：默认跟随系统，其余是可选的观感。 */
+export type LyricFont = 'system' | 'serif' | 'kai' | 'round'
+
 export interface AppSettings {
   theme: 'system' | 'light' | 'dark'
   accent: AccentColor
   /** Multiplier applied to the player lyric font size. */
   lyricScale: number
+  /** Font family used for lyric text. */
+  lyricFont: LyricFont
   playbackRate: number
   downloadFilenameTemplate: string
   /** Show translation lines under the original lyric text. */
@@ -52,6 +57,7 @@ export const settingsState = reactive<AppSettings>({
   theme: 'system',
   accent: 'green',
   lyricScale: 1,
+  lyricFont: 'system',
   playbackRate: 1,
   downloadFilenameTemplate: '%t - %s',
   showLyricTranslation: true,
@@ -85,6 +91,7 @@ export function restoreSettings(): void {
         saved.version = 2
       }
       Object.assign(settingsState, saved)
+      if (!LYRIC_FONTS[settingsState.lyricFont as LyricFont]) settingsState.lyricFont = 'system'
     }
   } catch {}
   applyTheme()
@@ -107,6 +114,7 @@ export function updateSettings(patch: Partial<AppSettings>): void {
   Object.assign(settingsState, patch)
   persist()
   if (patch.theme || patch.accent || patch.lyricScale !== undefined) applyTheme()
+  if (patch.lyricFont !== undefined) applyLyricFont()
   if (logsChanged) applyLoggingEnabled()
   if (verboseChanged) applyVerboseLogs()
 }
@@ -164,6 +172,25 @@ function applyLyricScale(): void {
   document.documentElement.style.setProperty('--lyric-scale', String(scale))
 }
 
+/**
+ * 系统字体走 Android 的 sans-serif，其余是可选观感。
+ * 字体名全部带兜底，设备缺字时会自然退化到系统字体，不会出现方框。
+ */
+const LYRIC_FONTS: Record<LyricFont, string> = {
+  system:
+    "-apple-system, BlinkMacSystemFont, 'HarmonyOS Sans SC', 'MiSans', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif",
+  serif:
+    "Georgia, 'Times New Roman', 'Songti SC', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Noto Serif SC', STSong, SimSun, serif",
+  kai: "'Kaiti SC', STKaiti, KaiTi, 'Songti SC', 'Noto Serif CJK SC', serif",
+  round:
+    "'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Arial Rounded MT Bold', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif"
+}
+
+function applyLyricFont(): void {
+  const font = LYRIC_FONTS[settingsState.lyricFont] ?? LYRIC_FONTS.system
+  document.documentElement.style.setProperty('--lyric-font', font)
+}
+
 /** Android reports night mode through the SystemBars plugin; WebView media queries lag. */
 let nativeDarkOverride: boolean | null = null
 
@@ -179,6 +206,7 @@ export function applyTheme(): void {
   document.documentElement.classList.toggle('dark', dark)
   applyAccent()
   applyLyricScale()
+  applyLyricFont()
 }
 
 export function registerSettingsHostHooks(): void {

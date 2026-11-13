@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { Capacitor } from '@capacitor/core'
+import { StatusBar } from '@capacitor/status-bar'
 import Icon from '@/components/Icon.vue'
 import {
   currentTrack,
@@ -26,12 +28,16 @@ import { settingsState, updateSettings } from '@/core/settings'
 import { qualityLabel } from '@/core/quality'
 import { downloadTrack, isDownloaded } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
+import { setBackGuard } from '@/core/native/backGuard'
 
 const router = useRouter()
 const track = computed(() => currentTrack())
 const lyricsBox = ref<HTMLElement>()
 const showQueue = ref(false)
 const showLyrics = ref(false)
+/** 全屏歌词页的控件是否可见：进入即隐藏，点按/滑动再唤出。 */
+const lyricUi = ref(true)
+let lyricUiTimer: ReturnType<typeof setTimeout> | undefined
 const showQuality = ref(false)
 const queueFilter = ref<'next' | 'played' | 'all'>('next')
 
@@ -224,7 +230,49 @@ function retry(): void {
 
 function openLyrics(): void {
   showLyrics.value = true
+  // 进来先看一眼控件，随后自动沉下去，只留歌词。
+  lyricUi.value = true
+  if (lyricUiTimer) clearTimeout(lyricUiTimer)
+  lyricUiTimer = setTimeout(putLyricsToSleep, 1600)
+  setStatusBarVisible(true)
   setTimeout(scrollActiveLyric, 120)
+}
+
+function setStatusBarVisible(visible: boolean): void {
+  if (!Capacitor.isNativePlatform()) return
+  void (visible ? StatusBar.show() : StatusBar.hide()).catch(() => undefined)
+}
+
+/** 隐藏顶部/底部控件和状态栏，只留歌词。 */
+function putLyricsToSleep(): void {
+  if (!showLyrics.value) return
+  lyricUi.value = false
+  setStatusBarVisible(false)
+}
+
+/** 任何触摸/滚动都把控件叫回来，停手 3.2 秒后再沉下去。 */
+function pokeLyrics(): void {
+  if (!showLyrics.value) return
+  lyricUi.value = true
+  setStatusBarVisible(true)
+  if (lyricUiTimer) clearTimeout(lyricUiTimer)
+  lyricUiTimer = setTimeout(putLyricsToSleep, 3200)
+}
+
+function closeLyrics(): void {
+  if (lyricUiTimer) clearTimeout(lyricUiTimer)
+  showLyrics.value = false
+  lyricUi.value = true
+  setStatusBarVisible(true)
+}
+
+/** 控件藏起来时，第一次点歌词只负责唤出控件，避免误触跳转。 */
+function onLyricLineTap(line: { startTimeMs: number }): void {
+  if (!lyricUi.value) {
+    pokeLyrics()
+    return
+  }
+  lyricSeek(line)
 }
 
 function onTouchStart(event: TouchEvent): void {
@@ -299,6 +347,12 @@ onMounted(() => {
     return
   }
   setTimeout(scrollActiveLyric, 300)
+  // 返回键先收歌词浮层，再交给 App.vue 处理路由/退出。
+  setBackGuard(() => {
+    if (!showLyrics.value) return false
+    closeLyrics()
+    return true
+  })
 })
 
 onUnmounted(() => {
@@ -306,6 +360,12 @@ onUnmounted(() => {
     clearInterval(sleepPoll)
     sleepPoll = null
   }
+  if (lyricUiTimer) {
+    clearTimeout(lyricUiTimer)
+    lyricUiTimer = undefined
+  }
+  setBackGuard(null)
+  setStatusBarVisible(true)
 })
 </script>
 
@@ -475,13 +535,20 @@ onUnmounted(() => {
     </div>
 
     <!-- 全屏歌词 -->
-    <div v-if="showLyrics" class="ly">
+    <div
+      v-if="showLyrics"
+      class="ly"
+      :class="{ 'ly-idle': !lyricUi }"
+      @click="pokeLyrics"
+      @touchmove.passive="pokeLyrics"
+      @wheel.passive="pokeLyrics"
+    >
       <div class="ly-bg">
         <img :src="track.artwork || '/default-cover.png'" alt="" />
         <div class="ly-veil" />
       </div>
       <header class="p-top ly-top">
-        <button class="iconbtn glass" aria-label="收起歌词" @click="showLyrics = false">
+        <button class="iconbtn glass" aria-label="收起歌词" @click.stop="closeLyrics">
           <Icon name="chevron-down" :size="20" />
         </button>
         <div class="p-head">
@@ -509,7 +576,7 @@ onUnmounted(() => {
             :key="index"
             class="ly-line"
             :class="{ cur: index === playerState.activeLyric, passed: index < playerState.activeLyric }"
-            @click="lyricSeek(line)"
+            @click.stop="onLyricLineTap(line)"
           >
             <template v-if="index === playerState.activeLyric">
               <span
@@ -1164,7 +1231,7 @@ onUnmounted(() => {
   min-height: 22px;
 }
 .p-lyric-cur {
-  font-family: var(--serif);
+  font-family: var(--lyric-font, var(--serif));
   font-size: 15.5px;
   line-height: 22px;
   max-height: 44px;
@@ -1266,7 +1333,7 @@ onUnmounted(() => {
 .ly-line {
   position: relative;
   padding: 11px 0;
-  font-family: var(--serif);
+  font-family: var(--lyric-font, var(--serif));
   font-size: calc(15.5px * var(--ly-scale, 1));
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.34);
@@ -1336,6 +1403,29 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   margin-top: 8px;
+}
+
+/* 沉浸模式：控件和状态栏一起退场，只留歌词；点按/滑动再唤出 */
+.ly-top,
+.ly-foot {
+  transition: opacity 0.32s var(--e-out), transform 0.32s var(--e-out);
+}
+.ly.ly-idle .ly-top {
+  opacity: 0;
+  transform: translateY(-18px);
+  pointer-events: none;
+}
+.ly.ly-idle .ly-foot {
+  opacity: 0;
+  transform: translateY(22px);
+  pointer-events: none;
+}
+.ly-box {
+  transition: padding 0.32s var(--e-out);
+}
+.ly.ly-idle .ly-box {
+  /* 控件不在时，歌词往上挪一点，视觉重心更稳 */
+  padding-top: clamp(56px, 20vh, 168px);
 }
 
 /* 队列 sheet */

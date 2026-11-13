@@ -165,6 +165,8 @@ public class MediaPlaybackService extends Service {
     private long position = 0;
     private long positionBaseRealtime = 0;
     private long duration = 0;
+    /** 当前曲目标识：换歌时进度必须重置，不能被「stale progress」守卫吞掉。 */
+    private String songKey = "";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
@@ -274,12 +276,12 @@ public class MediaPlaybackService extends Service {
             if (intent != null) {
                 long next = intent.getLongExtra("position", position);
                 long nativePos = currentPosition();
-                // WebView timers can be throttled in the background and report
-                // an older position after the native ticker already advanced.
-                // Accepting it rewinds the shared lyric timeline to the first
-                // lines, so small gaps are clamped forward and only a large
-                // one is treated as noise; real seeks go through ACTION_SEEK.
-                if (!playing || next >= nativePos) {
+                boolean songChanged = takeSongKey(intent);
+                // 换歌后第一个进度必然是「小值」，此时旧位置毫无意义，直接采纳。
+                if (songChanged) {
+                    setPosition(next);
+                    recordDiagnostic("progress", "song switched, reset to " + next);
+                } else if (!playing || next >= nativePos) {
                     setPosition(next);
                 } else if (next > nativePos - LYRICON_SEEK_JUMP_MS) {
                     recordDiagnostic("progress", "clamp stale progress " + next + " -> " + nativePos);
@@ -303,6 +305,7 @@ public class MediaPlaybackService extends Service {
             if (intent != null) {
                 if (intent.hasExtra("position")) setPosition(intent.getLongExtra("position", position));
                 if (intent.hasExtra("duration")) duration = intent.getLongExtra("duration", duration);
+                takeSongKey(intent);
             }
             recordDiagnostic("seek", "position=" + position + " duration=" + duration);
             updatePlaybackState();
@@ -330,11 +333,12 @@ public class MediaPlaybackService extends Service {
             playing = intent.getBooleanExtra("playing", playing);
             long next = intent.getLongExtra("position", currentPosition());
             long nativePos = currentPosition();
+            boolean songChanged = takeSongKey(intent);
             // Start/pause and explicit seeks may set any position. A plain
             // update that falls behind the native estimate means the WebView
             // timer was throttled; clamping forward keeps the shared lyric
             // timeline moving instead of replaying the first lines.
-            if (ACTION_START.equals(action) || !playing || next >= nativePos) {
+            if (ACTION_START.equals(action) || songChanged || !playing || next >= nativePos) {
                 setPosition(next);
             } else if (next > nativePos - LYRICON_SEEK_JUMP_MS) {
                 recordDiagnostic("progress", "clamp stale update " + next + " -> " + nativePos);
@@ -374,6 +378,17 @@ public class MediaPlaybackService extends Service {
         position = Math.max(0, value);
         if (duration > 0) position = Math.min(position, duration);
         positionBaseRealtime = SystemClock.elapsedRealtime();
+    }
+
+    /**
+     * 更新当前曲目标识，返回 true 表示换歌了。
+     * 换歌后上一首的 position 已经没有任何意义，必须允许它「倒退」。
+     */
+    private boolean takeSongKey(Intent intent) {
+        String next = intent != null ? intent.getStringExtra("id") : null;
+        if (next == null || next.isEmpty() || next.equals(songKey)) return false;
+        songKey = next;
+        return true;
     }
 
     private long currentPosition() {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import OptionSheet from '@/components/OptionSheet.vue'
@@ -14,6 +14,7 @@ import { updateState } from '@/core/updater'
 import type { Track } from '@/core/track'
 import type { AccentColor, AppFont } from '@/core/settings'
 import { confirmAction } from '@/core/confirm'
+import { audioCacheSize, clearAudioCache } from '@/core/cache/audioCache'
 
 const router = useRouter()
 const appVersion = __APP_VERSION__
@@ -86,6 +87,8 @@ const ROW_TERMS: Record<string, string> = {
   'lyrics:shared': '启用歌词共享 歌词共享 共享',
   'lyrics:sharedTranslation': '共享翻译 翻译 歌词',
   'playback:keepScreenOn': '播放时保持亮屏 亮屏 屏幕',
+  'playback:cache': '播放缓存 缓存 流量 离线 重听',
+  'playback:cacheClear': '清理播放缓存 缓存 清理 删除 占用',
   'playback:headset': '耳机拔出时暂停 耳机 暂停',
   'playback:fallback': '播放失败自动切换音源 音源 失败 切换',
   'playback:swipePlayer': '播放页左右滑动切歌 手势 滑动 切歌',
@@ -158,9 +161,33 @@ const offsetOptions = Array.from({ length: 21 }, (_, index) => (index - 10) / 10
 const appFonts: Array<{ value: AppFont; label: string; hint: string }> = [
   { value: 'system', label: '系统默认', hint: '跟随手机 UI 字体，最稳妥' },
   { value: 'wenkai', label: '文楷 · 内置', hint: '随包内附的楷体，任何机型都有效' },
-  { value: 'serif', label: '宋体 · 全衬线', hint: '标题正文都变成衬线，像唱片内页' },
+  { value: 'smiley', label: '得意黑 · 内置', hint: '窄体黑体，标题很有劲' },
+  { value: 'serif', label: '宋体 · 内置衬线', hint: '标题正文都变成衬线，像唱片内页' },
   { value: 'mono', label: '等宽', hint: '字距均匀，像歌词本打出来的' }
 ]
+
+const cacheBytes = ref(0)
+const cacheSizeLabel = computed(() => {
+  const bytes = cacheBytes.value
+  if (!bytes) return '暂无缓存 · 播过的歌会自动留在这里'
+  const mb = bytes / 1024 / 1024
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`
+})
+
+async function refreshCache(): Promise<void> {
+  cacheBytes.value = await audioCacheSize()
+}
+
+async function clearCache(): Promise<void> {
+  if (!cacheBytes.value) return
+  await clearAudioCache()
+  cacheBytes.value = 0
+  notify('播放缓存已清理')
+}
+
+onMounted(() => {
+  void refreshCache()
+})
 
 const previewTrack = {
   id: 'preview',
@@ -394,7 +421,13 @@ function applyPick(value: string | number): void {
     }
     case 'fontFamily': {
       const font = String(value)
-      if (font === 'system' || font === 'serif' || font === 'wenkai' || font === 'mono') {
+      if (
+        font === 'system' ||
+        font === 'serif' ||
+        font === 'wenkai' ||
+        font === 'smiley' ||
+        font === 'mono'
+      ) {
         updateSettings({ fontFamily: font })
       }
       break
@@ -670,6 +703,31 @@ async function resetSettings(): Promise<void> {
               aria-label="播放时保持亮屏"
               @click="updateSettings({ keepScreenOn: !settingsState.keepScreenOn })"
             />
+          </div>
+
+          <div v-if="show('playback:cache')" class="settingrow">
+            <span class="ico"><Icon name="cloud" :size="15" /></span>
+            <div class="body">
+              <div class="lab">播放缓存</div>
+              <div class="sub">听过的歌留在手机上，重听不再走流量</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.playbackCache }"
+              role="switch"
+              :aria-checked="settingsState.playbackCache"
+              aria-label="播放缓存"
+              @click="updateSettings({ playbackCache: !settingsState.playbackCache })"
+            />
+          </div>
+
+          <div v-if="show('playback:cacheClear')" class="settingrow">
+            <span class="ico"><Icon name="trash" :size="15" /></span>
+            <div class="body">
+              <div class="lab">清理播放缓存</div>
+              <div class="sub">{{ cacheSizeLabel }}</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" @click="clearCache">清理</button>
           </div>
 
           <div v-if="show('playback:headset')" class="settingrow">

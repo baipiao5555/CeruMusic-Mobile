@@ -17,6 +17,7 @@ import { checkForUpdate, updateState } from '@/core/updater'
 import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, refreshBackgroundLyrics, applyPlaybackRate, savePlaybackState } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { runBackGuard } from '@/core/native/backGuard'
+import { resolveBackAction } from '@/core/navigation/backNav'
 import {
   applyNavigationBar,
   applySystemInsets,
@@ -98,6 +99,9 @@ function initNativeTheme(): void {
 
 const ROOT_PATHS = ['/', '/search', '/playlists', '/library']
 const EXIT_ANIMATION_MS = 260
+/** 连按两次退出的时间窗。 */
+const EXIT_CONFIRM_MS = 2200
+let lastExitPress = 0
 let tabSwipe: { x: number; y: number; time: number; path: string } | null = null
 let appExiting = false
 
@@ -137,7 +141,7 @@ function onTabTouchEnd(event: TouchEvent): void {
   router.push(ROOT_PATHS[nextIndex])
 }
 
-/** Android back gesture/button: close sheets, walk history, exit only at a root tab. */
+/** Android back gesture/button: close sheets, walk up the tab chain, exit only from 发现. */
 function handleBackNavigation(): void {
   const mask = document.querySelector('.sheet-mask') as HTMLElement | null
   if (mask) {
@@ -145,25 +149,40 @@ function handleBackNavigation(): void {
     return
   }
   if (runBackGuard()) return
-  if (ROOT_PATHS.includes(route.path)) {
-    if (appExiting) return
-    appExiting = true
-    const shell = document.querySelector('.app-shell') as HTMLElement | null
-    if (shell) {
-      shell.classList.add('app-exiting')
-      window.setTimeout(() => {
-        savePlaybackState()
-        void NativeApp.exitApp()
-      }, EXIT_ANIMATION_MS)
-    } else {
-      savePlaybackState()
-      void NativeApp.exitApp()
-    }
+  const hasHistoryBack = Boolean(window.history.state && window.history.state.back != null)
+  const action = resolveBackAction(route.path, hasHistoryBack)
+  if (action.type === 'parent') {
+    void router.replace(action.path)
     return
   }
-  const canGoBack = Boolean(window.history.state && window.history.state.back != null)
-  if (canGoBack) router.back()
-  else void router.replace('/')
+  if (action.type === 'history') {
+    router.back()
+    return
+  }
+  if (action.type === 'home') {
+    void router.replace('/')
+    return
+  }
+  if (appExiting) return
+  const now = Date.now()
+  if (now - lastExitPress > EXIT_CONFIRM_MS) {
+    lastExitPress = now
+    notify('再按一次退出应用')
+    return
+  }
+  lastExitPress = 0
+  appExiting = true
+  const shell = document.querySelector('.app-shell') as HTMLElement | null
+  if (shell) {
+    shell.classList.add('app-exiting')
+    window.setTimeout(() => {
+      savePlaybackState()
+      void NativeApp.exitApp()
+    }, EXIT_ANIMATION_MS)
+  } else {
+    savePlaybackState()
+    void NativeApp.exitApp()
+  }
 }
 
 async function handleDeepLink(url: string): Promise<void> {

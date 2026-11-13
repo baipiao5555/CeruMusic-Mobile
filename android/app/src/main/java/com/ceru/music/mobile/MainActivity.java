@@ -32,7 +32,14 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SystemBarsPlugin.class);
         registerPlugin(DownloaderPlugin.class);
         registerPlugin(ExternalPlugin.class);
+        registerPlugin(AudioCachePlugin.class);
         super.onCreate(savedInstanceState);
+
+        // 本机缓存代理走 http://127.0.0.1，允许页面（https://localhost）加载它
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().getSettings().setMixedContentMode(
+                    android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)

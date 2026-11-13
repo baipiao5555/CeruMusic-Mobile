@@ -5,7 +5,7 @@ import { setLoggingEnabled, setVerboseConsoleCapture } from './logs'
 export type AccentColor = 'green' | 'blue' | 'purple' | 'orange'
 
 /** 全应用字体：默认跟随系统，其余会替换界面与歌词的字体族。 */
-export type AppFont = 'system' | 'wenkai' | 'serif' | 'mono'
+export type AppFont = 'system' | 'wenkai' | 'smiley' | 'serif' | 'mono'
 
 export interface AppSettings {
   theme: 'system' | 'light' | 'dark'
@@ -44,6 +44,8 @@ export interface AppSettings {
   verboseLogs: boolean
   /** Re-download URL-installed plugins when a newer version is published. */
   pluginAutoUpdate: boolean
+  /** Keep played audio on disk so replaying a song costs no traffic. */
+  playbackCache: boolean
   /** Empty means follow the playback quality. */
   downloadQuality: string
   /** How many downloads run at the same time (1-3). */
@@ -75,6 +77,7 @@ export const settingsState = reactive<AppSettings>({
   logsEnabled: true,
   verboseLogs: false,
   pluginAutoUpdate: true,
+  playbackCache: true,
   downloadQuality: '',
   downloadConcurrency: 2,
   version: 2
@@ -190,15 +193,18 @@ function applyLyricScale(): void {
 const SANS_STACK =
   "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif"
 const SERIF_STACK =
-  "Georgia, 'Times New Roman', 'Songti SC', STSong, 'Source Han Serif SC', 'Noto Serif SC', 'Noto Serif CJK SC', SimSun, serif"
+  "'Ceru Serif', Georgia, 'Times New Roman', 'Songti SC', STSong, 'Source Han Serif SC', 'Noto Serif SC', 'Noto Serif CJK SC', SimSun, serif"
 const KAI_STACK =
   "'Ceru WenKai', 'Kaiti SC', STKaiti, KaiTi, 'Songti SC', STSong, 'Noto Serif CJK SC', SimSun, serif"
+const SMILEY_STACK =
+  "'Ceru Smiley', 'PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif"
 const MONO_STACK =
   "'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Mono', Consolas, 'Noto Sans Mono CJK SC', monospace"
 
 const FONT_STACKS: Record<AppFont, { sans: string; serif: string }> = {
   system: { sans: SANS_STACK, serif: SERIF_STACK },
   wenkai: { sans: KAI_STACK, serif: KAI_STACK },
+  smiley: { sans: SMILEY_STACK, serif: SMILEY_STACK },
   serif: { sans: SERIF_STACK, serif: SERIF_STACK },
   mono: { sans: MONO_STACK, serif: MONO_STACK }
 }

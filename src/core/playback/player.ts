@@ -20,6 +20,7 @@ import { matchCloudLyrics } from '../lyrics/cloud'
 import { normalizeTimedWords, type TimedLyricWord } from '../lyrics/timeline'
 import { playableUrl, providerForTrack } from './source'
 import { localUrlFor } from '../downloads'
+import { cachedAudioUrl } from '../cache/audioCache'
 import { logEvent } from '../logs'
 
 export type { Track } from '../track'
@@ -428,7 +429,9 @@ async function resolvePlaybackUrl(track: Track): Promise<string> {
     playerState.resolvedQuality = 'local'
     return local
   }
-  return playableUrl(track, playerState.quality)
+  const remote = await playableUrl(track, playerState.quality)
+  if (!settingsState.playbackCache) return remote
+  return cachedAudioUrl(remote)
 }
 
 function releaseBlob(): void {

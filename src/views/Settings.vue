@@ -12,7 +12,7 @@ import { downloadSummary, formatDownloadTemplate } from '@/core/downloads'
 import { libraryState } from '@/core/library'
 import { updateState } from '@/core/updater'
 import type { Track } from '@/core/track'
-import type { AccentColor, LyricFont } from '@/core/settings'
+import type { AccentColor, AppFont } from '@/core/settings'
 import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
@@ -79,7 +79,7 @@ const ROW_TERMS: Record<string, string> = {
   'playback:mode': '播放模式 顺序播放 列表循环 单曲循环 随机播放',
   'playback:speed': '播放速度 倍速 0.75 1.5 2',
   'lyrics:scale': '歌词字号 字号 大小 特大',
-  'lyrics:font': '歌词字体 字体 宋体 楷体 圆黑 系统',
+  'appearance:font': '字体 字体族 宋体 楷体 等宽 系统',
   'lyrics:offset': '歌词偏移 延迟 提前 校准 秒',
   'lyrics:show': '显示歌词 歌词',
   'lyrics:cloud': '自动匹配云歌词 云歌词 歌词',
@@ -155,11 +155,11 @@ const lyricScales = [
   { value: 1.25, label: '特大' }
 ]
 const offsetOptions = Array.from({ length: 21 }, (_, index) => (index - 10) / 10)
-const lyricFonts: Array<{ value: LyricFont; label: string; hint: string }> = [
+const appFonts: Array<{ value: AppFont; label: string; hint: string }> = [
   { value: 'system', label: '系统默认', hint: '跟随手机 UI 字体，最稳妥' },
-  { value: 'serif', label: '宋体 · 衬线', hint: '唱片内页的观感' },
-  { value: 'kai', label: '楷体', hint: '偏手写，适合慢歌' },
-  { value: 'round', label: '圆黑', hint: '圆润的现代黑体' }
+  { value: 'wenkai', label: '文楷 · 内置', hint: '随包内附的楷体，任何机型都有效' },
+  { value: 'serif', label: '宋体 · 全衬线', hint: '标题正文都变成衬线，像唱片内页' },
+  { value: 'mono', label: '等宽', hint: '字距均匀，像歌词本打出来的' }
 ]
 
 const previewTrack = {
@@ -213,8 +213,8 @@ const lyricScaleLabel = computed(() => {
   const option = lyricScales.find((item) => item.value === settingsState.lyricScale)
   return `${option?.label ?? '标准'} · ${Math.round(settingsState.lyricScale * 100)}%`
 })
-const lyricFontLabel = computed(
-  () => lyricFonts.find((font) => font.value === settingsState.lyricFont)?.label ?? '系统默认'
+const fontFamilyLabel = computed(
+  () => appFonts.find((font) => font.value === settingsState.fontFamily)?.label ?? '系统默认'
 )
 const lyricOffsetLabel = computed(() =>
     `${settingsState.lyricOffsetMs >= 0 ? '+' : ''}${(settingsState.lyricOffsetMs / 1000).toFixed(1)} 秒`
@@ -230,7 +230,7 @@ type PickerKey =
   | 'mode'
   | 'speed'
   | 'lyricScale'
-  | 'lyricFont'
+  | 'fontFamily'
   | 'lyricOffset'
   | 'downloadQuality'
   | 'concurrency'
@@ -314,16 +314,16 @@ const pickerMeta = computed<{
         value: settingsState.lyricScale,
         layout: 'list'
       }
-    case 'lyricFont':
+    case 'fontFamily':
       return {
-        title: '歌词字体',
-        sub: '只影响歌词文字，界面仍用系统字体',
-        options: lyricFonts.map((font) => ({
+        title: '字体',
+        sub: '界面与歌词一起换，缺字时自动兜底',
+        options: appFonts.map((font) => ({
           value: font.value,
           label: font.label,
           desc: font.hint
         })),
-        value: settingsState.lyricFont,
+        value: settingsState.fontFamily,
         layout: 'list'
       }
     case 'lyricOffset':
@@ -392,10 +392,10 @@ function applyPick(value: string | number): void {
       if (Number.isFinite(scale)) updateSettings({ lyricScale: scale })
       break
     }
-    case 'lyricFont': {
+    case 'fontFamily': {
       const font = String(value)
-      if (font === 'system' || font === 'serif' || font === 'kai' || font === 'round') {
-        updateSettings({ lyricFont: font })
+      if (font === 'system' || font === 'serif' || font === 'wenkai' || font === 'mono') {
+        updateSettings({ fontFamily: font })
       }
       break
     }
@@ -575,6 +575,24 @@ async function resetSettings(): Promise<void> {
               />
             </div>
           </div>
+
+          <div
+            v-if="show('appearance:font')"
+            class="settingrow pickrow"
+            role="button"
+            tabindex="0"
+            @click="openPicker('fontFamily')"
+            @keydown.enter.prevent="openPicker('fontFamily')"
+            @keydown.space.prevent="openPicker('fontFamily')"
+          >
+            <span class="ico"><Icon name="size" :size="15" /></span>
+            <div class="body">
+              <div class="lab">字体</div>
+              <div class="sub">界面和歌词一起换</div>
+            </div>
+            <span class="val">{{ fontFamilyLabel }}</span>
+            <Icon name="chevron-down" :size="13" />
+          </div>
         </div>
       </section>
 
@@ -741,24 +759,6 @@ async function resetSettings(): Promise<void> {
               <div class="sub">只影响歌词页的字号</div>
             </div>
             <span class="val">{{ lyricScaleLabel }}</span>
-            <Icon name="chevron-down" :size="13" />
-          </div>
-
-          <div
-            v-if="show('lyrics:font')"
-            class="settingrow pickrow"
-            role="button"
-            tabindex="0"
-            @click="openPicker('lyricFont')"
-            @keydown.enter.prevent="openPicker('lyricFont')"
-            @keydown.space.prevent="openPicker('lyricFont')"
-          >
-            <span class="ico"><Icon name="size" :size="15" /></span>
-            <div class="body">
-              <div class="lab">歌词字体</div>
-              <div class="sub">系统默认，或换成宋体、楷体、圆黑</div>
-            </div>
-            <span class="val">{{ lyricFontLabel }}</span>
             <Icon name="chevron-down" :size="13" />
           </div>
 

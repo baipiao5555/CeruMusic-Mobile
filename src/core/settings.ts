@@ -4,16 +4,16 @@ import { setLoggingEnabled, setVerboseConsoleCapture } from './logs'
 
 export type AccentColor = 'green' | 'blue' | 'purple' | 'orange'
 
-/** 歌词用的字体族：默认跟随系统，其余是可选的观感。 */
-export type LyricFont = 'system' | 'serif' | 'kai' | 'round'
+/** 全应用字体：默认跟随系统，其余会替换界面与歌词的字体族。 */
+export type AppFont = 'system' | 'wenkai' | 'serif' | 'mono'
 
 export interface AppSettings {
   theme: 'system' | 'light' | 'dark'
   accent: AccentColor
   /** Multiplier applied to the player lyric font size. */
   lyricScale: number
-  /** Font family used for lyric text. */
-  lyricFont: LyricFont
+  /** Font family used by the whole app (UI and lyrics). */
+  fontFamily: AppFont
   playbackRate: number
   downloadFilenameTemplate: string
   /** Show translation lines under the original lyric text. */
@@ -57,7 +57,7 @@ export const settingsState = reactive<AppSettings>({
   theme: 'system',
   accent: 'green',
   lyricScale: 1,
-  lyricFont: 'system',
+  fontFamily: 'system',
   playbackRate: 1,
   downloadFilenameTemplate: '%t - %s',
   showLyricTranslation: true,
@@ -90,8 +90,15 @@ export function restoreSettings(): void {
         if (saved.quality === '128k') saved.quality = ''
         saved.version = 2
       }
+      // 旧版本只有歌词字体；升级后沿用为全局字体
+      if (!saved.fontFamily && saved.lyricFont) {
+        saved.fontFamily = saved.lyricFont
+        delete saved.lyricFont
+      }
+      if (saved.fontFamily === 'kai' || saved.fontFamily === 'round') saved.fontFamily = 'wenkai'
       Object.assign(settingsState, saved)
-      if (!LYRIC_FONTS[settingsState.lyricFont as LyricFont]) settingsState.lyricFont = 'system'
+      delete (settingsState as unknown as Record<string, unknown>).lyricFont
+      if (!FONT_STACKS[settingsState.fontFamily]) settingsState.fontFamily = 'system'
     }
   } catch {}
   applyTheme()
@@ -114,7 +121,7 @@ export function updateSettings(patch: Partial<AppSettings>): void {
   Object.assign(settingsState, patch)
   persist()
   if (patch.theme || patch.accent || patch.lyricScale !== undefined) applyTheme()
-  if (patch.lyricFont !== undefined) applyLyricFont()
+  if (patch.fontFamily !== undefined) applyFontFamily()
   if (logsChanged) applyLoggingEnabled()
   if (verboseChanged) applyVerboseLogs()
 }
@@ -173,22 +180,36 @@ function applyLyricScale(): void {
 }
 
 /**
- * 系统字体走 Android 的 sans-serif，其余是可选观感。
- * 字体名全部带兜底，设备缺字时会自然退化到系统字体，不会出现方框。
+ * 字体：系统默认 / 全衬线 / 楷体 / 等宽。
+ *
+ * 直接覆盖 --sans 与 --serif 两个根令牌，界面和歌词一起换。
+ * 每个字体栈末尾都落到 CSS 通用族（serif / monospace / sans-serif），
+ * 所以手机上即便没有里面列的具体字体，观感也一定跟系统默认不同，
+ * 不会出现「选了没反应」。
  */
-const LYRIC_FONTS: Record<LyricFont, string> = {
-  system:
-    "-apple-system, BlinkMacSystemFont, 'HarmonyOS Sans SC', 'MiSans', 'PingFang SC', 'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif",
-  serif:
-    "Georgia, 'Times New Roman', 'Songti SC', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Noto Serif SC', STSong, SimSun, serif",
-  kai: "'Kaiti SC', STKaiti, KaiTi, 'Songti SC', 'Noto Serif CJK SC', serif",
-  round:
-    "'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Arial Rounded MT Bold', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif"
+const SANS_STACK =
+  "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'HarmonyOS Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif"
+const SERIF_STACK =
+  "Georgia, 'Times New Roman', 'Songti SC', STSong, 'Source Han Serif SC', 'Noto Serif SC', 'Noto Serif CJK SC', SimSun, serif"
+const KAI_STACK =
+  "'Ceru WenKai', 'Kaiti SC', STKaiti, KaiTi, 'Songti SC', STSong, 'Noto Serif CJK SC', SimSun, serif"
+const MONO_STACK =
+  "'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Mono', Consolas, 'Noto Sans Mono CJK SC', monospace"
+
+const FONT_STACKS: Record<AppFont, { sans: string; serif: string }> = {
+  system: { sans: SANS_STACK, serif: SERIF_STACK },
+  wenkai: { sans: KAI_STACK, serif: KAI_STACK },
+  serif: { sans: SERIF_STACK, serif: SERIF_STACK },
+  mono: { sans: MONO_STACK, serif: MONO_STACK }
 }
 
-function applyLyricFont(): void {
-  const font = LYRIC_FONTS[settingsState.lyricFont] ?? LYRIC_FONTS.system
-  document.documentElement.style.setProperty('--lyric-font', font)
+function applyFontFamily(): void {
+  const stack = FONT_STACKS[settingsState.fontFamily] ?? FONT_STACKS.system
+  const root = document.documentElement
+  root.style.setProperty('--sans', stack.sans)
+  root.style.setProperty('--serif', stack.serif)
+  // 歌词跟着同一个字体走，除非将来单独开放歌词字体
+  root.style.setProperty('--lyric-font', stack.serif)
 }
 
 /** Android reports night mode through the SystemBars plugin; WebView media queries lag. */
@@ -206,7 +227,7 @@ export function applyTheme(): void {
   document.documentElement.classList.toggle('dark', dark)
   applyAccent()
   applyLyricScale()
-  applyLyricFont()
+  applyFontFamily()
 }
 
 export function registerSettingsHostHooks(): void {

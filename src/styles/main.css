@@ -4,6 +4,16 @@
    规则：页面只使用这里的类与令牌，不再出现硬编码颜色。
    ============================================================ */
 
+/* 内置楷体：只收 GB2312 一级常用字 + 拉丁与标点，887KB。
+   手机上不依赖任何系统字体，选了就一定看得出变化。 */
+@font-face {
+  font-family: 'Ceru WenKai';
+  src: url('/fonts/wenkai-subset.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ---------- 1. 令牌 ---------- */
 :root {
   /* 青瓷色谱：从深墨釉到瓷白 */

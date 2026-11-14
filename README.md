@@ -4,64 +4,113 @@
 
 - 仓库：https://github.com/baipiao5555/CeruMusic-Mobile
 - 下载：https://github.com/baipiao5555/CeruMusic-Mobile/releases
+- 当前版本：**v2.6.14**
 
 澜音本身只提供插件运行框架和播放器，不存储、不提供任何音乐文件。支持自行安装澜音 v2 插件或洛雪 LX 音源；LX 模式由应用查询歌曲目录，播放地址由音源脚本解析。
 
 ## 截图
 
-| 发现 | 搜索 | 我的 |
+| 发现 | 搜索 | 播放 |
 | --- | --- | --- |
-| ![发现](docs/screenshots/01-discover.png) | ![搜索](docs/screenshots/02-search.png) | ![我的](docs/screenshots/03-library.png) |
+| ![发现](docs/screenshots/01-discover.png) | ![搜索](docs/screenshots/02-search.png) | ![播放](docs/screenshots/04-player.png) |
 
-| 歌单 | 播放页 | 插件管理 |
+| 歌词 | 我的 | 歌单 |
 | --- | --- | --- |
-| ![歌单](docs/screenshots/06-playlists.png) | ![播放](docs/screenshots/04-player.png) | ![插件](docs/screenshots/05-plugins.png) |
+| ![歌词](docs/screenshots/05-lyrics.png) | ![我的](docs/screenshots/06-library.png) | ![歌单](docs/screenshots/07-playlists.png) |
+
+| 设置 | 插件管理 | 更新 |
+| --- | --- | --- |
+| ![设置](docs/screenshots/08-settings.png) | ![插件](docs/screenshots/09-plugins.png) | ![更新](docs/screenshots/10-update.png) |
+
+| 边听边逛 | 本机音乐 |
+| --- | --- |
+| ![连续播放](docs/screenshots/03-discover-playing.png) | ![本机音乐](docs/screenshots/11-local.png) |
 
 ## 功能
 
-- 音源：从链接或本地文件安装澜音 v2 插件、洛雪 LX 脚本，支持启用/停用、卸载和链接更新；v2 插件继续支持配置与签名校验
-- 洛雪兼容：按脚本实际声明提供酷我、酷狗、QQ、网易云、咪咕平台，保留歌曲 ID、音质哈希、歌词和封面信息；同平台可选择具体插件，已有歌曲仍优先使用原插件
-- 发现页：插件提供的榜单与推荐歌单
-- 搜索：输入时防抖联网联想包含关键词的歌名，去重后最多 10 条，并保留本地补充；回车/点搜索展示正式结果，支持排序、高亮、搜索历史、缩词重试与本地兜底
-- 歌单导入：通过插件提供的导入器，把 QQ音乐、网易云音乐、酷狗、酷我、咪咕等平台的歌单导入到本地
-- 播放：队列、上一首/下一首、随机/单曲循环/列表循环、进度拖动
-- 播放封面：圆形封面随播放旋转，暂停与缓冲时停在当前角度；开启系统减少动态效果时不旋转
-- 音质：自动选择当前歌曲可用的最高音质，也可手动选择标准、超高、无损、高清臻音、全景环绕、超清母带等插件支持的档位
-- 歌词：逐行高亮，点击歌词跳转
-- 云歌词：插件没有歌词时，自动从 LrcLib / QQ音乐 / 网易云 匹配同步歌词与翻译；播放页也可以手动触发匹配
+**音源**
+
+- 从链接或本地文件安装澜音 v2 插件、洛雪 LX 脚本，支持启用/停用、卸载和链接更新；v2 插件继续支持配置与签名校验
+- 洛雪兼容：按脚本实际声明提供酷我、酷狗、QQ、网易云、咪咕平台，保留歌曲 ID、音质哈希、歌词和封面；同平台可选择具体插件，已有歌曲优先使用原插件
+
+**发现与搜索**
+
+- 发现页展示插件提供的榜单与推荐歌单，可横向滑动的 3:4 榜单卡；从其他页面返回时保留滚动位置与已加载内容，不会重新拉一遍
+- 搜索支持「歌名 / 歌词」两种模式，输入框右侧一键切换，选择会被记住
+- 歌名模式：输入时防抖联想（最多 10 条），输入完整歌名时按精准匹配收敛结果，单字只保留真正相关的曲目
+- 歌词模式：输入一句歌词，先查歌词库，再回音源找可播放版本，命中行显示在结果下方；歌词库里有、音源没有的歌单独列出来，提示换音源
+- 结果支持排序、关键词高亮、搜索历史、缩词重试与本地兜底
+
+**播放**
+
+- 队列、上一首/下一首、随机/单曲循环/列表循环、进度拖动
+- 播放缓存：边播边存到本机（512 MB LRU），重听不再走流量；可在设置里开关与一键清理
+- 下载：原生流式下载到应用专属目录，实时进度、断点重下、取消、失败重试、下载管理页；下载完成的歌直接读本地文件，可离线播放
+- 本机音乐：扫描系统媒体库并直接播放手机里的歌，支持搜索、播放全部、拖动进度；不复制文件，也不占用播放缓存
+- 音质：自动选择可用最高音质，也可手动选标准、超高、无损、高清臻音、全景环绕、超清母带等插件支持的档位
+- 播放页设置面板：播放速度、歌词字号、歌词偏移（±0.5s）、显示翻译、定时停止、下载当前歌曲
+
+**歌词**
+
+- 逐字变色：当前行按演唱进度一个字一个字点亮，播放页的两行预览与全屏歌词同步；认不出逐字时间的音源按字数估算节奏，唱完立即整行点亮
+- 全屏歌词：上下控件自动隐藏进入沉浸态，点一下屏幕或按返回键唤出，数秒后再次隐藏
+- 云歌词：插件没有歌词时自动从 LrcLib / QQ音乐 / 网易云 匹配同步歌词与翻译；插件取词失败会先按歌名在同音源重搜，再回落云端
+- 系统歌词共享：通过 Lyricon Provider 与 ColorOS 锁屏 `lyricInfo` 元数据把歌词共享到状态栏、锁屏或车机；歌词负载带逐字时间，支持 HyperOS 实时通知与焦点通知两种卡片形态
+- 设置项：歌词字号、歌词偏移、显示翻译、共享开关、是否共享翻译、岛歌词兼容
+
+**曲库**
+
 - 收藏、本地歌单、播放历史
 - 歌曲「更多」菜单：添加到歌单、新建歌单并添加、从当前歌单移除、下一首播放、加入播放队列、下载
 - 歌单管理：新建、重命名、删除，支持下载全部
-- 澜音账号登录：与电脑版共用同一个账号（Logto OAuth 2.0 + PKCE），登录页在系统浏览器打开，通过 `cerumusic://oauth/callback` 深链回到应用
+- 歌单导入：通过插件提供的导入器，把 QQ音乐、网易云音乐、酷狗、酷我、咪咕等平台的歌单导入到本地
 - 云歌单同步：读取电脑版「上传到云端」的歌单，一键导入或更新到手机；导入时自动匹配本机已安装的音源插件
-- 下载：原生流式下载到应用专属目录，实时进度、断点重下（重新下载）、取消、失败重试、下载管理页；下载完成后播放同一首歌会直接使用本地文件，可离线播放
-- 应用内更新：启动时检查 GitHub Release（12 小时最多一次），发现新版本发系统通知；更新页展示更新说明，可直接下载 APK 并调起系统安装器覆盖安装
-- 深色/浅色主题，跟随系统
-- Android 前台媒体服务：后台播放、通知栏与锁屏显示歌曲封面、播放进度、播放/暂停/上一首/下一首、锁屏媒体控制
-- Android 返回手势/返回键：优先关闭弹层，其次返回上一页，在底部主页面退出应用
+
+**外观**
+
+- 深色 / 浅色主题，跟随系统
+- 字体：系统默认、内置文楷、内置得意黑、内置宋体衬线、等宽，界面与歌词一起切换
+- 悬浮胶囊底栏，选中项带滑动指示器；页面切换与退出应用带淡出/缩放动画
+
+**系统集成**
+
+- Android 前台媒体服务：后台播放、通知栏与锁屏显示封面、进度、播放控制
+- 返回层级：发现页连按两次退出；我的、歌单、搜索先回上一级（歌单 → 发现，我的 → 歌单，搜索 → 发现），列表页返回不丢滚动位置
 - 左右滑动：播放页滑动切歌，主页面在发现 / 搜索 / 歌单 / 我的之间切换，可在设置中单独关闭
-- 系统歌词共享：通过 Lyricon Provider 和 ColorOS 锁屏 `lyricInfo` 元数据，把当前歌词共享到状态栏、锁屏或车机；设置里可以开关和选择是否共享翻译
-- 播放页设置面板：播放速度、歌词字号、歌词偏移（±0.5s）、显示翻译、定时停止（15/30/60 分钟或播完当前歌）、下载当前歌曲
-- 设置项：主题与主题色、歌词字号、默认音质、播放模式、播放速度、显示歌词/翻译、云歌词来源、保持亮屏、耳机拔出暂停、歌词共享、下载音质、下载文件名格式、同时下载数量、手势开关、自动检查更新
-- 悬浮胶囊底栏：底部导航改为悬浮样式，选中项带滑动指示器；页面切换与退出应用带淡出/缩放动画
+
+**更新**
+
+- 启动时检查 GitHub Release（12 小时最多一次），发现新版本发系统通知；更新页展示说明，可直接下载并调起系统安装器
+- 下载走加速线路：主用 + 备用双线路，失败自动换下一条，最后才回落直连；支持按测速自动排序与手动测速，尺寸不符的坏包会自动丢弃重试
+
+**隐私**
+
 - 数据全部保存在本机（IndexedDB / localStorage）；账号只保存 OAuth token，不保存密码
+- 澜音账号登录与电脑版共用同一账号（Logto OAuth 2.0 + PKCE），登录在系统浏览器完成，通过 `cerumusic://oauth/callback` 深链返回
 
 ## 技术结构
 
 ```
 src/
-  core/plugin/      插件产物解析、iframe 沙箱、Host RPC、网络访问
-  core/playback/    音频播放、队列、歌词、历史、插件音源解析
-  core/lyrics/      云歌词匹配（LrcLib / QQ音乐 / 网易云）
-  core/library.ts   收藏与本地歌单
-  core/auth.ts      澜音账号登录（Logto OAuth PKCE + 深链回调）
-  core/cloud.ts     云歌单读取与导入
-  core/downloads.ts 下载队列、进度、离线文件
-android/.../MediaPlaybackService.java  媒体服务、封面/进度、ColorOS 歌词与 Lyricon 发布
-  core/updater.ts   应用内检查更新、下载与安装 APK
-  core/native/      Capacitor 原生桥接（后台媒体服务、下载器、外部浏览器、安装器、通知）
-  views/            发现 / 搜索 / 我的 / 播放 / 云端歌单 / 下载 / 更新 / 设置 / 插件
-android/            Capacitor Android 工程 + 前台媒体服务 + 下载/安装/通知插件
+  core/plugin/          插件产物解析、iframe 沙箱、Host RPC、网络访问
+  core/playback/        音频播放、队列、歌词、历史、插件音源解析
+  core/lyrics/          云歌词匹配、逐字时间轴、原生歌词负载
+  core/cache/           播放缓存（本机 HTTP 代理 + 本地直出）
+  core/local/           本机音乐（MediaStore 扫描）
+  core/navigation/      返回层级
+  core/library.ts       收藏与本地歌单
+  core/auth.ts          澜音账号登录（Logto OAuth PKCE + 深链回调）
+  core/cloud.ts         云歌单读取与导入
+  core/downloads.ts     下载队列、进度、离线文件
+  core/updater.ts       检查更新、下载与安装 APK
+  core/update-mirror.ts 加速线路（主用/备用/测速）
+  core/native/          Capacitor 原生桥接（媒体服务、下载器、浏览器、安装器、通知、返回守卫）
+  views/                发现 / 搜索 / 我的 / 播放 / 本机音乐 / 云端歌单 / 下载 / 更新 / 设置 / 插件
+android/.../MediaPlaybackService.java   媒体服务、封面/进度、ColorOS 歌词与 Lyricon 发布
+android/.../IslandLyricNotifier.java    系统实时通知与 HyperOS 焦点通知
+android/.../AudioCacheServer.java       本机 HTTP 服务：播放缓存 + 本机音乐直出（支持 Range）
+android/.../LocalMediaPlugin.java       MediaStore 扫描与权限
+android/                Capacitor Android 工程 + 下载/安装/通知插件
 public/plugin-runtime/  构建时从 @shiqianjiang/ceru-plugin-core 复制（不纳入版本库）
 ```
 
@@ -69,7 +118,7 @@ v2 插件继续使用官方 `sandbox.js` 与隔离 iframe。洛雪脚本在受�
 
 ## 构建
 
-要求：Node.js 22+、JDK 17、Android SDK 34、Gradle 8.8。
+要求：Node.js 22+、JDK 17、Android SDK 36、Gradle 8.8。
 
 ```bash
 npm install
@@ -83,11 +132,15 @@ gradlew.bat assembleRelease
 
 产物：`android/app/build/outputs/apk/release/app-release.apk`
 
-Windows 下若 JDK 报 `Unable to establish loopback connection`，可在本次 PowerShell 会话中指定已存在的短临时目录，再重试 Gradle 构建：
+`compileSdkVersion` 是 36：HyperOS 的实时通知需要 `Notification.Builder#setShortCriticalText`，这个 API 只在 36 上存在。AGP 8.2.1 对 36 会告警，`android/gradle.properties` 里已用 `android.suppressUnsupportedCompileSdk=36` 压掉。
+
+Windows 下若 JDK 报 `Unable to establish loopback connection`，是 JVM 建 NIO 管道时 unix-domain 临时目录不可用，指定一个纯英文短路径再重试：
 
 ```powershell
-New-Item -ItemType Directory -Force 'D:/LX/.vite/jdk-tmp' | Out-Null
-$env:JAVA_TOOL_OPTIONS = "$env:JAVA_TOOL_OPTIONS -Djdk.net.unixdomain.tmpdir=D:/LX/.vite/jdk-tmp -Djava.io.tmpdir=D:/LX/.vite/jdk-tmp".Trim()
+New-Item -ItemType Directory -Force 'D:/LX/.tmp' | Out-Null
+$env:JAVA_TOOL_OPTIONS = '-Djdk.net.unixdomain.tmpdir=D:/LX/.tmp'
+cd android
+gradlew.bat assembleRelease
 ```
 
 ## 发版与跟随上游
@@ -97,10 +150,12 @@ $env:JAVA_TOOL_OPTIONS = "$env:JAVA_TOOL_OPTIONS -Djdk.net.unixdomain.tmpdir=D:/
 ```bash
 npm run release
 npm run release -- --dry-run          # 只打印步骤
-npm run release -- --version 2.3.2-mobile.1
+npm run release -- --version 2.6.15
 ```
 
 发版说明放在 `docs/release-v<版本>.md`，可用 `<!-- SHA256 -->` 和 `<!-- SIZE -->` 占位，脚本会回填。
+
+注意顺序：**先改版本号再构建**。`__APP_VERSION__` 是构建时注入的，先构建后改版本会让 APK 里嵌的版本号落后一档，应用内会一直提示“发现新版本”。
 
 检查桌面版是否有新版本、需要移植哪些文件：
 
@@ -147,14 +202,15 @@ node scripts/test-network-policy.mjs
 - 插件逻辑与主界面隔离；洛雪 Worker 禁止直接联网，宿主桥接仅开放网络、权限查询和提示等必要接口
 - 下载器对每一跳重定向都重新解析域名并做同样的公网校验，跨域重定向会丢弃 Authorization、Cookie 等敏感请求头
 - 应用内更新只从本仓库 GitHub Release 的 HTTPS 地址下载 APK，同样经过下载器的逐跳校验；安装时通过 FileProvider 把文件交给系统安装器，不接受任意路径
+- 本机音乐只读系统媒体库：扫描不写入、不修改文件，播放经本机回环服务输出
 - 账号 token 只保存在本机 localStorage，登录密码始终在系统浏览器中由认证服务处理，应用不会接触密码
 
 ## 与桌面版的差异
 
-手机版聚焦「音源插件 + 搜索 + 播放 + 歌词 + 本地收藏/歌单 + 云歌单 + 下载」。桌面版的以下功能暂未移植：
+手机版聚焦「音源插件 + 搜索 + 播放 + 歌词 + 本机音乐 + 本地收藏/歌单 + 云歌单 + 下载」。桌面版的以下功能暂未移植：
 
 - 社区、AI、一起听、播放设置云同步
-- 本地音乐扫描与标签编辑、DLNA
+- 本机音乐的标签编辑、DLNA
 - 插件提供的 Web/Native Surface 页面（插件只作为音源使用）
 - 部分插件服务接口（房间、设备等）会返回「手机版暂不支持」
 
@@ -162,9 +218,10 @@ node scripts/test-network-policy.mjs
 
 - 云歌单是**单向导入**：电脑版负责「上传到云端」，手机版负责读取并导入/更新到本地；手机端本地的改动不会回写云端。
 - 下载保存到应用专属目录（`Android/data/com.ceru.music.mobile/files/Music`），卸载应用或清除数据会删除文件。
+- 本机音乐读取系统媒体库索引到的音频：被 `.nomedia` 隐藏、或被其他应用放在私有目录里的文件不会出现。
 - 插件发起的下载（`services.downloads.*`）支持 list/create/pause/resume/cancel/retry，`reveal`（打开文件管理器）不支持。
 
-主界面、播放器和插件管理均已针对触屏与安全区适配。
+主界面、播放器、歌词页与插件管理均已针对触屏与安全区适配。
 
 ## 许可与致谢
 
@@ -173,7 +230,8 @@ node scripts/test-network-policy.mjs
 - 上游项目：https://github.com/timeshiftsauce/CeruMusic
 - 插件运行时：`@shiqianjiang/ceru-plugin-core` / `ceru-plugin-sdk`
 - 云歌词匹配思路参考：[tomakino/LyricProvider](https://github.com/tomakino/LyricProvider)（Apache-2.0）；LyricProvider 是 LSPosed 模块，手机版没有直接复用它的代码，而是接入同类的公开歌词接口：LrcLib、QQ音乐、网易云
-- 系统歌词共享：[Lyricon](https://github.com/proify/lyricon) Provider（Apache-2.0）；ColorOS 锁屏歌词参考 [ColorOS Live Lyrics Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge)
+- 系统歌词共享：[Lyricon](https://github.com/proify/lyricon) Provider（Apache-2.0）；ColorOS 锁屏歌词参考 [ColorOS Live Lyrics Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge)；HyperOS 实时通知与焦点通知形态参考 [HyperLyric](https://github.com/limczhh/HyperLyric) 的公开说明
+- 内置字体：文楷（LXGW WenKai，OFL-1.1）、得意黑（Smiley Sans，OFL-1.1）、思源宋体（Noto Serif SC，OFL-1.1），均已做 GB2312 子集化
 - 图标与品牌资源来自上游项目
 
 本项目不分发任何音乐文件或第三方音源插件。请确保你安装和使用的插件符合当地法律法规。

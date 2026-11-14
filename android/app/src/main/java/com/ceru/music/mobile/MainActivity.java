@@ -33,6 +33,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(DownloaderPlugin.class);
         registerPlugin(ExternalPlugin.class);
         registerPlugin(AudioCachePlugin.class);
+        registerPlugin(LocalMediaPlugin.class);
         super.onCreate(savedInstanceState);
 
         // 本机缓存代理走 http://127.0.0.1，允许页面（https://localhost）加载它

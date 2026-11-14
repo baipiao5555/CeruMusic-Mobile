@@ -445,7 +445,8 @@ async function resolvePlaybackUrl(track: Track): Promise<string> {
     return local
   }
   const remote = await playableUrl(track, playerState.quality)
-  if (!settingsState.playbackCache) return remote
+  // 本机音乐已经是 127.0.0.1 直出，再套一层缓存代理没有意义，还会白占磁盘。
+  if (track.pluginId === 'local' || !settingsState.playbackCache) return remote
   return cachedAudioUrl(remote)
 }
 

@@ -59,8 +59,17 @@ export async function cachedAudioUrl(url: string): Promise<string> {
   return `${target.base}/cache?t=${target.token}&u=${encodeURIComponent(url)}${suffix}`
 }
 
-export async function audioCacheSize(): Promise<number> {
-  if (!Capacitor.isNativePlatform()) return 0
+/**
+ * 本机音乐的播放地址：交给同一个本机服务按 MediaStore id 直出，
+ * 支持 Range（拖进度），也不会复制文件。
+ */
+export async function localAudioUrl(id: string): Promise<string> {
+  const target = await ensureEndpoint()
+  if (!target) return ''
+  return `${target.base}/local?t=${target.token}&id=${encodeURIComponent(id)}`
+}
+
+export async function audioCacheSize(): Promise<number> {  if (!Capacitor.isNativePlatform()) return 0
   try {
     const result = await NativeAudioCache.size()
     return Number(result?.bytes) || 0

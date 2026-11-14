@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core'
 import { allProviders, invokeProvider, type ProviderHandle } from '../plugin/manager'
 import { selectPlaybackQuality } from '../quality'
+import { localAudioUrl } from '../cache/audioCache'
 import type { Track } from '../track'
 
 export function providerForTrack(track: Track): ProviderHandle | undefined {
@@ -22,6 +23,12 @@ export async function resolveTrackSource(
   track: Track,
   requestedQuality = ''
 ): Promise<TrackSource> {
+  // 本机音乐：不走插件，直接交给本机小服务按 MediaStore id 出流。
+  if (track.pluginId === 'local') {
+    const url = await localAudioUrl(track.id)
+    if (!url) throw new Error('本机音乐服务没有启动')
+    return { url }
+  }
   const provider = providerForTrack(track)
   if (!provider) throw new Error('音源插件未启用')
   const order = provider.qualities.length ? provider.qualities : track.qualities

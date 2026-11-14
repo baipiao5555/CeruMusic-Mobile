@@ -40,11 +40,13 @@ public class AudioCacheServer {
     private final File dir;
     private final long maxBytes;
     private final String token;
+    private final android.content.Context context;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private ServerSocket socket;
     private volatile boolean running;
 
-    AudioCacheServer(File cacheDir, long maxBytes) {
+    AudioCacheServer(android.content.Context context, File cacheDir, long maxBytes) {
+        this.context = context.getApplicationContext();
         this.dir = cacheDir;
         this.maxBytes = maxBytes;
         this.token = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
@@ -130,6 +132,10 @@ public class AudioCacheServer {
                 return;
             }
             String upstream = query.get("u");
+            if (query.containsKey("id")) {
+                serveLocal(out, query.get("id"), range, head);
+                return;
+            }
             if (upstream == null || upstream.isEmpty()) {
                 writeError(out, 400, "missing url");
                 return;
@@ -162,6 +168,116 @@ public class AudioCacheServer {
         } catch (Throwable ignored) {
             // 客户端提前关闭连接很正常，静默结束
             }
+    }
+
+    /**
+     * 本机音乐：按 MediaStore id 打开 content:// 流并直出，支持 Range。
+     * 不复制文件，也不进入音频缓存目录，播完即关。
+     */
+    private void serveLocal(OutputStream out, String id, String range, boolean head) throws IOException {
+        if (id == null || id.isEmpty()) {
+            writeError(out, 400, "missing id");
+            return;
+        }
+        android.net.Uri uri;
+        try {
+            uri = com.ceru.music.mobile.LocalMediaPlugin.audioUri(id);
+        } catch (NumberFormatException error) {
+            writeError(out, 400, "bad id");
+            return;
+        }
+        android.content.res.AssetFileDescriptor descriptor = null;
+        java.io.FileInputStream stream = null;
+        try {
+            descriptor = context.getContentResolver().openAssetFileDescriptor(uri, "r");
+            if (descriptor == null) {
+                writeError(out, 404, "not found");
+                return;
+            }
+            long total = descriptor.getLength();
+            String type = context.getContentResolver().getType(uri);
+            if (type == null || type.isEmpty()) type = "audio/mpeg";
+
+            long from = 0;
+            long to = total > 0 ? total - 1 : -1;
+            boolean partial = false;
+            if (range != null && range.startsWith("bytes=") && total > 0) {
+                String spec = range.substring(6).split(",")[0].trim();
+                int dash = spec.indexOf('-');
+                if (dash >= 0) {
+                    String startText = spec.substring(0, dash).trim();
+                    String endText = spec.substring(dash + 1).trim();
+                    if (!startText.isEmpty()) from = Long.parseLong(startText);
+                    if (!endText.isEmpty()) to = Long.parseLong(endText);
+                    if (to >= total) to = total - 1;
+                    if (from < 0 || from > to) {
+                        String header = "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */"
+                                + total + "\r\nConnection: close\r\n\r\n";
+                        out.write(header.getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                        return;
+                    }
+                    partial = true;
+                }
+            }
+
+            long length = total > 0 ? (to - from + 1) : -1;
+            StringBuilder header = new StringBuilder();
+            header.append(partial ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 OK\r\n");
+            header.append("Content-Type: ").append(type).append("\r\n");
+            header.append("Accept-Ranges: bytes\r\n");
+            if (total > 0) {
+                if (partial) {
+                    header.append("Content-Range: bytes ").append(from).append('-').append(to)
+                            .append('/').append(total).append("\r\n");
+                }
+                header.append("Content-Length: ").append(length).append("\r\n");
+            }
+            header.append("Cache-Control: no-store\r\nConnection: close\r\n\r\n");
+            out.write(header.toString().getBytes(StandardCharsets.UTF_8));
+            if (head) {
+                out.flush();
+                return;
+            }
+
+            stream = descriptor.createInputStream();
+            if (from > 0) {
+                long skipped = 0;
+                while (skipped < from) {
+                    long step = stream.skip(from - skipped);
+                    if (step <= 0) break;
+                    skipped += step;
+                }
+            }
+            byte[] buffer = new byte[BUFFER];
+            long remaining = length;
+            while (remaining != 0) {
+                int want = remaining < 0 ? buffer.length : (int) Math.min(buffer.length, remaining);
+                int read = stream.read(buffer, 0, want);
+                if (read <= 0) break;
+                out.write(buffer, 0, read);
+                if (remaining > 0) remaining -= read;
+            }
+            out.flush();
+        } catch (Throwable error) {
+            try {
+                writeError(out, 500, "local stream failed");
+            } catch (IOException ignored) {
+            }
+        } finally {
+            if (stream != null) {
+                try {
+                    stream.close();
+                } catch (IOException ignored) {
+                }
+            }
+            if (descriptor != null) {
+                try {
+                    descriptor.close();
+                } catch (IOException ignored) {
+                }
+            }
+        }
     }
 
     private void serveFile(OutputStream out, File file, String range, boolean head, String ext) throws IOException {

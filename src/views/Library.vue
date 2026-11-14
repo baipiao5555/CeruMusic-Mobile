@@ -224,6 +224,15 @@ function openImport(): void {
         </button>
       </div>
 
+      <button class="p-local" @click="router.push('/local')">
+        <span class="ic"><Icon name="music" :size="20" /></span>
+        <span class="tx">
+          <b>本机音乐</b>
+          <small>扫描手机里的歌曲，不占额外空间</small>
+        </span>
+        <Icon name="chevron-right" :size="16" />
+      </button>
+
       <div class="p-seg">
         <div class="segment">
           <button :class="{ on: tab === 'songs' }" @click="tab = 'songs'">歌曲</button>
@@ -638,6 +647,46 @@ function openImport(): void {
 }
 .p-quick .gold .ic {
   color: var(--gold);
+}
+.p-local {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: calc(100% - var(--pad) * 2);
+  margin: 14px var(--pad) 0;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--line-2, rgba(255, 255, 255, 0.08));
+  text-align: left;
+  color: var(--ink-1);
+}
+.p-local .ic {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--tint-soft, rgba(169, 228, 207, 0.14));
+  color: var(--tint);
+}
+.p-local .tx {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.p-local .tx b {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.p-local .tx small {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.p-local:active {
+  transform: scale(0.995);
 }
 .p-seg {
   padding: 20px var(--pad) 0;

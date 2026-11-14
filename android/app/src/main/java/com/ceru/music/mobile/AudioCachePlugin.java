@@ -9,7 +9,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
 
 /**
- * 播放缓存：把 &lt;audio&gt; 的远程地址换成本机代理地址，边播边落盘，重听直接读本地。
+ * 播放缓存：把 audio 的远程地址换成本机代理地址，边播边落盘，重听直接读本地。
+ * 同一个服务还负责本机音乐的 /local 流（按 MediaStore id 直出，不落盘）。
  */
 @CapacitorPlugin(name = "AudioCache")
 public class AudioCachePlugin extends Plugin {
@@ -20,7 +21,7 @@ public class AudioCachePlugin extends Plugin {
 
     private AudioCacheServer server() {
         if (server == null) {
-            server = new AudioCacheServer(new File(getContext().getCacheDir(), "audio"), MAX_BYTES);
+            server = new AudioCacheServer(getContext(), new File(getContext().getCacheDir(), "audio"), MAX_BYTES);
         }
         return server;
     }

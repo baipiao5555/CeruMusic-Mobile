@@ -1,5 +1,5 @@
 /* ============================================================
-   澜音 CeruMusic Mobile · 设计系统 v2「青瓷 · 釉光」
+   澜音 CeruMusic Mobile · 设计系统 v3「内容优先 · QQ 音乐式布局」
    令牌 → 排印 → 图标 → 组件 → 布局 → 动效
    规则：页面只使用这里的类与令牌，不再出现硬编码颜色。
    ============================================================ */
@@ -44,17 +44,17 @@
   --c100: #dcebe4;
   --c050: #eef5f1;
 
-  --porcelain: #f7f8f5;
-  --porcelain-2: #eff2ee;
+  --porcelain: #ffffff;
+  --porcelain-2: #f5f6f7;
   --surface: #ffffff;
-  --surface-2: #fbfcfa;
+  --surface-2: #f7f8f8;
   --glaze: rgba(255, 255, 255, 0.72);
   --glaze-2: rgba(255, 255, 255, 0.46);
 
-  --ink: #11231e;
-  --ink-2: #3d534c;
-  --ink-3: #6d827b;
-  --ink-4: #9daea8;
+  --ink: #181d1a;
+  --ink-2: #465049;
+  --ink-3: #6a746d;
+  --ink-4: #89918c;
   --ink-inv: #f4f8f6;
 
   --line: rgba(17, 35, 30, 0.08);
@@ -85,7 +85,7 @@
   --pad: 20px;
   --tab-h: 56px;
   --mini-h: 58px;
-  --dock-h: 168px;
+  --dock-h: calc(var(--mini-h) + var(--tab-h) + var(--safe-bottom) + 1px);
 
   --sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'HarmonyOS Sans SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui,
@@ -94,20 +94,20 @@
     'Noto Serif SC', SimSun, serif;
   --mono: 'SF Mono', 'JetBrains Mono', ui-monospace, 'Cascadia Mono', monospace;
 
-  /* 动态强调色：默认梅子青，播放页由封面驱动 */
-  --tint: #3f8271;
-  --tint-soft: rgba(63, 130, 113, 0.12);
-  --tint-softer: rgba(63, 130, 113, 0.06);
+  /* 跟随用户强调色设置，绿色默认使用确认稿的鲜绿。 */
+  --tint: var(--brand);
+  --tint-soft: var(--brand-soft);
+  --tint-softer: var(--brand-softer);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   /* 旧令牌别名：仍有少量组件引用，统一指向新色板 */
-  --brand: #3f8271;
-  --brand-strong: #2c6455;
-  --brand-soft: rgba(63, 130, 113, 0.12);
-  --brand-softer: rgba(63, 130, 113, 0.06);
-  --bg: #f7f8f5;
+  --brand: #11bb84;
+  --brand-strong: #087b57;
+  --brand-soft: rgba(17, 187, 132, 0.12);
+  --brand-softer: rgba(17, 187, 132, 0.06);
+  --bg: #ffffff;
   --text: var(--ink);
   --muted: var(--ink-3);
   --muted-2: var(--ink-4);
@@ -130,10 +130,10 @@
 }
 
 [data-theme='dark'] {
-  --porcelain: #0a1210;
-  --porcelain-2: #0e1714;
-  --surface: #131e1a;
-  --surface-2: #16231e;
+  --porcelain: #101214;
+  --porcelain-2: #191c1e;
+  --surface: #1b1e21;
+  --surface-2: #23272a;
   --glaze: rgba(19, 30, 26, 0.78);
   --glaze-2: rgba(24, 38, 33, 0.36);
 
@@ -160,17 +160,17 @@
   --sh-3: 0 18px 40px -18px rgba(0, 0, 0, 0.75);
   --sh-glow: 0 12px 32px -8px rgba(111, 184, 161, 0.35);
 
-  --tint: #6fb8a1;
-  --tint-soft: rgba(111, 184, 161, 0.14);
-  --tint-softer: rgba(111, 184, 161, 0.07);
+  --tint: var(--brand);
+  --tint-soft: var(--brand-soft);
+  --tint-softer: var(--brand-softer);
 
   --brand: #6fb8a1;
   --brand-strong: #8ccdb8;
   --brand-soft: rgba(111, 184, 161, 0.14);
   --brand-softer: rgba(111, 184, 161, 0.07);
-  --bg: #0a1210;
+  --bg: #101214;
   --danger: #d97264;
-  --surface-solid: #131e1a;
+  --surface-solid: #1b1e21;
 
   --ion-color-primary: #6fb8a1;
   --ion-color-primary-rgb: 111, 184, 161;
@@ -295,7 +295,7 @@ ion-app {
   color: #eaf2ee;
 }
 
-/* 滚动区：内容从底部浮岛下方穿过，末段渐隐 */
+/* 内容可完整滚动到常驻播放条上方；不再使用浮岛渐隐遮罩。 */
 .scroll {
   position: absolute;
   inset: 0;
@@ -304,8 +304,8 @@ ion-app {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   padding-bottom: calc(var(--dock-h) + 28px);
-  -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 148px), transparent 100%);
-  mask-image: linear-gradient(180deg, #000 calc(100% - 148px), transparent 100%);
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .scroll::-webkit-scrollbar {
@@ -354,14 +354,14 @@ html.native-android:not(.insets-ready) {
 
 /* ---------- 4. 排印 ---------- */
 .display {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 34px;
   line-height: 1.14;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 .h1 {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 26px;
   line-height: 1.2;
   font-weight: 600;
@@ -449,9 +449,9 @@ html.native-android:not(.insets-ready) {
   padding: 0 var(--pad);
 }
 .page-head h1 {
-  font-family: var(--serif);
-  font-size: 33px;
-  line-height: 1.05;
+  font-family: var(--sans);
+  font-size: 26px;
+  line-height: 1.25;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -926,7 +926,7 @@ html.native-android:not(.insets-ready) {
   gap: 8px;
 }
 .section-head h2 {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 20px;
   font-weight: 600;
   letter-spacing: 0.01em;
@@ -962,7 +962,7 @@ html.native-android:not(.insets-ready) {
   padding: 20px var(--pad) 8px;
 }
 .group-title .cn {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.012em;
@@ -992,8 +992,8 @@ html.native-android:not(.insets-ready) {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 60px;
-  padding: 0 4px;
+  min-height: 66px;
+  padding: 0;
   border-radius: var(--r-sm);
   transition: background 0.16s var(--e-out);
 }
@@ -1009,8 +1009,8 @@ html.native-android:not(.insets-ready) {
   flex: none;
 }
 .songrow .cover {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   border-radius: var(--r-sm);
 }
 .songrow .meta-wrap {
@@ -1200,52 +1200,42 @@ mark.hl {
   letter-spacing: 0.02em;
 }
 
-/* ---------- 12. 底部浮岛（迷你播放器 + TabBar 合体） ---------- */
+/* ---------- 12. 常驻播放条与三项导航 ---------- */
 .dock {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   z-index: 30;
-  pointer-events: none;
-}
-.dock > * {
-  pointer-events: auto;
 }
 .dock-inner {
-  position: relative;
-  background: var(--glaze);
-  -webkit-backdrop-filter: blur(26px) saturate(1.6);
-  backdrop-filter: blur(26px) saturate(1.6);
+  background: var(--surface);
   border-top: 1px solid var(--line);
-  padding-bottom: calc(10px + var(--safe-bottom));
-  transition: transform 0.3s var(--e-out);
+  padding-bottom: var(--safe-bottom);
 }
 .mini {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 2px;
   height: var(--mini-h);
-  margin: 8px 12px 6px;
-  padding: 0 8px;
-  border-radius: var(--r-md);
-  background: var(--surface);
-  box-shadow: var(--sh-2);
+  margin: 0;
+  padding: 0 12px 0 var(--pad);
   position: relative;
   overflow: hidden;
 }
 .mini .cover {
   width: 40px;
   height: 40px;
-  border-radius: 9px;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
 }
 .mini .bar {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 2px;
-  background: var(--line-2);
+  left: var(--pad);
+  right: var(--pad);
+  bottom: 0;
+  height: 1px;
+  background: var(--line);
 }
 .mini .bar i {
   display: block;
@@ -1253,20 +1243,9 @@ mark.hl {
   background: var(--tint);
   transition: width 0.25s linear;
 }
-.mini .info {
-  flex: 1;
-  min-width: 0;
-}
-.mini .info .t {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.mini .info .a {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--ink-3);
-}
+.mini .info { flex: 1; min-width: 0; }
+.mini .info .t { font-size: 13px; font-weight: 550; color: var(--ink); }
+.mini .info .a { margin-top: 4px; font-size: 11px; color: var(--ink-3); }
 .tabbar {
   display: flex;
   align-items: center;
@@ -1278,33 +1257,22 @@ mark.hl {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  width: 62px;
-  color: var(--ink-4);
-  font-size: 10px;
-  font-weight: 550;
-  letter-spacing: 0.02em;
-  transition: color 0.22s var(--e-out);
-}
-.tab .pillbg {
-  display: flex;
-  align-items: center;
   justify-content: center;
-  width: 46px;
-  height: 28px;
-  border-radius: var(--r-pill);
-  transition: background 0.25s var(--e-out), transform 0.25s var(--e-spring);
+  gap: 4px;
+  min-width: 72px;
+  height: var(--tab-h);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 500;
+  transition: color 0.16s var(--e-out);
 }
-.tab.on {
-  color: var(--ink);
-}
-.tab.on .pillbg {
-  background: var(--tint-soft);
-  color: var(--tint);
-  transform: translateY(-1px);
-}
-.tab:active .pillbg {
-  transform: scale(0.94);
+.tab .pillbg { display: grid; place-items: center; width: 28px; height: 24px; }
+.tab.on { color: var(--tint); }
+.tab:active { opacity: 0.65; }
+button:focus-visible, [role='button']:focus-visible, [role='checkbox']:focus-visible,
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--brand-strong);
+  outline-offset: 3px;
 }
 
 /* ---------- 13. 列表 ---------- */
@@ -1496,7 +1464,7 @@ mark.hl {
   padding: 2px var(--pad) 12px;
 }
 .sheet .sh-title {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 18px;
   font-weight: 600;
 }

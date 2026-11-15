@@ -326,7 +326,7 @@ onMounted(() => {
           <span class="ico"><Icon name="refresh" :size="15" /></span>
           <div class="body">
             <div class="lab">自动检查更新</div>
-            <div class="sub">启动时静默检查，发现新版本再提示</div>
+            <div class="sub">启动或回到前台时检查，发现新版每天最多弹出一次</div>
           </div>
           <button
             class="switch"

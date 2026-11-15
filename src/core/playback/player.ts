@@ -560,7 +560,6 @@ async function startPlayback(
     releaseBlob()
     if (url.startsWith('blob:')) blobUrl = url
     audio!.src = url
-    const sourceUrl = audio!.src
     // 新音源的 metadata 一到就解除时间轴锁定；要续播的位置也在这里落下去。
     audio!.addEventListener(
       'loadedmetadata',
@@ -578,12 +577,9 @@ async function startPlayback(
       { once: true }
     )
     await audio!.play()
-    if (token !== resolveToken) {
-      // Pause was pressed while the source was resolving. Don't touch a
-      // source that a newer start has already taken over.
-      if (audio!.src === sourceUrl) audio!.pause()
-      return
-    }
+    // 旧请求不再拥有共享 audio，即使新歌曲用了同一 URL 也不能暂停它。
+    // 用户主动取消已由 cancelPendingStart() 停止并卸载音源。
+    if (token !== resolveToken) return
     clearLoadTimer()
     startPending = false
     playerState.playing = true

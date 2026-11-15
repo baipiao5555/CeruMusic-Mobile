@@ -74,7 +74,13 @@ function formatDuration(ms: number): string {
   <div
     class="songrow"
     :class="{ active, selecting, selected: selectable && selected }"
+    :role="selectable ? 'checkbox' : 'button'"
+    :aria-checked="selectable ? selected : undefined"
+    :aria-label="`${selectable ? '选择' : '播放'} ${track.title} · ${track.artist}`"
+    tabindex="0"
     @click="play"
+    @keydown.enter.self.prevent="play"
+    @keydown.space.self.prevent="play"
   >
     <span v-if="selecting" class="sel" :class="{ on: selected }" aria-hidden="true">
       <Icon v-if="selected" name="check" :size="12" />
@@ -118,7 +124,7 @@ function formatDuration(ms: number): string {
     </div>
 
     <div v-if="!selecting" class="r" @click.stop>
-      <div v-if="active" class="wave" aria-label="正在播放">
+      <div v-if="active" class="wave" :class="{ paused: !playerState.playing || playerState.loading }" :aria-label="playerState.playing && !playerState.loading ? '正在播放' : '当前歌曲'">
         <i /><i /><i /><i />
       </div>
       <span v-else class="dur">{{ formatDuration(track.durationMs) }}</span>
@@ -209,5 +215,8 @@ function formatDuration(ms: number): string {
 }
 .wave {
   margin-right: 6px;
+}
+.wave.paused i {
+  animation-play-state: paused;
 }
 </style>

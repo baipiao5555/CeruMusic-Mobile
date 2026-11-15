@@ -41,6 +41,7 @@ interface StoredUpdate {
   autoCheck: boolean
   ignoredTag: string
   lastChecked: number
+  lastAutoPromptDay?: string
   latest: ReleaseInfo | null
   mirrorPrimary?: string
   mirrorBackup?: string
@@ -59,6 +60,7 @@ export const updateState = reactive({
   ignoredTag: '',
   autoCheck: true,
   lastChecked: 0,
+  lastAutoPromptDay: '',
   error: '',
   downloadedFileName: '',
   needsPermission: false,
@@ -74,6 +76,7 @@ export const updateState = reactive({
 })
 
 let progressBound = false
+let pendingCheck: Promise<ReleaseInfo | null> | null = null
 
 function persist(): void {
   try {
@@ -81,6 +84,7 @@ function persist(): void {
       autoCheck: updateState.autoCheck,
       ignoredTag: updateState.ignoredTag,
       lastChecked: updateState.lastChecked,
+      lastAutoPromptDay: updateState.lastAutoPromptDay,
       latest: updateState.latest,
       mirrorPrimary: updateState.mirrorPrimary,
       mirrorBackup: updateState.mirrorBackup,
@@ -99,6 +103,7 @@ function restore(): void {
     if (typeof saved.autoCheck === 'boolean') updateState.autoCheck = saved.autoCheck
     if (typeof saved.ignoredTag === 'string') updateState.ignoredTag = saved.ignoredTag
     if (Number.isFinite(saved.lastChecked)) updateState.lastChecked = saved.lastChecked
+    if (typeof saved.lastAutoPromptDay === 'string') updateState.lastAutoPromptDay = saved.lastAutoPromptDay
     if (saved.latest?.tag) updateState.latest = saved.latest
     if (saved.mirrorPrimary) updateState.mirrorPrimary = saved.mirrorPrimary
     if (saved.mirrorBackup) updateState.mirrorBackup = saved.mirrorBackup
@@ -189,12 +194,19 @@ async function fetchLatestRelease(): Promise<{ status: number; data: any }> {
   return { status: lastStatus || 502, data: null }
 }
 
-export async function checkForUpdate(options: { force?: boolean; silent?: boolean } = {}): Promise<ReleaseInfo | null> {
+export function checkForUpdate(options: { force?: boolean; silent?: boolean } = {}): Promise<ReleaseInfo | null> {
+  // 冷启动、前台和手动检查并发时等待同一次请求，不能把旧缓存当成新结果。
+  if (pendingCheck) return pendingCheck
   const force = options.force ?? false
-  if (updateState.checking) return updateState.latest
   if (!force && Date.now() - updateState.lastChecked < CHECK_INTERVAL) {
-    return updateState.latest
+    return Promise.resolve(updateState.latest)
   }
+  pendingCheck = fetchAndStoreUpdate(options)
+  return pendingCheck
+}
+
+async function fetchAndStoreUpdate(options: { force?: boolean; silent?: boolean }): Promise<ReleaseInfo | null> {
+  const force = options.force ?? false
   updateState.checking = true
   updateState.error = ''
   try {
@@ -225,7 +237,25 @@ export async function checkForUpdate(options: { force?: boolean; silent?: boolea
     return null
   } finally {
     updateState.checking = false
+    pendingCheck = null
   }
+}
+
+function localDay(now: Date): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+/** 检查缓存和弹出限频分开：按设备本地日计算，而不是 UTC 或滚动 24 小时。 */
+export function canAutoPromptUpdate(now = new Date()): boolean {
+  return updateState.autoCheck && updateState.hasUpdate && !updateState.downloading &&
+    !updateState.installing && updateState.lastAutoPromptDay !== localDay(now)
+}
+
+/** 仅在更新页面确实导航成功且仍处前台时调用。 */
+export function markAutoUpdatePromptShown(now = new Date()): void {
+  if (!canAutoPromptUpdate(now)) return
+  updateState.lastAutoPromptDay = localDay(now)
+  persist()
 }
 
 export function setAutoCheck(value: boolean): void {

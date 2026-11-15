@@ -11,15 +11,10 @@ import {
   type ProviderHandle
 } from '@/core/plugin/manager'
 import {
-  currentTrack,
   getHistory,
-  playTracks,
-  playerState,
-  togglePlay,
-  type Track
+  playTracks
 } from '@/core/playback/player'
 import { libraryState } from '@/core/library'
-import { highestQuality, qualityLabel } from '@/core/quality'
 
 const router = useRouter()
 const providers = computed(() => allProviders())
@@ -61,45 +56,8 @@ let restoring = false
 const history = computed(() => getHistory().slice(0, 8))
 const favorites = computed(() => libraryState.favorites.slice(0, 8))
 
-const daypart = computed(() => {
-  const hour = new Date().getHours()
-  if (hour < 5) return '深夜'
-  if (hour < 9) return '早间'
-  if (hour < 12) return '上午'
-  if (hour < 18) return '下午'
-  if (hour < 23) return '晚间'
-  return '深夜'
-})
-
-      /** 继续播放卡：优先当前曲目，其次最近一次播放记录。 */
-const heroTrack = computed<Track | null>(() => currentTrack() ?? history.value[0] ?? null)
-const heroIsCurrent = computed(() => {
-  const track = currentTrack()
-  return Boolean(track && heroTrack.value && track.id === heroTrack.value.id)
-})
-const heroProgress = computed(() => {
-  if (!heroIsCurrent.value || !playerState.duration) return 0
-  return Math.min(100, (playerState.currentTime / playerState.duration) * 100)
-})
-const heroQuality = computed(() => {
-  const track = heroTrack.value
-  if (!track) return ''
-  const best = highestQuality(track.qualities)
-  return best ? qualityLabel(best) : '标准'
-})
-
-function mmss(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return '0:00'
-  const m = Math.floor(value / 60)
-  const s = Math.floor(value % 60)
-  return `${m}:${String(s).padStart(2, '0')}`
-}
-const heroElapsed = computed(() => (heroIsCurrent.value ? mmss(playerState.currentTime) : '0:00'))
-const heroDuration = computed(() => {
-  const track = heroTrack.value
-  const known = heroIsCurrent.value && playerState.duration ? playerState.duration : 0
-  return mmss(known || (track?.durationMs ? track.durationMs / 1000 : 0))
-})
+const sourcePickerOpen = ref(false)
+const spotlight = computed(() => playlists.value[0] ?? null)
 
 const providerName = computed(() => selected.value?.name ?? '未连接音源')
 
@@ -121,6 +79,7 @@ function countOf(entity: any): string {
 
 function choose(provider: ProviderHandle): void {
   selectProvider(provider.providerId, provider.pluginId)
+  sourcePickerOpen.value = false
 }
 
 async function loadPlaylists(): Promise<void> {
@@ -250,6 +209,7 @@ function openChart(chart: any): void {
     path: '/browse',
     query: {
       provider: chart.ref.providerId,
+      plugin: selected.value?.pluginId,
       kind: chart.ref.kind,
       id: chart.ref.id,
       title: chart.title,
@@ -258,19 +218,8 @@ function openChart(chart: any): void {
   })
 }
 
-function openPlayer(): void {
-  router.push('/player')
-}
-
-function playHero(): void {
-  if (heroIsCurrent.value) {
-    togglePlay()
-    return
-  }
-  const track = heroTrack.value
-  if (!track) return
-  const index = history.value.findIndex((item) => item.id === track.id)
-  void playTracks(history.value, Math.max(0, index))
+function openCatalog(tab: 'playlists' | 'charts' = 'playlists'): void {
+  router.push({ path: '/browse', query: { tab } })
 }
 
 function playHistory(index: number): void {
@@ -331,404 +280,127 @@ watch(providerKey, () => void load())
 </script>
 
 <template>
-  <div class="screen">
-    <div class="scroll safe-t-lg" ref="scrollEl" @scroll.passive="onScroll">
-      <div class="pad">
-        <div class="eyebrow">Ceru Music · {{ daypart }}</div>
+  <div class="screen discover-page">
+    <div class="scroll safe-t" ref="scrollEl" @scroll.passive="onScroll">
+      <header class="home-head">
+        <nav class="home-channels" aria-label="音乐频道">
+          <button class="on" aria-current="page">推荐</button>
+          <button @click="openCatalog()">音乐馆</button>
+        </nav>
+        <div class="home-actions">
+          <button class="iconbtn quiet" aria-label="切换音源" @click="sourcePickerOpen = true"><Icon name="plugin" :size="21" /></button>
+          <button class="iconbtn quiet" aria-label="设置" @click="router.push('/settings')"><Icon name="settings" :size="21" /></button>
+        </div>
+      </header>
+
+      <div class="home-search">
+        <button class="search-launch" @click="router.push('/search')"><Icon name="search" :size="18" /><span>搜索歌曲、歌手或一句歌词</span></button>
+        <button class="lyric-launch" @click="router.push({ path: '/search', query: { mode: 'lyric' } })">歌词找歌</button>
       </div>
 
-      <div class="page-head mt10">
-        <div>
-          <h1>发现</h1>
-        <div class="sub">
-          <template v-if="pluginState.loading">正在载入音源…</template>
-          <template v-else>{{ providerName }} · {{ charts.length }} 个榜单 · {{ playlists.length }} 张歌单</template>
-        </div>
-        </div>
-        <div class="page-actions">
-          <button class="iconbtn soft" aria-label="云端歌单" @click="router.push('/cloud')">
-            <Icon name="cloud" :size="19" />
-          </button>
-          <button class="iconbtn soft" aria-label="设置" @click="router.push('/settings')">
-            <Icon name="settings" :size="19" />
-          </button>
-        </div>
+      <div class="home-shortcuts">
+        <button @click="router.push({ path: '/library', query: { view: 'recent' } })"><span class="shortcut-tile mint"><Icon name="history" :size="23" /></span><span>最近播放</span></button>
+        <button @click="openCatalog('charts')"><span class="shortcut-tile orange"><Icon name="sort" :size="23" /></span><span>排行榜</span></button>
+        <button @click="openCatalog('playlists')"><span class="shortcut-tile purple"><Icon name="playlist" :size="23" /></span><span>歌单精选</span></button>
+        <button @click="router.push('/local')"><span class="shortcut-tile blue"><Icon name="folder" :size="23" /></span><span>本地音乐</span></button>
       </div>
 
-      <!-- 继续播放 -->
-      <div v-if="heroTrack" class="hero" @click="openPlayer">
-        <img
-          class="hero-img"
-          :src="heroTrack.artwork || '/default-cover.png'"
-          alt=""
-          @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
-        />
-        <div class="imgscrim hero-scrim" />
-        <div class="hero-top">
-          <span class="badge on-art">
-              <Icon name="play" :size="10" />{{ heroIsCurrent ? '正在播放' : '继续播放' }}
-          </span>
-          <span class="badge on-art">{{ providerName }} · {{ heroQuality }}</span>
-        </div>
-        <div class="hero-bot">
-          <div class="hero-row">
-            <div class="hero-txt">
-              <div class="hero-title truncate">{{ heroTrack.title }}</div>
-              <div class="hero-artist truncate">{{ heroTrack.artist }}</div>
-            </div>
-            <button class="hero-play" aria-label="播放" @click.stop="playHero">
-              <Icon :name="heroIsCurrent && playerState.playing ? 'pause' : 'play'" :size="20" />
-            </button>
-          </div>
-          <div class="hero-prog">
-            <div class="hero-bar">
-              <i :style="{ width: heroProgress + '%' }" />
-              <b class="hero-thumb" :style="{ left: heroProgress + '%' }" />
-            </div>
-            <div class="hero-time"><span>{{ heroElapsed }}</span><span>{{ heroDuration }}</span></div>
-          </div>
-        </div>
+      <button v-if="spotlight" class="spotlight" @click="openChart(spotlight)">
+        <span class="spotlight-copy"><small>{{ providerName }} · 精选</small><strong class="clamp-2">{{ spotlight.title }}</strong><span>{{ spotlight.playlist?.author || countOf(spotlight) }}<Icon name="chevron" :size="13" /></span></span>
+        <img :src="artworkOf(spotlight)" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
+        <span class="spotlight-go"><Icon name="play" :size="15" /></span>
+      </button>
+
+      <div v-if="loading || pluginState.loading" class="pad mt24" aria-live="polite">
+        <div class="skeleton" style="height: 150px; border-radius: 13px" />
+        <div class="home-skeletons mt16"><div v-for="i in 3" :key="i" class="skeleton" /></div>
+        <p class="meta mt12">正在加载音源内容…</p>
       </div>
 
-      <template v-if="providers.length">
-        <div class="chip-row mt20 pad src-row">
-          <span class="src-lab">音源</span>
-          <button
-            v-for="provider in providers"
-            :key="provider.pluginId + ':' + provider.providerId"
-            class="chip"
-            :class="{ active: selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId }"
-            @click="choose(provider)"
-          >
-            <span class="dot" />{{ provider.name }}
-          </button>
-        </div>
-
-        <div v-if="loading || pluginState.loading" class="pad mt24">
-          <div class="skeleton" style="height: 190px; border-radius: 20px" />
-          <div class="grid2 mt16">
-            <div class="skeleton" style="height: 150px" />
-            <div class="skeleton" style="height: 150px" />
+      <template v-else>
+        <template v-if="playlists.length">
+          <div class="section-head mt24"><div class="st"><h2>听点喜欢的</h2></div><button class="more" @click="openCatalog()">更多歌单<Icon name="chevron" :size="14" /></button></div>
+          <div v-if="categories.length > 1" class="chip-row pad home-categories">
+            <button v-for="(category, index) in categories" :key="category.ref?.id || index" class="chip" :class="{ active: activeCategory === index }" @click="selectCategory(index)">{{ category.title }}</button>
           </div>
-        </div>
-
-        <template v-else>
-          <template v-if="charts.length">
-            <div class="section-head mt24">
-              <div class="st"><h2>排行榜</h2><span class="idx">CHARTS</span></div>
-              <span class="more">共 {{ charts.length }} 个</span>
-            </div>
-            <div class="hscroll" :class="{ single: charts.length === 1 }">
-              <button
-                v-for="(chart, index) in charts"
-                :key="chart.ref.id"
-                class="rankcard"
-                @click="openChart(chart)"
-              >
-                <div class="cover">
-                  <img
-                    :src="artworkOf(chart)"
-                    alt=""
-                   
-                    @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
-                  />
-                  <div class="shade" />
-                  <span class="rk">{{ String(index + 1).padStart(2, '0') }}</span>
-                  <span class="rt">{{ chart.title }}</span>
-                  <span class="rs">{{ chart.chart?.updateFrequency || chart.subtitle || '实时更新' }}</span>
-                </div>
-              </button>
-            </div>
-          </template>
-
-          <template v-if="playlists.length">
-            <div class="section-head mt24">
-              <div class="st"><h2>推荐歌单</h2><span class="idx">{{ categories[activeCategory]?.title || 'FOR YOU' }}</span></div>
-              <button class="more" @click="router.push('/browse')">全部<Icon name="chevron" :size="14" /></button>
-            </div>
-            <div v-if="categories.length > 1" class="chip-row pad" style="padding-bottom: 14px">
-              <button
-                v-for="(category, index) in categories"
-                :key="category.ref?.id || index"
-                class="chip"
-                :class="{ active: activeCategory === index }"
-                @click="selectCategory(index)"
-              >
-                {{ category.title }}
-              </button>
-            </div>
-            <div class="grid2 pad">
-              <button
-                v-for="playlist in playlists.slice(0, 8)"
-                :key="playlist.ref.id"
-                class="mediacard"
-                @click="openChart(playlist)"
-              >
-                <div class="cover">
-                  <img
-                    :src="artworkOf(playlist)"
-                    alt=""
-                   
-                    @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
-                  />
-                  <span class="badge on-art">{{ countOf(playlist) }}</span>
-                </div>
-                <div class="ct clamp-2">{{ playlist.title }}</div>
-                <div class="cs truncate">
-                  {{ playlist.playlist?.author || playlist.subtitle || '精选歌单' }}
-                </div>
-              </button>
-            </div>
-          </template>
-
-          <div v-if="!playlists.length && charts.length" class="pad mt20">
-            <div class="tipcard">
-              <div class="tc-t">这个音源没有提供歌单分类</div>
-              <div class="tc-s">排行榜可以照常听；想找具体的歌，去搜索页更快，也可以再装一个音源。</div>
-              <div class="row g8 mt14">
-                <button class="btn btn-tonal btn-sm" @click="router.push('/search')">
-                  <Icon name="search" :size="14" /> 去搜索
-                </button>
-                <button class="btn btn-ghost btn-sm" @click="router.push('/plugins')">
-                  <Icon name="plugin" :size="14" /> 音源插件
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="!charts.length && !playlists.length && !error" class="empty">
-            <div class="glyph"><Icon name="info" :size="34" /></div>
-          <h3>这个音源没有提供首页内容</h3>
-          <p>你仍然可以在搜索页直接搜索歌曲，或换一个音源再看看。</p>
-          </div>
-
-          <div v-if="error && !charts.length" class="empty">
-            <div class="glyph"><Icon name="wifi-off" :size="34" /></div>
-            <h3>{{ error }}</h3>
-          <p>检查网络后重试，或者换一个音源。</p>
-            <button class="btn btn-ghost btn-sm mt8" @click="load(true)">
-              <Icon name="refresh" :size="16" /> 重新加载
+          <div class="hscroll home-covers">
+            <button v-for="playlist in playlists.slice(0, 8)" :key="playlist.ref.id" class="mediacard" @click="openChart(playlist)">
+              <div class="cover"><img :src="artworkOf(playlist)" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span class="cover-play"><Icon name="play" :size="12" /></span></div>
+              <div class="ct clamp-2">{{ playlist.title }}</div><div class="cs truncate">{{ playlist.playlist?.author || countOf(playlist) }}</div>
             </button>
           </div>
         </template>
-      </template>
 
-      <div v-else class="empty">
-        <div class="glyph"><Icon name="plugin" :size="34" /></div>
-        <h3>还没有可用的音源</h3>
-          <p>澜音通过插件获取音乐信息。安装一个 v2 音源插件后，就可以搜索和播放。</p>
-        <button class="btn btn-primary mt8" @click="router.push('/plugins')">
-            <Icon name="plus" :size="17" /> 安装音源插件
-        </button>
-      </div>
+        <template v-if="history.length">
+          <div class="section-head mt24"><div class="st"><h2>最近在听</h2></div><button class="more" @click="router.push({ path: '/library', query: { view: 'recent' } })">全部<Icon name="chevron" :size="14" /></button></div>
+          <div class="pad"><SongRow v-for="(track, index) in history.slice(0, 4)" :key="track.pluginId + ':' + track.providerId + ':' + track.id" :track="track" :index="index" :queue="history" @play="(_, i) => playHistory(i)" /></div>
+        </template>
 
-      <template v-if="history.length">
-        <div class="section-head mt24">
-          <div class="st"><h2>最近播放</h2><span class="idx">{{ history.length }} TRACKS</span></div>
-          <button class="more" @click="playHistory(0)">全部播放</button>
-        </div>
-        <div class="pad">
-          <div
-            v-for="(track, index) in history.slice(0, 5)"
-            :key="track.providerId + track.id"
-            class="songrow"
-            @click="playHistory(index)"
-          >
-            <span class="idx">{{ String(index + 1).padStart(2, '0') }}</span>
-            <div class="cover">
-              <img
-                :src="track.artwork"
-                alt=""
-               
-                @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
-              />
-            </div>
-            <div class="meta-wrap">
-              <div class="t truncate">{{ track.title }}</div>
-              <div class="a"><span class="truncate">{{ track.artist }}</span></div>
-            </div>
-            <span class="r"><Icon name="play" :size="15" /></span>
+        <template v-if="charts.length">
+          <div class="section-head mt24"><div class="st"><h2>排行榜</h2></div><button class="more" @click="openCatalog('charts')">全部榜单<Icon name="chevron" :size="14" /></button></div>
+          <div class="hscroll home-covers">
+            <button v-for="chart in charts.slice(0, 8)" :key="chart.ref.id" class="mediacard" @click="openChart(chart)">
+              <div class="cover"><img :src="artworkOf(chart)" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span class="cover-play"><Icon name="play" :size="12" /></span></div>
+              <div class="ct clamp-2">{{ chart.title }}</div><div class="cs truncate">{{ chart.chart?.updateFrequency || chart.subtitle || providerName }}</div>
+            </button>
           </div>
+        </template>
+
+        <template v-if="favorites.length">
+          <div class="section-head mt24"><div class="st"><h2>我喜欢的音乐</h2></div><button class="more" @click="playFavorite(0)">全部播放<Icon name="play" :size="13" /></button></div>
+          <div class="pad"><SongRow v-for="(track, index) in favorites.slice(0, 4)" :key="track.pluginId + ':' + track.providerId + ':' + track.id" :track="track" :index="index" :queue="favorites" @play="(_, i) => playFavorite(i)" /></div>
+        </template>
+
+        <div v-if="!providers.length" class="empty">
+          <div class="glyph"><Icon name="plugin" :size="30" /></div><h3>把喜欢的音乐带进来</h3><p>启用音源后可搜索和浏览音乐；本地音乐与已有收藏仍可使用。</p><button class="btn btn-primary mt8" @click="router.push('/plugins')"><Icon name="plus" :size="17" />添加音源</button>
+        </div>
+        <div v-else-if="error && !charts.length" class="empty">
+          <div class="glyph"><Icon name="wifi-off" :size="30" /></div><h3>{{ error }}</h3><p>检查网络后重试，或切换音源。</p><button class="btn btn-ghost btn-sm mt8" @click="load(true)"><Icon name="refresh" :size="16" />重新加载</button>
+        </div>
+        <div v-else-if="!playlists.length && !charts.length" class="home-note pad">
+          <Icon name="info" :size="18" /><div><strong>这个音源暂未提供首页内容</strong><p>可以直接搜索歌曲，也可以从本地音乐开始听。</p><button @click="router.push('/search')">去搜索<Icon name="chevron" :size="13" /></button></div>
         </div>
       </template>
 
-      <template v-if="favorites.length">
-        <div class="section-head mt24">
-          <div class="st"><h2>我喜欢的音乐</h2><span class="idx">{{ libraryState.favorites.length }} LIKED</span></div>
-          <button class="more" @click="playFavorite(0)">全部播放</button>
-        </div>
-        <div class="pad">
-          <SongRow
-            v-for="(track, index) in favorites.slice(0, 4)"
-            :key="track.providerId + track.id"
-            :track="track"
-            :index="index"
-            :queue="favorites"
-            @play="(_, i) => playFavorite(i)"
-          />
-        </div>
-      </template>
+      <div class="home-source-footer"><button @click="sourcePickerOpen = true">{{ providerName }}<Icon name="chevron-down" :size="13" /></button><button :disabled="loading" @click="load(true)"><Icon name="refresh" :size="14" />刷新内容</button></div>
     </div>
+
+    <Teleport to="body">
+      <div v-if="sourcePickerOpen" class="sheet-mask" @click.self="sourcePickerOpen = false">
+        <section class="sheet home-source-sheet" role="dialog" aria-modal="true" aria-label="选择音源">
+          <div class="grab" /><div class="sh-head"><span class="sh-title">选择音源</span><button class="iconbtn quiet" aria-label="关闭" @click="sourcePickerOpen = false"><Icon name="close" :size="20" /></button></div>
+          <div class="pad"><button v-for="provider in providers" :key="provider.pluginId + ':' + provider.providerId" class="source-option" @click="choose(provider)"><span><strong>{{ provider.name }}</strong><small>{{ provider.pluginName }}</small></span><Icon v-if="selected?.pluginId === provider.pluginId && selected?.providerId === provider.providerId" name="check" :size="20" /></button><p v-if="!providers.length" class="meta">还没有已启用的音源。</p><button class="btn btn-tonal btn-block mt16" @click="sourcePickerOpen = false; router.push('/plugins')"><Icon name="plugin" :size="17" />音源管理</button></div>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
-.tipcard {
-  padding: 18px 18px 16px;
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  border: 1px solid var(--line);
-}
-.tipcard .tc-t {
-  font-family: var(--serif);
-  font-size: 15.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.tipcard .tc-s {
-  margin-top: 5px;
-  font-size: 12px;
-  line-height: 1.62;
-  color: var(--ink-3);
-}
-.src-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 18px;
-}
-.src-lab {
-  flex: none;
-  padding-right: 2px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  color: var(--ink-4);
-}
-.hero {
-  position: relative;
-  margin: 0 var(--pad);
-  height: 206px;
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  box-shadow: var(--sh-3);
-  cursor: pointer;
-}
-.hero-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: brightness(0.92) saturate(1.04);
-  transform: scale(1.06);
-}
-.hero-scrim {
-  z-index: 1;
-  background: linear-gradient(
-    180deg,
-    rgba(6, 16, 13, 0.46) 0%,
-    rgba(6, 16, 13, 0.05) 26%,
-    rgba(6, 16, 13, 0.62) 62%,
-    rgba(6, 16, 13, 0.94) 100%
-  );
-}
-.hero-top {
-  position: absolute;
-  z-index: 2;
-  top: 14px;
-  left: 16px;
-  right: 16px;
-  display: flex;
-  gap: 6px;
-  justify-content: space-between;
-  align-items: center;
-}
-.hero-bot {
-  position: absolute;
-  z-index: 2;
-  left: 16px;
-  right: 16px;
-  bottom: 14px;
-  color: #fff;
-}
-.hero-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.hero-txt {
-  flex: 1;
-  min-width: 0;
-}
-.hero-kicker {
-  font-size: 9.5px;
-  font-weight: 650;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.7);
-}
-.hero-title {
-  font-family: var(--serif);
-  font-size: 23px;
-  font-weight: 600;
-  letter-spacing: 0.005em;
-  line-height: 1.2;
-  color: #fff;
-  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
-}
-.hero-artist {
-  margin-top: 4px;
-  font-size: 11.5px;
-  letter-spacing: 0.01em;
-  color: rgba(255, 255, 255, 0.82);
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.4);
-}
-.hero-prog {
-  margin-top: 12px;
-}
-.hero-bar {
-  position: relative;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.26);
-}
-.hero-bar i {
-  display: block;
-  height: 100%;
-  border-radius: 2px;
-  background: #fff;
-}
-.hero-thumb {
-  position: absolute;
-  top: 50%;
-  width: 9px;
-  height: 9px;
-  margin: -4.5px 0 0 -4.5px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
-}
-.hero-time {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 6px;
-  font-size: 10.5px;
-  color: rgba(255, 255, 255, 0.72);
-  font-variant-numeric: tabular-nums;
-}
-.hero-play {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: #fff;
-  color: #11231e;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
-}
-.hero-play:active {
-  transform: scale(0.94);
-}
+.home-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 12px 0 var(--pad); min-height:58px; }
+.home-channels { display:flex; align-items:center; gap:22px; min-width:0; }
+.home-channels button { position:relative; height:52px; font-size:19px; font-weight:600; color:var(--ink-3); white-space:nowrap; }
+.home-channels .on { font-size:25px; font-weight:750; color:var(--ink); }
+.home-channels .on::after { content:''; position:absolute; bottom:2px; left:calc(50% - 11px); width:22px; height:4px; background:var(--tint); border-radius:4px; }
+.home-actions { display:flex; flex:none; }
+.home-actions .iconbtn { width:40px; height:44px; }
+.home-search { display:flex; align-items:center; height:44px; margin:12px var(--pad) 18px; border-radius:24px; background:var(--porcelain-2); }
+.search-launch { display:flex; flex:1; min-width:0; gap:8px; align-items:center; height:44px; padding:0 12px; color:var(--ink-3); }
+.search-launch span { font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.lyric-launch { height:44px; flex:none; padding:0 13px 0 9px; font-size:11px; color:var(--ink-3); position:relative; }
+.lyric-launch::before { content:''; position:absolute; left:0; top:15px; height:14px; width:1px; background:var(--line-2); }
+.home-shortcuts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding:0 var(--pad); gap:6px; margin-bottom:22px; }
+.home-shortcuts button { display:flex; flex-direction:column; align-items:center; gap:8px; min-height:66px; font-size:12px; }
+.shortcut-tile { display:grid; place-items:center; width:40px; height:40px; border-radius:13px; }
+.mint { background:#e6f8f0; color:#0aaa75; }.orange { background:#fff0de; color:#d89431; }.purple { background:#f0eaff; color:#9170d5; }.blue { background:#e8f1ff; color:#588dd3; }
+.spotlight { position:relative; display:flex; align-items:center; width:calc(100% - var(--pad) * 2); height:150px; overflow:hidden; margin:0 var(--pad); border-radius:13px; background:var(--tint-soft); padding:18px; text-align:left; }
+.spotlight-copy { min-width:0; width:58%; z-index:1; padding-right:8px; }.spotlight-copy small { font-size:10px; color:var(--ink-3); display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.spotlight-copy strong { display:-webkit-box; margin-top:10px; font-size:22px; line-height:1.35; font-weight:750; word-break:break-word; }.spotlight-copy>span { display:flex; align-items:center; gap:4px; font-size:11px; color:var(--ink-3); margin-top:9px; }
+.spotlight>img { position:absolute; right:-11px; bottom:-22px; height:168px; width:168px; object-fit:cover; transform:rotate(12deg); border-radius:18px; opacity:.87; }.spotlight-go { position:absolute; right:14px; bottom:12px; display:grid; place-items:center; width:30px; height:30px; border-radius:50%; background:rgba(255,255,255,.9); color:#183b2d; }
+.home-covers .mediacard { width:110px; flex:none; }.home-covers .cover { width:110px; height:110px; border-radius:10px; }.home-covers .ct { min-height:38px; font-size:13px; line-height:1.5; font-weight:500; }.home-covers .cs { font-size:11px; }.cover-play { position:absolute; display:grid; place-items:center; right:7px; bottom:7px; width:23px; height:23px; border-radius:50%; color:#1c4432; background:rgba(255,255,255,.9); }.home-categories { padding-bottom:12px; }
+.home-skeletons { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }.home-skeletons>div { height:110px; }
+.home-note { display:flex; gap:12px; align-items:flex-start; margin-top:24px; color:var(--ink-3); }.home-note strong { font-size:13px; font-weight:500; }.home-note p { font-size:12px; line-height:1.6; margin-top:6px; }.home-note button { display:flex; gap:5px; align-items:center; min-height:40px; color:var(--brand-strong); font-size:12px; }
+.home-source-footer { display:flex; justify-content:space-between; gap:12px; padding:24px var(--pad) 0; }.home-source-footer button { display:flex; align-items:center; gap:6px; min-height:44px; min-width:0; color:var(--ink-3); font-size:11px; }.home-source-footer button:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.home-source-sheet { max-height:80dvh; overflow:auto; }.source-option { display:flex; align-items:center; gap:12px; justify-content:space-between; width:100%; min-height:64px; border-bottom:1px solid var(--line); }.source-option>span { min-width:0; }.source-option strong { display:block; font-size:14px; font-weight:500; }.source-option small { display:block; color:var(--ink-3); font-size:11px; margin-top:5px; }.source-option>.i { color:var(--tint); }
+[data-theme='dark'] .shortcut-tile { background:var(--surface-2); }
+@media(max-width:375px) { .home-channels { gap:17px; }.home-channels button { font-size:18px; }.home-channels .on { font-size:24px; }.home-actions .iconbtn { width:36px; }.spotlight-copy strong { font-size:20px; } }
 </style>

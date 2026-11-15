@@ -51,9 +51,8 @@ router.go = ((delta: number) => {
   return goRoute(delta)
 }) as typeof router.go
 
-// Top-level tabs stay on the same level; Miuix/MeiloX fades between them
-// instead of running the push/pop slide.
-const TAB_ROUTES = new Set(['/', '/search', '/playlists', '/library'])
+// Search is now a secondary page; only the three root tabs use a cross-fade.
+const TAB_ROUTES = new Set(['/', '/playlists', '/library'])
 router.afterEach((to, from) => {
   if (TAB_ROUTES.has(to.path) && TAB_ROUTES.has(from.path)) {
     routeDirection.value = 'tab'

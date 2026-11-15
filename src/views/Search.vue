@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
 import {
@@ -54,6 +54,12 @@ function setMode(next: SearchMode): void {
 }
 
 const route = useRoute()
+const router = useRouter()
+
+function goBack(): void {
+  if (window.history.state?.back) router.back()
+  else void router.replace('/')
+}
 const providers = computed(() => allProviders())
 const selected = computed(
   () => providers.value.find((item) => item.providerId === pluginState.selectedProvider) ?? providers.value[0]
@@ -602,6 +608,10 @@ watch(
   }
 )
 
+watch(() => route.query.mode, value => {
+  if (route.path === '/search' && (value === 'name' || value === 'lyric')) setMode(value)
+}, { immediate: true })
+
 onMounted(() => {
   if (query.value.trim()) void runSearch()
   else nextTick(() => inputRef.value?.focus())
@@ -632,27 +642,8 @@ onBeforeUnmount(stopPendingSearch)
 
 <template>
   <div class="screen search-page">
-    <div class="scroll safe-t-lg">
-      <div class="pad">
-        <div class="eyebrow">Ceru Music · 检索</div>
-      </div>
-
-      <div class="page-head mt6">
-        <div>
-          <h1>搜索</h1>
-          <div class="sub">
-            <template v-if="selected">{{ selected.name }} · {{ providers.length }} 个音源可用</template>
-            <template v-else>还没有可用的音源</template>
-          </div>
-        </div>
-        <div class="page-actions">
-          <button class="iconbtn soft" aria-label="设置" @click="$router.push('/settings')">
-            <Icon name="settings" :size="19" />
-          </button>
-        </div>
-      </div>
-
-      <div class="findrow pad mt16">
+      <header class="findrow search-header" aria-label="搜索">
+        <button class="iconbtn quiet search-back" aria-label="返回" @click="goBack"><Icon name="back" :size="21" /></button>
         <div class="finder" @focusout="onBlur">
           <form class="searchfield" :class="{ focus: focused, lyric: mode === 'lyric' }" @submit.prevent="submitSearch">
             <Icon name="search" :size="17" />
@@ -660,6 +651,7 @@ onBeforeUnmount(stopPendingSearch)
               ref="inputRef"
               v-model="query"
               type="search"
+              aria-label="歌曲、歌手或歌词"
               enterkeyhint="search"
               :placeholder="mode === 'lyric' ? '输入一句歌词，例如：雨一直下' : '输入歌名或歌手'"
               autocomplete="off"
@@ -668,17 +660,7 @@ onBeforeUnmount(stopPendingSearch)
               @compositionend="onCompositionEnd"
               @focus="onFocus"
             />
-            <button
-              type="button"
-              class="modetog"
-              :class="{ on: mode === 'lyric' }"
-              :aria-label="mode === 'lyric' ? '切换为按歌名搜索' : '切换为按歌词搜索'"
-              @mousedown.prevent
-              @click="setMode(mode === 'lyric' ? 'name' : 'lyric')"
-            >
-              <Icon :name="mode === 'lyric' ? 'lyrics' : 'music'" :size="13" />
-              <span>{{ mode === 'lyric' ? '歌词' : '歌名' }}</span>
-            </button>
+
             <button v-if="query" type="button" class="clearbtn" aria-label="清空" @mousedown.prevent @click="reset">
               <Icon name="close" :size="13" />
             </button>
@@ -710,21 +692,36 @@ onBeforeUnmount(stopPendingSearch)
           </div>
         </div>
         <button class="findgo" @click="submitSearch">搜索</button>
+      </header>
+    <div class="scroll search-scroll no-fade">
+      <div class="pad">
+          <div v-if="searched || query.trim()" class="segment result-tabs" aria-label="结果分组">
+            <button :class="{ on: tab === 'songs' }" @click="tab = 'songs'">
+              单曲 <em>{{ results.length }}</em>
+            </button>
+            <button :class="{ on: tab === 'artists' }" @click="tab = 'artists'">
+              歌手分组 <em>{{ artistGroups.length }}</em>
+            </button>
+            <button :class="{ on: tab === 'playlists' }" @click="tab = 'playlists'">
+              本地歌单 <em>{{ playlistGroups.length }}</em>
+            </button>
+          </div>
       </div>
-
-      <div v-if="providers.length" class="pad mt12">
-        <div class="chip-row">
-          <button
-            v-for="provider in providers"
-            :key="provider.pluginId + ':' + provider.providerId"
-            class="chip"
-            :class="{ active: selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId }"
-            @click="choose(provider)"
-          >
-            <span v-if="selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId" class="dot" />
-            {{ provider.name }}
-          </button>
+      <div class="pad search-filters">
+        <div v-if="providers.length" class="chip-row source-filters">
+          <button v-for="provider in providers" :key="provider.pluginId + ':' + provider.providerId" class="chip" :class="{ active: selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId }" @click="choose(provider)"><span v-if="selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId" class="dot" />{{ provider.name }}</button>
         </div>
+            <button
+              type="button"
+              class="modetog"
+              :class="{ on: mode === 'lyric' }"
+              :aria-label="mode === 'lyric' ? '切换为按歌名搜索' : '切换为按歌词搜索'"
+              @mousedown.prevent
+              @click="setMode(mode === 'lyric' ? 'name' : 'lyric')"
+            >
+              <Icon :name="mode === 'lyric' ? 'lyrics' : 'music'" :size="13" />
+              <span>{{ mode === 'lyric' ? '歌词找歌' : '歌名搜索' }}</span>
+            </button>
       </div>
 
       <section v-if="historyVisible" class="pad mt20">
@@ -743,7 +740,7 @@ onBeforeUnmount(stopPendingSearch)
 
       <section v-if="!searched && !query.trim()" class="pad mt20">
         <div class="strip">
-          <span class="cap">热门</span>
+          <span class="cap">搜索灵感</span>
           <button class="linkbtn" @click="nextHotBatch()">
             <Icon name="refresh" :size="13" /> 换一批
           </button>
@@ -836,17 +833,7 @@ onBeforeUnmount(stopPendingSearch)
         </div>
 
         <div class="pad">
-          <div class="segment">
-            <button :class="{ on: tab === 'songs' }" @click="tab = 'songs'">
-              单曲 <em>{{ results.length }}</em>
-            </button>
-            <button :class="{ on: tab === 'artists' }" @click="tab = 'artists'">
-              歌手 <em>{{ artistGroups.length }}</em>
-            </button>
-            <button :class="{ on: tab === 'playlists' }" @click="tab = 'playlists'">
-              歌单 <em>{{ playlistGroups.length }}</em>
-            </button>
-          </div>
+
           <p v-if="relaxedQuery" class="note mt10">
             音源没有「{{ query.trim() }}」的结果，已按「{{ relaxedQuery }}」搜索。
           </p>
@@ -862,7 +849,6 @@ onBeforeUnmount(stopPendingSearch)
               :index="index"
               :queue="results"
               :query="appliedQuery"
-              show-index
               @play="play(index)"
             />
             <p v-if="mode === 'lyric' && lyricHits[track.providerId + ':' + track.id]" class="lyr-hit">
@@ -1212,4 +1198,31 @@ onBeforeUnmount(stopPendingSearch)
 .hint-empty .empty {
   padding: 26px 24px 8px;
 }
+
+.search-header { min-height:calc(var(--safe-top) + 64px); height:calc(var(--safe-top) + 64px); padding:var(--safe-top) 12px 0 8px; gap:4px; position:relative; z-index:30; background:var(--porcelain); }
+.search-back { width:36px; height:44px; flex:none; }
+.search-scroll { top:calc(var(--safe-top) + 64px); padding-top:0; }
+.searchfield { height:44px; padding:0 11px; border-radius:24px; background:var(--porcelain-2); border-color:transparent; }
+.searchfield.focus { border-color:transparent; box-shadow:none; }
+.searchfield input { font-size:14px; }
+.searchfield input:focus-visible { outline:none; }
+@media (hover: hover) and (pointer: fine) {
+  .searchfield:has(input:focus-visible) { outline:2px solid GrayText; outline-offset:2px; }
+}
+.clearbtn { height:42px; width:30px; background:none; }
+.findgo { padding:0 7px; color:var(--ink-2); font-weight:500; }
+.search-filters { display:flex; align-items:center; gap:10px; min-height:51px; padding-top:5px; padding-bottom:5px; }
+.source-filters { flex:1; min-width:0; overflow-x:auto; }.source-filters .chip { flex:none; min-height:40px; border-radius:8px; font-size:12px; background:var(--porcelain-2); border:0; }.source-filters .chip.active { background:var(--tint-soft); color:var(--brand-strong); }
+.modetog { height:44px; padding:0 10px; font-size:12px; border-radius:8px; background:var(--porcelain-2); }
+.modetog.on { color:var(--brand-strong); background:var(--tint-soft); }
+.result-tabs { gap:23px; border:0; border-radius:0; padding:0; background:none; min-height:51px; align-items:center; }
+.result-tabs>button { position:relative; flex:none; min-width:0; padding:0; height:45px; border-radius:0; font-size:15px; font-weight:500; color:var(--ink-3); background:none; box-shadow:none; }
+.result-tabs>button.on { color:var(--ink); font-weight:700; background:none; box-shadow:none; }
+.result-tabs>button.on::after { content:''; position:absolute; bottom:0; left:calc(50% - 10px); width:20px; height:3px; border-radius:4px; background:var(--tint); }
+.result-tabs em { font-size:10px; margin-left:2px; }
+.search-page .section-head { align-items:center; padding-bottom:9px; }.search-page .section-head .st { flex-wrap:wrap; gap:6px; }.search-page .section-head h2 { font-family:var(--sans); font-size:16px; }.search-page .section-head .btn { flex:none; min-height:38px; font-size:11px; }
+.search-page .avatar { font-family:var(--sans); }.linkbtn { min-height:44px; }.hotword { border:0; background:var(--porcelain-2); min-height:40px; border-radius:8px; }
+.search-scroll .hint-empty .empty { padding-top:42px; }.search-page .group-title .en { display:none; }
+@media(max-width:375px) { .result-tabs { gap:17px; }.result-tabs>button { font-size:14px; }.result-tabs em { font-size:9px; }.modetog { padding:0 8px; }.search-filters { gap:6px; } }
+
 </style>

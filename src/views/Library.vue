@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
 import ImportPlaylistSheet from '@/components/ImportPlaylistSheet.vue'
@@ -18,8 +18,9 @@ import { authState, displayName } from '@/core/auth'
 import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
+const route = useRoute()
 const appVersion = __APP_VERSION__
-const tab = ref<'songs' | 'albums' | 'artists' | 'folders'>('songs')
+const tab = ref<'songs' | 'albums' | 'artists' | 'playlists'>('playlists')
 const songTab = ref<'favorites' | 'recent'>('favorites')
 const showCreate = ref(false)
 const playlistName = ref('')
@@ -48,7 +49,7 @@ const profileAvatar = computed(() => authState.user?.picture || '/logo.png')
 const cloudCount = computed(() => playlists.value.filter((playlist) => playlist.cloudId).length)
 const profileSub = computed(() =>
   authState.authenticated
-    ? `已登录澜音 · ${cloudCount.value} 个云端歌单`
+    ? `已登录澜音 · ${cloudCount.value} 个云端导入歌单`
     : '本地账户 · 未登录澜音'
 )
 
@@ -86,9 +87,6 @@ const artistGroups = computed<TrackGroup[]>(() => {
 
 const downloaded = computed(() => downloadState.tasks.filter((task) => task.status === 'completed'))
 const usedBytes = computed(() => downloaded.value.reduce((total, task) => total + (task.size || 0), 0))
-const downloadPercent = computed(() =>
-  downloadState.tasks.length ? Math.round((downloaded.value.length / downloadState.tasks.length) * 100) : 0
-)
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 MB'
@@ -117,6 +115,15 @@ function openSongs(kind: 'favorites' | 'recent'): void {
   tab.value = 'songs'
   songTab.value = kind
 }
+
+watch(
+  () => route.query.section ?? route.query.view,
+  (section) => {
+    if (section === 'favorites' || section === 'recent') openSongs(section)
+    else if (section === 'albums' || section === 'artists' || section === 'playlists') tab.value = section
+  },
+  { immediate: true }
+)
 
 function openPlaylist(playlist: LocalPlaylist): void {
   router.push('/playlist/' + playlist.id)
@@ -148,273 +155,133 @@ function openImport(): void {
 </script>
 
 <template>
-  <div class="screen">
+  <div class="screen library-screen">
     <div class="scroll safe-t-lg">
-      <div class="pad">
-        <div class="eyebrow">Ceru Music · 本机</div>
-      </div>
+      <header class="page-head library-head">
+        <h1>我的</h1>
+        <button class="iconbtn quiet" aria-label="设置" @click="router.push('/settings')">
+          <Icon name="settings" :size="22" />
+        </button>
+      </header>
 
-      <div class="page-head mt10">
-        <div>
-          <h1>我的</h1>
-          <div class="sub">{{ favorites.length }} 首收藏 · {{ playlists.length }} 张歌单 · {{ runningPlugins }} 个音源</div>
+      <section class="profile">
+        <button class="profile-main" aria-label="账户与云端歌单" @click="router.push('/cloud')">
+          <img class="avatar" :src="profileAvatar" alt="" @error="($event.target as HTMLImageElement).src = '/logo.png'" />
+          <span class="profile-copy">
+            <strong>{{ profileName }}</strong>
+            <small>{{ profileSub }}</small>
+          </span>
+          <Icon name="chevron-right" :size="17" />
+        </button>
+      </section>
+
+      <nav class="library-shortcuts" aria-label="我的音乐快捷入口">
+        <button @click="openSongs('favorites')">
+          <Icon name="heart" :size="25" /><span>喜欢</span><small>{{ favorites.length }} 首</small>
+        </button>
+        <button @click="openSongs('recent')">
+          <Icon name="history" :size="25" /><span>最近</span><small>{{ history.length }} 首</small>
+        </button>
+        <button @click="router.push('/local')">
+          <Icon name="folder" :size="25" /><span>本地</span><small>扫描歌曲</small>
+        </button>
+        <button @click="router.push('/downloads')">
+          <Icon name="download" :size="25" /><span>下载</span><small>{{ downloaded.length }} 首已完成</small>
+        </button>
+      </nav>
+
+      <section v-if="history.length && tab === 'playlists'" class="recent-section">
+        <div class="section-head">
+          <h2>最近播放</h2>
+          <button class="text-action" @click="openSongs('recent')">全部 <Icon name="chevron-right" :size="14" /></button>
         </div>
-        <div class="page-actions">
-          <button class="iconbtn soft log-entry" aria-label="运行日志" @click="router.push('/logs')">
-            <Icon name="scroll-text" :size="19" />
-            <span v-if="logErrors" class="log-dot" />
+        <div class="recent-strip">
+          <button v-for="(track, index) in history.slice(0, 6)" :key="track.providerId + ':' + track.id" class="recent-card" @click="playHistory(index)">
+            <span class="recent-art"><img :src="track.artwork || '/default-cover.png'" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span><Icon name="play" :size="13" /></span></span>
+            <strong>{{ track.title }}</strong>
+            <small>{{ track.artist || '未知歌手' }}</small>
           </button>
-          <button class="iconbtn soft" aria-label="设置" @click="router.push('/settings')">
-            <Icon name="settings" :size="19" />
-          </button>
-        </div>
-      </div>
-
-      <section class="p-card">
-        <div class="p-id">
-          <div class="ava">
-            <img :src="profileAvatar" alt="" @error="($event.target as HTMLImageElement).src = '/logo.png'" />
-          </div>
-          <div class="f1">
-            <div class="nm">{{ profileName }}</div>
-            <div class="sub">{{ profileSub }}</div>
-          </div>
-          <button class="btn btn-ghost btn-sm p-new" aria-label="新建或导入歌单" @click="showQuick = true">
-            <Icon name="plus" :size="14" /> 新建
-          </button>
-        </div>
-
-        <div class="p-nums">
-          <div class="n"><b class="num">{{ allTracks.length }}</b><span>歌曲</span></div>
-          <i class="v" />
-          <div class="n"><b class="num">{{ albumGroups.length }}</b><span>专辑</span></div>
-          <i class="v" />
-          <div class="n"><b class="num">{{ artistGroups.length }}</b><span>歌手</span></div>
-        </div>
-
-        <div class="p-store">
-          <div class="head">
-            <span class="t">本机占用</span>
-            <span class="r num">{{ formatBytes(usedBytes) }} · {{ downloaded.length }}/{{ downloadState.tasks.length }} 首已下载</span>
-          </div>
-          <div class="tr"><i :style="{ width: downloadPercent + '%' }" /></div>
         </div>
       </section>
 
-      <div class="p-quick">
-        <button class="q" @click="openSongs('recent')">
-          <span class="ic"><Icon name="history" :size="21" /></span>
-          <span class="l">最近播放</span>
-          <span class="n num">{{ history.length }}</span>
-        </button>
-        <button class="q" @click="openSongs('favorites')">
-          <span class="ic"><Icon name="heart" :size="21" /></span>
-          <span class="l">我的收藏</span>
-          <span class="n num">{{ favorites.length }}</span>
-        </button>
-        <button class="q" @click="router.push('/downloads')">
-          <span class="ic"><Icon name="download" :size="21" /></span>
-          <span class="l">下载管理</span>
-          <span class="n num">{{ downloadState.tasks.length }}</span>
-        </button>
-        <button class="q gold" @click="router.push('/cloud')">
-          <span class="ic"><Icon name="cloud" :size="21" /></span>
-          <span class="l">云端歌单</span>
-          <span class="n num">{{ cloudCount }}</span>
-        </button>
-      </div>
-
-      <button class="p-local" @click="router.push('/local')">
-        <span class="ic"><Icon name="music" :size="20" /></span>
-        <span class="tx">
-          <b>本机音乐</b>
-          <small>扫描手机里的歌曲，不占额外空间</small>
-        </span>
-        <Icon name="chevron-right" :size="16" />
-      </button>
-
-      <div class="p-seg">
-        <div class="segment">
-          <button :class="{ on: tab === 'songs' }" @click="tab = 'songs'">歌曲</button>
-          <button :class="{ on: tab === 'albums' }" @click="tab = 'albums'">专辑</button>
-          <button :class="{ on: tab === 'artists' }" @click="tab = 'artists'">歌手</button>
-          <button :class="{ on: tab === 'folders' }" @click="tab = 'folders'">文件夹</button>
+      <section class="music-section">
+        <div class="section-head">
+          <h2>我的音乐</h2>
+          <button class="text-action" aria-label="新建或导入歌单" @click="showQuick = true"><Icon name="plus" :size="16" /> 添加</button>
         </div>
-      </div>
+        <nav class="library-tabs" aria-label="资料库分类">
+          <button :class="{ on: tab === 'playlists' }" :aria-pressed="tab === 'playlists'" @click="tab = 'playlists'">歌单 <small>{{ playlists.length }}</small></button>
+          <button :class="{ on: tab === 'songs' }" :aria-pressed="tab === 'songs'" @click="tab = 'songs'">歌曲 <small>{{ allTracks.length }}</small></button>
+          <button :class="{ on: tab === 'albums' }" :aria-pressed="tab === 'albums'" @click="tab = 'albums'">专辑 <small>{{ albumGroups.length }}</small></button>
+          <button :class="{ on: tab === 'artists' }" :aria-pressed="tab === 'artists'" @click="tab = 'artists'">歌手 <small>{{ artistGroups.length }}</small></button>
+        </nav>
 
-      <section class="mt16">
         <template v-if="tab === 'songs'">
-          <div class="chip-row p-sub">
-            <button class="chip" :class="{ active: songTab === 'favorites' }" @click="songTab = 'favorites'">
-              <span class="dot" />收藏<span class="num">{{ favorites.length }}</span>
-            </button>
-            <button class="chip" :class="{ active: songTab === 'recent' }" @click="songTab = 'recent'">
-              最近播放<span class="num">{{ history.length }}</span>
-            </button>
+          <div class="song-filters">
+            <button :class="{ on: songTab === 'favorites' }" :aria-pressed="songTab === 'favorites'" @click="songTab = 'favorites'">喜欢的歌曲 {{ favorites.length }}</button>
+            <button :class="{ on: songTab === 'recent' }" :aria-pressed="songTab === 'recent'" @click="songTab = 'recent'">最近播放 {{ history.length }}</button>
           </div>
-
           <div v-if="songTab === 'favorites' && favorites.length" class="song-list">
-            <SongRow
-              v-for="(track, index) in favorites"
-              :key="track.providerId + track.id"
-              :track="track"
-              :index="index"
-              :queue="favorites"
-              @play="playFavorites(index)"
-            />
+            <SongRow v-for="(track, index) in favorites" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="favorites" @play="playFavorites(index)" />
           </div>
           <div v-else-if="songTab === 'favorites'" class="empty">
-            <div class="glyph"><Icon name="heart" :size="34" /></div>
-            <h3>还没有喜欢的歌曲</h3>
-            <p>在歌曲右侧点一下爱心，就会出现在这里。</p>
-            <button class="btn btn-ghost btn-sm mt8" @click="router.push('/search')">去搜索音乐</button>
+            <div class="glyph"><Icon name="heart" :size="32" /></div>
+            <h3>还没有喜欢的歌曲</h3><p>在歌曲的更多菜单中收藏，就会出现在这里。</p>
+            <button class="btn btn-ghost btn-sm" @click="router.push('/search')">去搜索音乐</button>
           </div>
-
           <div v-else-if="history.length" class="song-list">
-            <SongRow
-              v-for="(track, index) in history"
-              :key="track.providerId + track.id"
-              :track="track"
-              :index="index"
-              :queue="history"
-              @play="playHistory(index)"
-            />
+            <SongRow v-for="(track, index) in history" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="history" @play="playHistory(index)" />
           </div>
-          <div v-else class="empty">
-            <div class="glyph"><Icon name="history" :size="34" /></div>
-            <h3>还没有播放记录</h3>
-            <p>播放过的歌曲会出现在这里。</p>
-          </div>
+          <div v-else class="empty"><div class="glyph"><Icon name="history" :size="32" /></div><h3>还没有播放记录</h3><p>播放过的歌曲会出现在这里。</p></div>
         </template>
 
-        <template v-else-if="tab === 'albums'">
-          <div class="section-head">
-            <div class="st"><h2>专辑</h2><span class="idx">Albums</span></div>
-            <span class="more">{{ albumGroups.length }} 张</span>
-          </div>
-          <div v-if="albumGroups.length" class="p-list">
-            <button v-for="group in albumGroups" :key="group.key" class="p-srow" @click="playGroup(group)">
-              <div class="cover"><img :src="group.cover" alt="" /></div>
-              <div class="m">
-                <div class="t truncate">{{ group.name }}</div>
-                <div class="a truncate">{{ group.sub }} · {{ group.tracks.length }} 首</div>
-              </div>
-              <Icon name="play" :size="16" class="pl" />
+        <template v-else-if="tab === 'albums' || tab === 'artists'">
+          <div v-if="(tab === 'albums' ? albumGroups : artistGroups).length" class="asset-list">
+            <button v-for="group in (tab === 'albums' ? albumGroups : artistGroups)" :key="group.key" class="asset-row" @click="playGroup(group)">
+              <img class="asset-cover" :class="{ round: tab === 'artists' }" :src="group.cover || '/default-cover.png'" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
+              <span class="asset-copy"><strong>{{ group.name }}</strong><small>{{ tab === 'albums' ? group.sub + ' · ' : '' }}{{ group.tracks.length }} 首</small></span>
+              <Icon name="play" :size="19" />
             </button>
           </div>
-          <div v-else class="empty">
-            <div class="glyph"><Icon name="music" :size="34" /></div>
-            <h3>还没有专辑信息</h3>
-            <p>收藏或导入歌曲后，这里会按专辑归类。</p>
-          </div>
-        </template>
-
-        <template v-else-if="tab === 'artists'">
-          <div class="section-head">
-            <div class="st"><h2>歌手</h2><span class="idx">Artists</span></div>
-            <span class="more">{{ artistGroups.length }} 位</span>
-          </div>
-          <div v-if="artistGroups.length" class="p-list">
-            <button v-for="group in artistGroups" :key="group.key" class="p-srow" @click="playGroup(group)">
-              <div class="cover round"><img :src="group.cover" alt="" /></div>
-              <div class="m">
-                <div class="t truncate">{{ group.name }}</div>
-                <div class="a truncate">{{ group.tracks.length }} 首歌曲</div>
-              </div>
-              <Icon name="play" :size="16" class="pl" />
-            </button>
-          </div>
-          <div v-else class="empty">
-            <div class="glyph"><Icon name="user" :size="34" /></div>
-            <h3>还没有歌手信息</h3>
-            <p>收藏或导入歌曲后，这里会按歌手归类。</p>
-          </div>
+          <div v-else class="empty"><div class="glyph"><Icon :name="tab === 'albums' ? 'music' : 'user'" :size="32" /></div><h3>还没有{{ tab === 'albums' ? '专辑' : '歌手' }}信息</h3><p>收藏或导入歌曲后，会按已有歌曲信息归类。</p></div>
         </template>
 
         <template v-else>
-          <div class="section-head">
-            <div class="st"><h2>我的歌单</h2><span class="idx">{{ playlists.length }} 张</span></div>
-            <div class="row g6">
-              <button class="mini" @click="openImport"><Icon name="folder" :size="14" />导入</button>
-              <button class="mini" @click="showCreate = true"><Icon name="plus" :size="14" />新建</button>
-            </div>
-          </div>
-          <div v-if="playlists.length" class="list p-folders">
-            <div
-              v-for="playlist in playlists"
-              :key="playlist.id"
-              class="li"
-              role="button"
-              tabindex="0"
-              @click="openPlaylist(playlist)"
-              @keydown.enter="openPlaylist(playlist)"
-            >
-              <div class="p-cv">
-                <img v-if="coverOf(playlist)" :src="coverOf(playlist)" alt="" />
-                <Icon v-else name="music" :size="18" />
-              </div>
-              <div class="f1">
-                <div class="lab truncate">{{ playlist.name }}</div>
-                <div class="sub">{{ playlist.tracks.length }} 首歌曲{{ playlist.cloudId ? ' · 云端' : '' }}</div>
-              </div>
-              <button class="iconbtn quiet p-del" aria-label="删除歌单" @click.stop="removePlaylist(playlist)">
-                <Icon name="trash" :size="16" />
+          <button class="favorite-row" @click="openSongs('favorites')">
+            <span class="favorite-cover"><Icon name="heart" :size="25" /></span>
+            <span class="asset-copy"><strong>我喜欢的音乐</strong><small>{{ favorites.length }} 首 · 本地收藏</small></span>
+            <Icon name="chevron-right" :size="16" />
+          </button>
+          <div v-if="playlists.length" class="asset-list">
+            <div v-for="playlist in playlists" :key="playlist.id" class="asset-row playlist-row">
+              <button class="asset-open" @click="openPlaylist(playlist)">
+                <img class="asset-cover" :src="coverOf(playlist) || '/default-cover.png'" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
+                <span class="asset-copy"><strong>{{ playlist.name }}</strong><small>{{ playlist.tracks.length }} 首 · {{ playlist.cloudId ? '云端导入副本' : '本地歌单' }}</small></span>
               </button>
-              <Icon name="chevron" :size="16" class="chev" />
+              <button class="iconbtn quiet" :aria-label="'删除歌单' + playlist.name" @click="removePlaylist(playlist)"><Icon name="trash" :size="18" /></button>
             </div>
           </div>
-          <div v-else class="empty">
-            <div class="glyph"><Icon name="playlist" :size="34" /></div>
-            <h3>还没有歌单</h3>
-            <p>创建一个歌单，把喜欢的歌曲整理到一起。</p>
-            <button class="btn btn-ghost btn-sm mt8" @click="showCreate = true">
-              <Icon name="plus" :size="16" /> 新建歌单
-            </button>
+          <div v-else class="playlist-empty"><p>创建或导入歌单，把喜欢的音乐放在一起。</p></div>
+          <div class="playlist-actions">
+            <button @click="showCreate = true"><Icon name="plus" :size="17" /> 新建歌单</button>
+            <button @click="openImport"><Icon name="folder" :size="17" /> 导入歌单</button>
+            <button @click="router.push('/playlists')">全部歌单 <Icon name="chevron-right" :size="14" /></button>
           </div>
         </template>
       </section>
 
-      <section class="mt28">
-        <div class="section-head">
-          <div class="st"><h2>更多</h2><span class="idx">More</span></div>
-        </div>
-        <div class="list p-more">
-          <button class="li" @click="openImport">
-            <span class="ico"><Icon name="folder" :size="17" /></span>
-            <div class="f1">
-              <div class="lab">导入歌单</div>
-              <div class="sub">{{ importers.length ? `支持 ${importers.length} 个插件导入源` : '从其他音乐平台导入歌单' }}</div>
-            </div>
-            <Icon name="chevron" :size="16" class="chev" />
-          </button>
-          <button class="li" @click="router.push('/plugins')">
-            <span class="ico"><Icon name="link" :size="17" /></span>
-            <div class="f1">
-              <div class="lab">音源插件</div>
-              <div class="sub">{{ pluginState.plugins.length }} 个已安装</div>
-            </div>
-            <Icon name="chevron" :size="16" class="chev" />
-          </button>
-          <button class="li" @click="router.push('/settings')">
-            <span class="ico"><Icon name="settings" :size="17" /></span>
-            <div class="f1">
-              <div class="lab">设置</div>
-              <div class="sub">外观、音质与播放选项</div>
-            </div>
-            <Icon name="chevron" :size="16" class="chev" />
-          </button>
-          <button class="li" @click="showAbout = true">
-            <span class="ico"><Icon name="info" :size="17" /></span>
-            <div class="f1">
-              <div class="lab">关于澜音</div>
-              <div class="sub">CeruMusic 手机版 · {{ appVersion }}</div>
-            </div>
-            <Icon name="chevron" :size="16" class="chev" />
-          </button>
+      <section class="tools-section">
+        <div class="section-head"><h2>音乐工具</h2></div>
+        <div class="tool-list">
+          <button @click="router.push('/cloud')"><Icon name="cloud" :size="21" /><span><strong>云端歌单</strong><small>{{ cloudCount }} 个本地副本 · 从澜音账号导入</small></span><Icon name="chevron-right" :size="16" /></button>
+          <button @click="router.push('/plugins')"><Icon name="plugin" :size="21" /><span><strong>音源插件</strong><small>{{ pluginState.plugins.length }} 个已安装 · {{ runningPlugins }} 个运行中</small></span><Icon name="chevron-right" :size="16" /></button>
+          <button @click="openImport"><Icon name="folder" :size="21" /><span><strong>导入歌单</strong><small>{{ importers.length ? `支持 ${importers.length} 个插件导入源` : '由已安装的音源插件提供导入能力' }}</small></span><Icon name="chevron-right" :size="16" /></button>
+          <button @click="router.push('/downloads')"><Icon name="download" :size="21" /><span><strong>下载管理</strong><small>已完成 {{ downloaded.length }} 首 · {{ formatBytes(usedBytes) }}</small></span><Icon name="chevron-right" :size="16" /></button>
+          <button @click="router.push('/settings')"><Icon name="settings" :size="21" /><span><strong>设置</strong><small>外观、歌词、播放与存储</small></span><Icon name="chevron-right" :size="16" /></button>
+          <button @click="router.push('/logs')"><Icon name="scroll-text" :size="21" /><span><strong>运行日志</strong><small>{{ logErrors ? `当前记录中有 ${logErrors} 条错误，可查看诊断` : '查看应用运行与诊断记录' }}</small></span><Icon name="chevron-right" :size="16" /></button>
+          <button @click="showAbout = true"><Icon name="info" :size="21" /><span><strong>关于澜音</strong><small>CeruMusic 手机版 · {{ appVersion }}</small></span><Icon name="chevron-right" :size="16" /></button>
         </div>
       </section>
-
-      <div class="scroll-end" />
     </div>
 
     <div v-if="showCreate" class="sheet-mask" @click.self="showCreate = false">
@@ -457,7 +324,7 @@ function openImport(): void {
           <div class="about-name">澜音 · CeruMusic 手机版</div>
           <p class="sh-sub">
             基于 CeruMusic v2.3.1 移植的 Android 移动端。沿用澜音 v2 插件协议，
-            由插件提供音乐信息与播放地址，应用本身不存储任何音乐文件。
+            由插件提供音乐信息与播放地址，可按你的操作缓存或下载音乐。
           </p>
           <p class="sh-sub">版本 {{ appVersion }} · 插件协议 2.0</p>
           <div class="sh-actions">
@@ -495,392 +362,72 @@ function openImport(): void {
 </template>
 
 <style scoped>
-.log-entry {
-  position: relative;
-}
-.log-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--cinnabar);
-  box-shadow: 0 0 0 2px var(--surface);
-}
-.p-card {
-  margin: 14px var(--pad) 0;
-  padding: 16px;
-  border-radius: 24px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--sh-1);
-}
-.p-id {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.p-id .ava {
-  width: 50px;
-  height: 50px;
-  flex: none;
-  border-radius: 50%;
-  overflow: hidden;
-  background: var(--tint-soft);
-}
-.p-id .ava img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.p-id .nm {
-  font-family: var(--serif);
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-.p-id .sub {
-  margin-top: 5px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-.p-id .p-new {
-  flex: none;
-  height: 34px;
-  padding: 0 13px;
-  font-size: 12px;
-}
-.p-nums {
-  display: flex;
-  align-items: center;
-  margin-top: 15px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-}
-.p-nums .n {
-  flex: 1;
-}
-.p-nums .n b {
-  display: block;
-  font-family: var(--serif);
-  font-size: 23.5px;
-  font-weight: 600;
-  line-height: 1.1;
-  color: var(--ink);
-}
-.p-nums .n span {
-  display: block;
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--ink-4);
-}
-.p-nums .v {
-  width: 1px;
-  align-self: stretch;
-  margin: 3px 12px 1px;
-  background: var(--line);
-}
-.p-store {
-  margin-top: 14px;
-}
-.p-store .head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-.p-store .t {
-  font-size: 11px;
-  color: var(--ink-4);
-}
-.p-store .r {
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.p-store .tr {
-  margin-top: 8px;
-  height: 5px;
-  border-radius: var(--r-pill);
-  background: var(--line);
-  overflow: hidden;
-}
-.p-store .tr i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--tint);
-  transition: width var(--e-out) 0.3s;
-}
-.p-quick {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 14px var(--pad) 0;
-}
-.p-quick .q {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
-}
-.p-quick .ic {
-  width: 44px;
-  height: 44px;
-  border-radius: 15px;
-  display: grid;
-  place-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--tint);
-  box-shadow: var(--sh-1);
-}
-.p-quick .l {
-  font-size: 11.5px;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.p-quick .n {
-  font-size: 11px;
-  color: var(--ink-4);
-}
-.p-quick .gold .ic {
-  color: var(--gold);
-}
-.p-local {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: calc(100% - var(--pad) * 2);
-  margin: 14px var(--pad) 0;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--line-2, rgba(255, 255, 255, 0.08));
-  text-align: left;
-  color: var(--ink-1);
-}
-.p-local .ic {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  background: var(--tint-soft, rgba(169, 228, 207, 0.14));
-  color: var(--tint);
-}
-.p-local .tx {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.p-local .tx b {
-  font-size: 14.5px;
-  font-weight: 600;
-}
-.p-local .tx small {
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-.p-local:active {
-  transform: scale(0.995);
-}
-.p-seg {
-  padding: 20px var(--pad) 0;
-}
-.p-seg .segment button {
-  height: 34px;
-  font-size: 12.5px;
-}
-.p-sub {
-  padding: 0 var(--pad) 10px;
-}
-.p-sub .chip {
-  height: 30px;
-}
-.p-sub .chip .num {
-  margin-left: 3px;
-  font-size: 11px;
-  opacity: 0.6;
-}
-.p-list {
-  padding: 0 8px;
-}
-.p-srow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 56px;
-  padding: 6px 12px;
-  text-align: left;
-}
-.p-srow .cover {
-  width: 44px;
-  height: 44px;
-  flex: none;
-}
-.p-srow .cover.round {
-  border-radius: 50%;
-}
-.p-srow .cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.p-srow .m {
-  flex: 1;
-  min-width: 0;
-}
-.p-srow .t {
-  font-size: 14px;
-  font-weight: 550;
-  color: var(--ink);
-}
-.p-srow .a {
-  margin-top: 3px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-.p-srow .pl {
-  color: var(--ink-4);
-}
-.p-folders {
-  margin: 0 var(--pad);
-  padding: 2px;
-}
-.p-folders .li {
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-}
-.p-folders .li .sub {
-  margin-top: 3px;
-  font-size: 11px;
-  color: var(--ink-4);
-}
-.p-cv {
-  width: 44px;
-  height: 44px;
-  flex: none;
-  border-radius: var(--r-sm);
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  background: var(--tint-softer);
-  color: var(--ink-4);
-}
-.p-cv img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.p-del {
-  width: 34px;
-  height: 34px;
-  flex: none;
-}
-.chev {
-  color: var(--ink-4);
-  flex: none;
-}
-.mini {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 26px;
-  padding: 0 9px;
-  border-radius: var(--r-pill);
-  border: 1px solid var(--line);
-  background: var(--surface);
-  font-size: 11.5px;
-  color: var(--ink-2);
-}
-.p-more {
-  margin: 0 var(--pad);
-  padding: 2px;
-}
-.p-more .li {
-  width: 100%;
-  text-align: left;
-  gap: 12px;
-}
-.p-more .ico {
-  width: 32px;
-  height: 32px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: var(--tint-softer);
-  color: var(--tint);
-}
-.p-more .lab {
-  font-size: 14px;
-  color: var(--ink);
-}
-.p-more .sub {
-  margin-top: 3px;
-  font-size: 11px;
-  color: var(--ink-4);
-}
-.scroll-end {
-  height: 26px;
-}
-.empty {
-  padding: 6px var(--pad) 0;
-  gap: 8px;
-}
-.empty .glyph {
-  width: 76px;
-  height: 76px;
-  margin-bottom: 2px;
-}
-.sh-form {
-  padding: 0 var(--pad);
-}
-.sh-sub {
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--ink-3);
-  margin-bottom: 10px;
-}
-.sh-input {
-  width: 100%;
-  height: 46px;
-  padding: 0 14px;
-  border-radius: var(--r-md);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  font-size: 14px;
-  color: var(--ink);
-  user-select: text;
-}
-.sh-input::placeholder {
-  color: var(--ink-4);
-}
-.sh-input:focus {
-  border-color: var(--tint);
-  outline: none;
-}
-.sh-actions {
-  display: flex;
-  gap: 8px;
-  padding-top: 14px;
-}
-.about-logo {
-  width: 60px;
-  height: 60px;
-  border-radius: 18px;
-  margin-bottom: 12px;
-}
-.about-name {
-  font-family: var(--serif);
-  font-size: 17px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
+.library-head { align-items: center; min-height: 48px; }
+.library-head h1 { font-family: inherit; font-size: 27px; font-weight: 750; }
+.profile { padding: 23px var(--pad) 16px; }
+.profile-main { display: flex; align-items: center; gap: 13px; width: 100%; min-height: 68px; text-align: left; }
+.avatar { width: 56px; height: 56px; flex: none; object-fit: cover; border-radius: 50%; background: var(--tint-softer); }
+.profile-copy { flex: 1; min-width: 0; }
+.profile-copy strong { display: block; font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+.profile-copy small { display: block; margin-top: 6px; font-size: 12px; color: var(--ink-3); }
+.profile-main > .i { color: var(--ink-3); }
+.library-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0 var(--pad); padding: 10px 0 22px; border-bottom: 1px solid var(--line); }
+.library-shortcuts button { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 84px; padding: 6px 0; }
+.library-shortcuts .i { color: var(--tint); }
+.library-shortcuts span { font-size: 13px; }
+.library-shortcuts small { font-size: 11px; color: var(--ink-3); }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; padding: 14px var(--pad) 5px; min-height: 58px; }
+.section-head h2 { font-family: inherit; font-size: 20px; font-weight: 700; }
+.text-action { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; gap: 3px; color: var(--ink-3); font-size: 12px; }
+.recent-section { padding-top: 5px; }
+.recent-strip { display: flex; gap: 12px; overflow-x: auto; padding: 0 var(--pad) 8px; scrollbar-width: none; }
+.recent-card { flex: 0 0 108px; width: 108px; text-align: left; }
+.recent-art { display: block; position: relative; }
+.recent-art img { width: 108px; height: 108px; object-fit: cover; border-radius: 9px; }
+.recent-art > span { position: absolute; right: 6px; bottom: 6px; width: 25px; height: 25px; border-radius: 50%; background: #ffffffe6; color: #234534; display: grid; place-items: center; }
+.recent-card strong, .recent-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-card strong { margin-top: 8px; font-size: 13px; font-weight: 500; }
+.recent-card small { margin-top: 5px; font-size: 11px; color: var(--ink-3); }
+.music-section { padding-top: 4px; }
+.library-tabs { display: flex; gap: 18px; padding: 0 var(--pad) 10px; overflow-x: auto; }
+.library-tabs button { flex: none; min-width: 44px; min-height: 44px; border-bottom: 2px solid transparent; color: var(--ink-3); font-size: 14px; }
+.library-tabs button.on { color: var(--ink); font-weight: 650; border-bottom-color: var(--tint); }
+.library-tabs small { font-size: 11px; font-weight: 400; }
+.song-filters { display: flex; gap: 8px; padding: 0 var(--pad) 10px; }
+.song-filters button { min-height: 44px; padding: 0 12px; color: var(--ink-3); font-size: 12px; border-radius: 8px; }
+.song-filters button.on { color: var(--tint-deep, var(--ink)); background: var(--tint-softer); }
+.song-list { padding: 0 8px; }
+.asset-list { padding: 0 var(--pad); }
+.asset-row, .favorite-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 78px; text-align: left; }
+.asset-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 78px; text-align: left; }
+.asset-cover, .favorite-cover { flex: none; width: 55px; height: 55px; border-radius: 8px; object-fit: cover; background: var(--tint-softer); }
+.asset-cover.round { border-radius: 50%; }
+.asset-copy { display: block; flex: 1; min-width: 0; }
+.asset-copy strong, .asset-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asset-copy strong { font-size: 14px; font-weight: 500; }
+.asset-copy small { margin-top: 5px; font-size: 12px; color: var(--ink-3); }
+.asset-row > .icon, .favorite-row > .i { color: var(--ink-3); }
+.favorite-row { padding: 5px var(--pad); }
+.favorite-cover { display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #f5a3bb, #e85b85); }
+.playlist-row .iconbtn { width: 44px; height: 44px; color: var(--ink-3); flex: none; }
+.playlist-actions { display: flex; flex-wrap: wrap; gap: 5px 15px; padding: 8px var(--pad) 0; }
+.playlist-actions button { display: inline-flex; align-items: center; gap: 5px; min-height: 44px; font-size: 12px; color: var(--ink-2); }
+.playlist-empty { padding: 12px var(--pad); color: var(--ink-3); font-size: 13px; line-height: 1.6; }
+.tools-section { margin-top: 12px; padding-bottom: 12px; }
+.tool-list { margin: 0 var(--pad); border-top: 1px solid var(--line); }
+.tool-list button { display: flex; align-items: center; width: 100%; min-height: 70px; gap: 13px; text-align: left; border-bottom: 1px solid var(--line); }
+.tool-list button > span { flex: 1; min-width: 0; }
+.tool-list strong { display: block; font-size: 14px; font-weight: 500; }
+.tool-list small { display: block; margin-top: 5px; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.tool-list .i { flex: none; color: var(--ink-2); }
+.empty { min-height: 190px; padding: 20px var(--pad); gap: 10px; }
+.empty .glyph { width: 64px; height: 64px; }
+.sh-form { padding: 0 var(--pad); }
+.sh-sub { font-size: 13px; line-height: 1.6; color: var(--ink-3); margin-bottom: 10px; }
+.sh-input { width: 100%; height: 48px; padding: 0 14px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-size: 15px; color: var(--ink); user-select: text; }
+.sh-input:focus { border-color: var(--tint); outline: 2px solid var(--tint-soft); }
+.sh-actions { display: flex; gap: 8px; padding-top: 14px; }
+.about-logo { width: 60px; height: 60px; border-radius: 15px; margin-bottom: 12px; }
+.about-name { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+@media (max-width: 375px) { .library-tabs { gap: 14px; } .library-shortcuts small { font-size: 10.5px; } }
 </style>

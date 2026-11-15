@@ -13,8 +13,8 @@ import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginS
 import { handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
 import { registerDownloadHostHooks } from '@/core/downloadHost'
-import { checkForUpdate, updateState } from '@/core/updater'
-import { initPlayer, registerPlayerHostHooks, restorePlayer, resume, pause, next, previous, seek, refreshBackgroundLyrics, applyPlaybackRate, savePlaybackState } from '@/core/playback/player'
+import { canAutoPromptUpdate, checkForUpdate, markAutoUpdatePromptShown, updateState } from '@/core/updater'
+import { initPlayer, registerPlayerHostHooks, restorePlayer, currentTrack, resume, pause, next, previous, seek, refreshBackgroundLyrics, applyPlaybackRate, savePlaybackState } from '@/core/playback/player'
 import { onMediaAction, stopBackgroundAudio } from '@/core/native/backgroundAudio'
 import { runBackGuard } from '@/core/native/backGuard'
 import { resolveBackAction } from '@/core/navigation/backNav'
@@ -39,9 +39,55 @@ import { routeDirection } from '@/router/transition'
 const router = useRouter()
 const route = useRoute()
 const showNav = computed(() => route.path !== '/player')
-/** 四个 tab 页常驻内存：返回时不重新挂载、不重新拉数据，滚动位置也自然保留 */
+const hasTrack = computed(() => Boolean(currentTrack()))
+const dockStyle = computed(() => ({
+  '--dock-h': showNav.value
+    ? `calc(var(--tab-h) + ${hasTrack.value ? 'var(--mini-h) + ' : ''}var(--safe-bottom) + 1px)`
+    : '0px'
+}))
+/** 三个主 Tab 与搜索保留状态：返回时不重复加载，也保留输入和滚动。 */
 const tabViewNames = ['Discover', 'Search', 'Playlists', 'Library']
 const nativePlatform = Capacitor.isNativePlatform()
+let appActive = true
+let appDisposed = false
+let autoUpdateRunning = false
+let autoUpdateAwaitingDisplay = false
+
+function isAppForeground(): boolean {
+  return !appDisposed && appActive && document.visibilityState !== 'hidden'
+}
+
+async function promptAvailableUpdate(): Promise<void> {
+  if (!isAppForeground()) return
+  if (autoUpdateAwaitingDisplay) {
+    autoUpdateAwaitingDisplay = false
+    if (route.path === '/update') {
+      markAutoUpdatePromptShown()
+      return
+    }
+  }
+  if (autoUpdateRunning || !updateState.autoCheck) return
+  autoUpdateRunning = true
+  try {
+    await router.isReady()
+    await checkForUpdate({ silent: true })
+    if (!isAppForeground() || !canAutoPromptUpdate() || route.path === '/update') return
+    const failure = await router.push('/update')
+    if (!failure && route.path === '/update' && !appDisposed) {
+      // 懒加载/导航等待时可能退到后台；真正回前台展示后再记当天次数。
+      autoUpdateAwaitingDisplay = !isAppForeground()
+      if (!autoUpdateAwaitingDisplay) markAutoUpdatePromptShown()
+    }
+  } catch (error) {
+    logEvent('warn', 'UPDATE', '自动更新提示未打开', String(error))
+  } finally {
+    autoUpdateRunning = false
+  }
+}
+
+function onAppVisibilityChange(): void {
+  if (document.visibilityState === 'visible') void promptAvailableUpdate()
+}
 
 function openToastAction(toast: { id: number; actionTo?: string }): void {
   pluginToasts.value = pluginToasts.value.filter((item) => item.id !== toast.id)
@@ -70,8 +116,10 @@ function scheduleStatusBarSync(): void {
     .catch(() => undefined)
     .finally(() => window.setTimeout(() => void syncStatusBar(), 300))
   void NativeApp.addListener('appStateChange', ({ isActive }) => {
+    appActive = isActive
     if (isActive) {
       void syncStatusBar()
+      void promptAvailableUpdate()
     } else {
       savePlaybackState()
     }
@@ -97,7 +145,7 @@ function initNativeTheme(): void {
   })
 }
 
-const ROOT_PATHS = ['/', '/search', '/playlists', '/library']
+const ROOT_PATHS = ['/', '/playlists', '/library']
 const EXIT_ANIMATION_MS = 260
 /** 连按两次退出的时间窗。 */
 const EXIT_CONFIRM_MS = 2200
@@ -112,7 +160,7 @@ function onTabTouchStart(event: TouchEvent): void {
   const target = event.target as HTMLElement
   if (
     target.closest(
-      'input, textarea, button, .chips, .song-list, .playlist-list, .task-list, .mini-player, .bottom-nav'
+      'input, textarea, button, .chips, .song-list, .playlist-list, .task-list, .mini, .tabbar, .cover-strip, .media-strip'
     )
   ) {
     return
@@ -205,6 +253,7 @@ onMounted(async () => {
   initNativeTheme()
   window.addEventListener('touchstart', onTabTouchStart, { passive: true })
   window.addEventListener('touchend', onTabTouchEnd, { passive: true })
+  document.addEventListener('visibilitychange', onAppVisibilityChange)
   void initAuth()
   void initDownloads()
   if (nativePlatform) {
@@ -233,6 +282,8 @@ onMounted(async () => {
       stopBackgroundAudio()
     }
   })
+  // 不等音源插件加载，启动更新与播放器/插件初始化互不阻塞。
+  void promptAvailableUpdate()
   await initPlugins()
   if (!pluginState.plugins.length) {
     try {
@@ -248,7 +299,6 @@ onMounted(async () => {
   if (pluginState.selectedProvider) selectProvider(pluginState.selectedProvider)
   // 从链接安装的音源插件：启动后静默检查一次新版本（6 小时内不重复）。
   if (settingsState.pluginAutoUpdate) void checkAllPluginUpdates()
-  if (updateState.autoCheck) void checkForUpdate({ silent: false })
   window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
     if (settingsState.theme === 'system') {
       applyTheme()
@@ -281,6 +331,8 @@ watch(
 )
 
 onUnmounted(() => {
+  appDisposed = true
+  document.removeEventListener('visibilitychange', onAppVisibilityChange)
   window.removeEventListener('touchstart', onTabTouchStart)
   window.removeEventListener('touchend', onTabTouchEnd)
 })
@@ -298,7 +350,7 @@ watch(navigationRequest, (request) => {
 
 <template>
   <ion-app>
-    <div class="app-shell">
+    <div class="app-shell" :style="dockStyle">
     <router-view v-slot="{ Component }">
       <transition
         :name="

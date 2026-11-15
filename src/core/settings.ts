@@ -32,7 +32,7 @@ export interface AppSettings {
   autoSourceFallback: boolean
   /** Swipe left/right on the player page to change tracks. */
   swipePlayer: boolean
-  /** Swipe left/right between the four main tabs. */
+  /** Swipe left/right between the three main tabs. */
   swipeTabs: boolean
   /** Publish the current lyric line to the system / lyricon consumers. */
   systemLyrics: boolean
@@ -168,10 +168,10 @@ export function applyVerboseLogs(): void {
 
 const ACCENTS: Record<AccentColor, { brand: string; strong: string; soft: string; softer: string }> = {
   green: {
-    brand: '#00b578',
-    strong: '#009c68',
-    soft: 'rgba(0, 181, 120, 0.12)',
-    softer: 'rgba(0, 181, 120, 0.06)'
+    brand: '#11bb84',
+    strong: '#087b57',
+    soft: 'rgba(17, 187, 132, 0.12)',
+    softer: 'rgba(17, 187, 132, 0.06)'
   },
   blue: {
     brand: '#2f7cf6',

@@ -17,15 +17,22 @@ const progress = computed(() => {
 function open(): void {
   if (track.value) router.push('/player')
 }
+
+function openQueue(): void {
+  if (track.value) router.push({ path: '/player', query: { panel: 'queue' } })
+}
 </script>
 
 <template>
   <transition name="fade">
-    <div v-if="visible" class="mini" @click="open">
+    <div v-if="visible" class="mini">
       <div class="bar"><i :style="{ width: progress + '%' }" /></div>
+      <button class="mini-track" :aria-label="`打开播放器：${track!.title}`" @click="open">
       <div class="cover">
         <img
-          :src="track!.artwork"
+          class="mini-record"
+          :class="{ playing: playerState.playing && !playerState.loading }"
+          :src="track!.artwork || '/default-cover.png'"
           alt=""
           @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
         />
@@ -34,24 +41,42 @@ function open(): void {
         <div class="t truncate">{{ track!.title }}</div>
         <div class="a truncate">{{ track!.artist }}</div>
       </div>
-      <button class="mini-play" aria-label="播放或暂停" @click.stop="togglePlay">
-        <span v-if="playerState.loading" class="loading-dots"><i /><i /><i /></span>
-        <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="18" />
       </button>
+      <button class="mini-play" :aria-label="playerState.playing ? '暂停' : '播放'" @click="togglePlay">
+        <span v-if="playerState.loading" class="loading-dots"><i /><i /><i /></span>
+        <Icon v-else :name="playerState.playing ? 'pause' : 'play'" :size="22" />
+      </button>
+      <button class="mini-play" aria-label="播放队列" @click="openQueue"><Icon name="queue" :size="22" /></button>
     </div>
   </transition>
 </template>
 
 <style scoped>
+.mini-record {
+  animation: mini-record-turn 28s linear infinite;
+  animation-play-state: paused;
+}
+.mini-record.playing { animation-play-state: running; }
+@keyframes mini-record-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .mini-record { animation: none; }
+}
+.mini-track {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  flex: 1;
+  height: 100%;
+}
 .mini-play {
   flex: none;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--ink);
-  color: var(--ink-inv);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: var(--ink);
 }
 .mini-play:active {
   transform: scale(0.94);

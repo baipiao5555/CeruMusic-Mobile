@@ -26,8 +26,8 @@ function loadCatalog(): Promise<any> {
 
 function loadWorkerRuntime(): Promise<string[]> {
   workerRuntimePromise ??= Promise.all(
-    ['node-globals.js', 'sandbox.js'].map(async (file) => {
-      const response = await fetch(`/plugin-runtime/${file}`)
+    ['/compat.js', '/plugin-runtime/node-globals.js', '/plugin-runtime/sandbox.js'].map(async (url) => {
+      const response = await fetch(url)
       if (!response.ok) throw new Error('插件运行时加载失败')
       return response.text()
     })
@@ -99,6 +99,7 @@ function buildFrameDocument(entryCode: string): string {
   return `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
 <body>
+<script src="/compat.js"></script>
 <script>${nodeGlobalsBootstrap}
 </script>
 <script src="/plugin-runtime/node-globals.js"></script>
@@ -123,6 +124,7 @@ function buildFrameDocument(entryCode: string): string {
 
 function buildWorkerDocument(entryCode: string, runtime: string[]): string {
   const workerCode = `
+${runtime[0]}
 (function () {
   var send = globalThis.postMessage.bind(globalThis);
   var listen = globalThis.addEventListener.bind(globalThis);
@@ -145,9 +147,9 @@ function buildWorkerDocument(entryCode: string, runtime: string[]): string {
   };
 })();
 ${nodeGlobalsBootstrap}
-${runtime[0]}
-globalThis.__restoreAssign();
 ${runtime[1]}
+globalThis.__restoreAssign();
+${runtime[2]}
 globalThis.__ceruStart((0, eval)("(" + ${JSON.stringify(entryCode)} + ")"));
 `
   const payload = encodeBase64Utf8(workerCode)

@@ -6,25 +6,28 @@ import SongRow from '@/components/SongRow.vue'
 import { allProviders, invokeProvider, pluginState, selectProvider, type ProviderHandle } from '@/core/plugin/manager'
 import { playTracks, toTrack, type Track } from '@/core/playback/player'
 import { rememberTracks } from '@/core/search'
+import { resourceContext } from '@/core/resourceNavigation'
 
 const route = useRoute()
 const router = useRouter()
+const context = computed(() => resourceContext(route.query.resource))
+const contextExpired = computed(() => Boolean(route.query.resource) && !context.value)
 const providers = computed(() => allProviders())
-const providerId = computed(() => String(route.query.provider ?? pluginState.selectedProvider ?? ''))
-const kind = computed(() => String(route.query.kind ?? 'chart'))
-const id = computed(() => String(route.query.id ?? ''))
-const title = computed(() => String(route.query.title ?? '歌单'))
-const artwork = computed(() => String(route.query.artwork ?? '/default-cover.png'))
-const catalogMode = computed(() => !id.value)
+const providerId = computed(() => context.value?.providerId || String(route.query.provider ?? pluginState.selectedProvider ?? ''))
+const kind = computed(() => context.value?.ref.kind || String(route.query.kind ?? 'chart'))
+const id = computed(() => context.value?.ref.id || String(route.query.id ?? ''))
+const title = computed(() => context.value?.title || String(route.query.title ?? '歌单'))
+const artwork = computed(() => context.value?.artwork || String(route.query.artwork ?? '/default-cover.png'))
+const catalogMode = computed(() => !id.value && !contextExpired.value)
 const provider = computed(() => {
-  const ownerId = String(route.query.plugin ?? '')
-  const match = providers.value.find(item => item.providerId === providerId.value && (!ownerId || item.pluginId === ownerId))
+  const ownerId = context.value?.pluginId || String(route.query.plugin ?? '')
+  const match = (ownerId ? allProviders(true) : providers.value).find(item => item.providerId === providerId.value && (!ownerId || item.pluginId === ownerId))
   return match ?? (!route.query.provider && !ownerId ? providers.value[0] : undefined)
 })
 const providerKey = computed(() => provider.value ? `${provider.value.pluginId}:${provider.value.providerId}` : '')
 const providerName = computed(() => provider.value?.name ?? '音源未启用')
 const kindLabel = computed(() => kind.value === 'playlist' ? '歌单' : kind.value === 'chart' ? '榜单' : '内容')
-const resourceRef = computed(() => ({ providerId: provider.value?.providerId || providerId.value, kind: kind.value, id: id.value, pluginId: provider.value?.manifestId ?? '' }))
+const resourceRef = computed(() => context.value?.ref || ({ providerId: provider.value?.providerId || providerId.value, kind: kind.value, id: id.value, pluginId: provider.value?.manifestId ?? '' }))
 const tracks = ref<Track[]>([])
 const loading = ref(true)
 const error = ref('')
@@ -134,6 +137,7 @@ async function chooseCategory(index: number): Promise<void> {
   }
 }
 async function load(more = false): Promise<void> {
+  if (contextExpired.value) { requestSeq++; error.value = '歌单上下文已过期，请返回搜索重新打开'; tracks.value = []; loading.value = false; loadingMore.value = false; return }
   const owner = provider.value
   if (!owner) {
     requestSeq += 1
@@ -181,7 +185,7 @@ function play(index: number): void { if (tracks.value.length) void playTracks(tr
 function playAll(): void { play(0) }
 watch(() => route.query.tab, value => { catalogTab.value = value === 'charts' ? 'charts' : 'playlists' }, { immediate: true })
 // 音乐馆与详情复用 /browse；路由或音源变化必须使旧响应失效。
-watch(() => [providerKey.value, id.value, kind.value], () => {
+watch(() => [providerKey.value, id.value, kind.value, route.query.resource], () => {
   if (route.path !== '/browse') return
   if (catalogMode.value) void loadCatalog()
   else void load()

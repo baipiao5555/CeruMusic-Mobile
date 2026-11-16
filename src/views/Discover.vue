@@ -17,6 +17,12 @@ import {
 import { libraryState } from '@/core/library'
 
 const router = useRouter()
+const dailyDate = ref(new Date())
+let dailyDateTimer: ReturnType<typeof setInterval> | undefined
+function updateDailyDate(): void { dailyDate.value = new Date() }
+onMounted(() => { dailyDateTimer = setInterval(updateDailyDate, 60000); document.addEventListener('visibilitychange', updateDailyDate) })
+onActivated(updateDailyDate)
+onBeforeUnmount(() => { if (dailyDateTimer) clearInterval(dailyDateTimer); document.removeEventListener('visibilitychange', updateDailyDate) })
 const providers = computed(() => allProviders())
 const selected = computed(
   () => providers.value.find((item) => item.providerId === pluginState.selectedProvider) ?? providers.value[0]
@@ -305,6 +311,11 @@ watch(providerKey, () => void load())
         <button @click="router.push('/local')"><span class="shortcut-tile blue"><Icon name="folder" :size="23" /></span><span>本地音乐</span></button>
       </div>
 
+      <button class="daily-entry" aria-label="查看澜音每日精选（本地）" @click="router.push('/daily')">
+        <span class="daily-card-date"><small>{{ dailyDate.getMonth() + 1 }} 月</small><strong>{{ String(dailyDate.getDate()).padStart(2, '0') }}</strong></span>
+        <span class="daily-card-copy"><strong>澜音每日精选（本地）</strong><small>收藏、歌单与最近播放 · 每日更新</small></span><Icon name="chevron" :size="18" />
+      </button>
+
       <button v-if="spotlight" class="spotlight" @click="openChart(spotlight)">
         <span class="spotlight-copy"><small>{{ providerName }} · 精选</small><strong class="clamp-2">{{ spotlight.title }}</strong><span>{{ spotlight.playlist?.author || countOf(spotlight) }}<Icon name="chevron" :size="13" /></span></span>
         <img :src="artworkOf(spotlight)" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
@@ -377,6 +388,7 @@ watch(providerKey, () => void load())
 </template>
 
 <style scoped>
+.daily-entry{display:flex;align-items:center;gap:13px;margin:0 var(--pad) 18px;width:calc(100% - var(--pad) * 2);min-height:84px;padding:11px 14px;border:1px solid var(--line-2);border-radius:14px;text-align:left;background:linear-gradient(120deg,var(--tint-soft),var(--porcelain));color:var(--ink)}.daily-card-date{flex:none;width:44px;text-align:center;color:var(--brand-strong)}.daily-card-date small{font-size:10px;display:block}.daily-card-date strong{font-size:30px;line-height:1.25;font-weight:650}.daily-card-copy{flex:1;min-width:0}.daily-card-copy strong{display:block;font-size:15px;font-weight:600;line-height:1.5}.daily-card-copy small{display:block;font-size:10px;color:var(--ink-3);line-height:1.6;margin-top:4px}@media(max-width:375px){.daily-entry{gap:10px;padding-left:11px;padding-right:11px}.daily-card-copy strong{font-size:14px}}
 .home-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 12px 0 var(--pad); min-height:58px; }
 .home-channels { display:flex; align-items:center; gap:22px; min-width:0; }
 .home-channels button { position:relative; height:52px; font-size:19px; font-weight:600; color:var(--ink-3); white-space:nowrap; }

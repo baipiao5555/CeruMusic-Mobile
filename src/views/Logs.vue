@@ -20,6 +20,14 @@ const platformName =
       ? `Android ${androidVersion}`
       : 'Android'
     : Capacitor.getPlatform()
+const compat = (window as any).__ceruCompat as
+  | { original: Record<string, boolean>; patched: string[]; chromium: string }
+  | undefined
+const compatSummary = compat
+  ? `补齐 ${compat.patched.join(', ') || '无'}；原生 ${Object.entries(compat.original)
+      .map(([name, available]) => `${name}=${available ? '有' : '无'}`)
+      .join(', ')}`
+  : '启动兼容信息未记录'
 const LEVELS = ['all', 'error', 'warn', 'info', 'debug'] as const
 type LevelFilter = (typeof LEVELS)[number]
 const levelQuery = typeof route.query.level === 'string' ? route.query.level : ''
@@ -91,6 +99,8 @@ function reportMeta(): Record<string, string> {
   return {
     应用版本: __APP_VERSION__,
     运行平台: platformName,
+    WebView内核: compat?.chromium ? `Chromium ${compat.chromium}` : '未识别',
+    启动兼容: compatSummary,
     设备信息: navigator.userAgent,
     屏幕: `${screen.width}x${screen.height} @${window.devicePixelRatio || 1}x`,
     插件:
@@ -208,6 +218,10 @@ async function clearAll(): Promise<void> {
       <div class="sumline">
         <span>{{ appVersion }} · {{ platformName }}</span>
         <span>原生播放服务 {{ nativeEntries.length }} 条</span>
+      </div>
+      <div class="sumline">
+        <span>WebView {{ compat?.chromium || '未识别' }}</span>
+        <span>兼容补齐 {{ compat?.patched.length || 0 }} 项</span>
       </div>
 
       <div class="chips">

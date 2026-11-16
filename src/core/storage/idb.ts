@@ -25,8 +25,12 @@ async function tx<T>(store: string, mode: IDBTransactionMode, run: (s: IDBObject
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(store, mode)
     const request = run(transaction.objectStore(store))
-    request.onsuccess = () => resolve(request.result)
+    let result: T
+    request.onsuccess = () => { result = request.result }
     request.onerror = () => reject(request.error)
+    transaction.oncomplete = () => resolve(result)
+    transaction.onerror = () => reject(transaction.error || request.error)
+    transaction.onabort = () => reject(transaction.error || new DOMException('数据库事务已取消', 'AbortError'))
   })
 }
 

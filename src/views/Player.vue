@@ -328,11 +328,11 @@ const queueRemaining = computed(() => {
   return minutes > 0 ? `剩余约 ${minutes} 分钟` : `共 ${list.length} 首`
 })
 
-const lyricCurrent = computed(() => {
-  const index = playerState.activeLyric
-  if (index < 0) return null
-  return playerState.lyrics[index] ?? null
-})
+// 固定前后槽位，首尾留空，当前句不会因邻句不足而偏离窗口中心。
+const lyricPreview = computed(() => [-2, -1, 0, 1, 2].map(offset => ({
+  offset,
+  line: playerState.lyrics[playerState.activeLyric + offset]
+})))
 
 function scrollActiveLyric(): void {
   const box = lyricsBox.value
@@ -466,19 +466,19 @@ onUnmounted(() => {
         </div>
 
         <button v-if="settingsState.showLyrics" class="p-lyric" aria-label="打开完整歌词" @click="openLyrics">
-          <span class="p-lyric-body">
-            <template v-if="playerState.lyrics.length">
-              <span class="p-lyric-slot">
-                <transition name="ly-swap" mode="out-in">
-                  <span class="p-lyric-cur" :key="playerState.activeLyric">
-                    <span v-for="(ch, index) in lyricChars(lyricCurrent?.text || '♪')" :key="index" class="pl-char" :class="{ on: index < activeLineCharCount }">{{ ch }}</span>
+          <span v-if="playerState.lyrics.length" class="p-lyric-body">
+            <transition name="ly-swap" mode="out-in">
+              <span class="p-lyric-stack" :key="playerState.activeLyric">
+                <span v-for="item in lyricPreview" :key="item.offset" class="p-lyric-line" :class="{ 'focus-slot': item.offset === 0, cur: item.offset === 0 && !!item.line, past: item.offset < 0 }" :data-offset="item.offset">
+                  <span v-if="item.offset === 0" class="p-lyric-cur" :class="{ dim: !item.line }">
+                    <span v-for="(ch, index) in lyricChars(item.line?.text || '♪')" :key="index" class="pl-char" :class="{ on: index < activeLineCharCount }">{{ ch }}</span>
                   </span>
-                </transition>
+                  <span v-else class="p-lyric-context">{{ item.line?.text || '' }}</span>
+                </span>
               </span>
-              <span class="p-lyric-next">{{ playerState.lyrics[playerState.activeLyric + 1]?.text || ' ' }}</span>
-            </template>
-            <span v-else class="p-lyric-cur dim">{{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词 · 点击匹配' }}</span>
+            </transition>
           </span>
+          <span v-else class="p-lyric-empty">{{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词 · 点击匹配' }}</span>
         </button>
 
         <div class="p-tools">
@@ -841,7 +841,7 @@ onUnmounted(() => {
 .p-tabs button.active { color: #fff; font-weight: 650; }
 .p-tabs button.active::after { content: ''; position: absolute; bottom: 5px; left: calc(50% - 8px); width: 16px; height: 2px; border-radius: 2px; background: #dbe8fb; }
 .p-main { position: relative; z-index: 2; flex: 1; min-height: 0; padding: 8px 28px calc(12px + var(--safe-bottom)); overflow-y: auto; scrollbar-width: none; }
-.p-core { display: grid; grid-template-rows: minmax(130px, 332px) auto auto minmax(40px, 1fr) auto auto; gap: 9px; height: 100%; min-height: 460px; }
+.p-core { display: grid; grid-template-rows: minmax(130px, 332px) auto minmax(44px, 1fr) auto auto auto; gap: 9px; height: 100%; min-height: 460px; }
 .p-art { grid-row: 1; position: relative; display: block; height: calc(100% - 12px); max-height: 320px; width: auto; max-width: 100%; aspect-ratio: 1; justify-self: center; align-self: start; margin-top: 12px; border-radius: 50%; overflow: hidden; touch-action: pan-y; box-shadow: 0 16px 38px #0005, 0 0 0 1px #ffffff20; }
 .p-record { display: block; width: 100%; height: 100%; padding: 8%; border-radius: inherit; background: repeating-radial-gradient(circle, #292b30 0 1px, #17191d 2px 4px); animation: record-turn 28s linear infinite; animation-play-state: paused; }
 .p-record.playing { animation-play-state: running; }
@@ -854,13 +854,16 @@ onUnmounted(() => {
 .p-favorite { grid-column: 3; }
 .p-error { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 4px 8px; background: #713e4855; border: 1px solid #eea4a955; border-radius: 8px; color: #ffe2e3; font-size: 12px; overflow-wrap: anywhere; }
 .p-error-btn { flex: none; min-width: 44px; min-height: 44px; color: #fff; font-weight: 600; }
-.p-lyric { grid-row: 3; width: 100%; min-width: 0; text-align: center; cursor: pointer; color: #cad8ed; }
-.p-lyric-body { display: block; min-height: 40px; }
-.p-lyric-slot, .p-lyric-cur { display: block; }
-.p-lyric-cur { font-family: var(--lyric-font, var(--sans)); font-size: 13px; line-height: 21px; max-height: 42px; overflow: hidden; }
-.p-lyric-cur.dim { color: #b7c8df; }
-.p-lyric-next { display: block; margin-top: 2px; font-size: 12px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #a9bdd9; }
-.pl-char { color: #b6c7df; transition: color .16s linear; }
+.p-lyric { grid-row: 3; position: relative; display: flex; align-items: center; justify-content: center; width: 100%; min-width: 0; min-height: 0; overflow: hidden; text-align: center; cursor: pointer; color: #cad8ed; }
+.p-lyric-body { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(180deg, transparent, #000 18%, #000 82%, transparent); }
+.p-lyric-stack { display: flex; flex: none; flex-direction: column; gap: 4px; width: 100%; }
+.p-lyric-line { display: flex; flex: none; align-items: center; justify-content: center; height: 32px; min-width: 0; color: #b2c2d8; }
+.p-lyric-line.focus-slot { height: 48px; }
+.p-lyric-line.past { color: #96aac4; }
+.p-lyric-context { display: block; width: 100%; font-family: var(--lyric-font, var(--sans)); font-size: 13px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-lyric-cur { display: -webkit-box; width: 100%; font-family: var(--lyric-font, var(--sans)); font-size: 17px; line-height: 24px; max-height: 48px; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.p-lyric-empty { font-size: 13px; line-height: 24px; color: #b7c8df; }
+.pl-char { color: #c4d0e0; transition: color .16s linear; }
 .pl-char.on { color: #fff; }
 .ly-swap-enter-active, .ly-swap-leave-active { transition: opacity .16s ease, transform .16s ease; }
 .ly-swap-enter-from { opacity: 0; transform: translateY(5px); }
@@ -918,7 +921,7 @@ onUnmounted(() => {
 /* 白色半屏队列覆盖在原播放器上，不再复制一份模糊的当前歌曲。 */
 .q-mask { flex-direction: column; justify-content: flex-end; align-items: center; background: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .q-mask .scrim { z-index: 0; background: #08152799; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.q-sheet { --surface: #fff; --ink: #171b22; --ink-2: #4c5661; --ink-3: #687481; --ink-4: #79838c; --line: #eef1f3; --line-2: #e5e9ec; --tint: #087b57; --tint-soft: #eefaf4; position: relative; z-index: 2; flex: none; height: min(64dvh, 580px); max-height: calc(100dvh - var(--safe-top) - 24px); display: flex; flex-direction: column; overflow: hidden; padding-bottom: calc(10px + var(--safe-bottom)); border-radius: 24px 24px 0 0; background: #fff; color: #171b22; }
+.q-sheet { --surface: #fff; --ink: #171b22; --ink-2: #4c5661; --ink-3: #687481; --ink-4: #79838c; --line: #eef1f3; --line-2: #e5e9ec; --tint: #087b57; --tint-soft: #eefaf4; position: relative; z-index: 2; flex: none; height: min(64vh, 580px); height: min(64dvh, 580px); max-height: calc(100vh - var(--safe-top) - 24px); max-height: calc(100dvh - var(--safe-top) - 24px); display: flex; flex-direction: column; overflow: hidden; padding-bottom: calc(10px + var(--safe-bottom)); border-radius: 24px 24px 0 0; background: #fff; color: #171b22; }
 .q-sheet .grab { background: #dbe1e1; }
 .q-sheet .sh-head { flex: none; padding: 2px 20px 8px; }
 .q-sheet .sh-title { font-family: var(--sans); font-size: 20px; font-weight: 650; }
@@ -944,7 +947,7 @@ onUnmounted(() => {
 .empty.tight { padding: 26px 0; }
 
 /* 原有速度、歌词、定时与下载设置仍在同一个可滚动 Sheet 中。 */
-.ps { display: flex; flex-direction: column; max-height: calc(100dvh - var(--safe-top) - 20px); overflow: hidden; padding-bottom: 0; }
+.ps { display: flex; flex-direction: column; max-height: calc(100vh - var(--safe-top) - 20px); max-height: calc(100dvh - var(--safe-top) - 20px); overflow: hidden; padding-bottom: 0; }
 .ps .sh-head { flex: none; }
 .ps-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 6px; }
 .ps-foot { flex: none; padding: 10px 20px calc(16px + var(--safe-bottom)); background: var(--surface); border-top: 1px solid var(--line-2); }
@@ -966,13 +969,12 @@ onUnmounted(() => {
   .p-meta { padding-top: 0; }
   .p-title { font-size: 23px; }
   .p-artist { margin-top: 4px; font-size: 12px; }
-  .p-lyric-body { min-height: 24px; }
-  .p-lyric-next { display: none; }
+  .p-lyric-cur { font-size: 15px; max-height: 24px; -webkit-line-clamp: 1; }
   .p-play, .ly-ctrl .p-play.sm { width: 60px; height: 60px; }
   .ly-line { font-size: calc(21px * var(--ly-scale, 1)); padding: 8px 0; }
   .ly-foot { padding-bottom: calc(6px + var(--safe-bottom)); }
   .ly-tools { margin-top: 2px; }
-  .q-sheet { height: 70dvh; }
+  .q-sheet { height: 70vh; height: 70dvh; }
 }
 @media (max-width: 374px) {
   .p-main, .ly-foot { padding-left: 22px; padding-right: 22px; }

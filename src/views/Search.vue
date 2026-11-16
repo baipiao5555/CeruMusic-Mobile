@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import PlaylistSearchPane from '@/components/PlaylistSearchPane.vue'
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
 import {
@@ -115,7 +116,7 @@ const suggestions = computed(() => {
 })
 
 const showSuggest = computed(
-  () => suggestOpen.value && focused.value && !composing.value &&
+  () => tab.value !== 'playlists' && suggestOpen.value && focused.value && !composing.value &&
     mode.value === 'name' && Boolean(query.value.trim())
 )
 
@@ -130,7 +131,40 @@ const localMatches = computed(() => {
 /* —— 以下只做纯 UI 派生：分组计数、真错误/无结果分流、热门词轮换 —— */
 
 /** 结果分组：单曲 / 歌手 / 本地歌单。 */
-const tab = ref<'songs' | 'artists' | 'playlists'>('songs')
+const tab = ref<'songs' | 'artists' | 'playlists'>(route.query.target === 'playlists' ? 'playlists' : 'songs')
+const playlistQuery = ref(String(route.query.target === 'playlists' ? route.query.playlistQ || route.query.q || '' : ''))
+let playlistInitialized = route.query.target === 'playlists'
+const playlistPane = ref<{ search(): Promise<void>; clear(): void; ensureSearch(): Promise<void> }>()
+const searchScroll = ref<HTMLElement>()
+let songScrollTop = 0
+let playlistScrollTop = 0
+const inputQuery = computed({ get: () => tab.value === 'playlists' ? playlistQuery.value : query.value,
+  set: value => { if (tab.value === 'playlists') playlistQuery.value = value; else query.value = value } })
+function selectTab(next: 'songs' | 'artists' | 'playlists'): void {
+  if (next === tab.value) return
+  cancelSuggestions()
+  suggestOpen.value = false
+  const scopeChanged = (next === 'playlists') !== (tab.value === 'playlists')
+  if (scopeChanged) {
+    if (tab.value === 'playlists') playlistScrollTop = searchScroll.value?.scrollTop || 0
+    else songScrollTop = searchScroll.value?.scrollTop || 0
+  }
+  if (next === 'playlists' && !playlistInitialized) { playlistQuery.value = query.value; playlistInitialized = true }
+  tab.value = next
+  if (scopeChanged && route.path === '/search') {
+    const target = next === 'playlists' ? 'playlists' : undefined
+    if (route.query.target !== target) {
+      const params: LocationQueryRaw = { ...route.query, target }
+      if (!target) delete params.playlistQ
+      void router.replace({ path: '/search', query: params })
+    }
+  }
+  nextTick(() => {
+    if (scopeChanged && searchScroll.value) searchScroll.value.scrollTop = next === 'playlists' ? playlistScrollTop : songScrollTop
+    if (next === 'playlists' && playlistQuery.value.trim()) void playlistPane.value?.ensureSearch()
+    else if (next !== 'playlists' && (resumeSubmittedSearch || (searched.value && searchedProviderKey !== providerKey.value))) void runSearch()
+  })
+}
 
 /** 换音源建议：换到下一个已启用的音源。 */
 const otherProvider = computed(() =>
@@ -149,15 +183,6 @@ const artistGroups = computed(() => {
   return [...groups.entries()]
     .map(([name, count]) => ({ name, count }))
     .sort((left, right) => right.count - left.count)
-})
-
-/** 本地歌单里和当前关键词同名的那些（只读展示，点击进详情）。 */
-const playlistGroups = computed(() => {
-  const needle = (appliedQuery.value || query.value).trim().toLowerCase()
-  if (!needle) return []
-  return libraryState.playlists.filter((playlist) =>
-    String(playlist.name ?? '').toLowerCase().includes(needle)
-  )
 })
 
 /** 音源明确回「没有结果」是中性态，别拿它当报错。 */
@@ -233,6 +258,7 @@ function scheduleSuggestions(): void {
 }
 
 function onInput(event?: Event): void {
+  if (tab.value === 'playlists') return
   requestSeq += 1
   loading.value = false
   lyricProgress.value = { done: 0, total: 0 }
@@ -250,6 +276,7 @@ function onInput(event?: Event): void {
 
 function onCompositionStart(): void {
   composing.value = true
+  if (tab.value === 'playlists') return
   requestSeq += 1
   loading.value = false
   cancelSuggestions()
@@ -444,6 +471,12 @@ async function searchByLyric(
 }
 
 async function runSearch(): Promise<void> {
+  if (tab.value === 'playlists') {
+    if (route.path === '/search' && route.query.playlistQ !== playlistQuery.value) {
+      await router.replace({ path: '/search', query: { ...route.query, target: 'playlists', playlistQ: playlistQuery.value } })
+    }
+    await nextTick(); await playlistPane.value?.search(); return
+  }
   cancelSuggestions()
   const seq = ++requestSeq
   const provider = selected.value
@@ -549,6 +582,7 @@ function pickSuggestion(track: Track): void {
 }
 
 function reset(): void {
+  if (tab.value === 'playlists') { playlistQuery.value = ''; playlistPane.value?.clear(); nextTick(() => inputRef.value?.focus()); return }
   cancelSuggestions()
   requestSeq += 1
   resumeSubmittedSearch = false
@@ -575,7 +609,7 @@ watch(
   providerKey,
   () => {
     cancelSuggestions()
-    if (route.path !== '/search') return
+    if (route.path !== '/search' || tab.value === 'playlists') return
     if (searched.value || loading.value) void runSearch()
     else scheduleSuggestions()
   }
@@ -601,6 +635,8 @@ watch(
   (value) => {
     if (route.path !== '/search') return
     const text = typeof value === 'string' ? value.trim() : ''
+    if (route.query.target === 'playlists') { playlistQuery.value = String(route.query.playlistQ || text); tab.value = 'playlists'; void runSearch(); return }
+    if (tab.value === 'playlists') tab.value = 'songs'
     if (!text || text === query.value) return
     query.value = text
     suggestOpen.value = false
@@ -609,11 +645,18 @@ watch(
 )
 
 watch(() => route.query.mode, value => {
-  if (route.path === '/search' && (value === 'name' || value === 'lyric')) setMode(value)
+  if (route.path === '/search' && (value === 'name' || value === 'lyric')) {
+    if (route.query.target !== 'playlists') selectTab('songs')
+    setMode(value)
+  }
 }, { immediate: true })
+watch(() => route.query.target, (value, previous) => {
+  if (route.path === '/search' && value === 'playlists') selectTab('playlists')
+  else if (route.path === '/search' && previous === 'playlists') selectTab('songs')
+})
 
 onMounted(() => {
-  if (query.value.trim()) void runSearch()
+  if (inputQuery.value.trim()) void runSearch()
   else nextTick(() => inputRef.value?.focus())
 })
 
@@ -628,7 +671,7 @@ function stopPendingSearch(): void {
 }
 
 onActivated(() => {
-  if (route.path !== '/search') return
+  if (route.path !== '/search' || tab.value === 'playlists') return
   if (resumeSubmittedSearch || (searched.value && searchedProviderKey !== providerKey.value)) {
     void runSearch()
   }
@@ -649,11 +692,11 @@ onBeforeUnmount(stopPendingSearch)
             <Icon name="search" :size="17" />
             <input
               ref="inputRef"
-              v-model="query"
+              v-model="inputQuery"
               type="search"
-              aria-label="歌曲、歌手或歌词"
+              :aria-label="tab === 'playlists' ? '歌单名称' : '歌曲、歌手或歌词'"
               enterkeyhint="search"
-              :placeholder="mode === 'lyric' ? '输入一句歌词，例如：雨一直下' : '输入歌名或歌手'"
+              :placeholder="tab === 'playlists' ? '输入歌单名称' : mode === 'lyric' ? '输入一句歌词，例如：雨一直下' : '输入歌名或歌手'"
               autocomplete="off"
               @input="onInput"
               @compositionstart="onCompositionStart"
@@ -661,7 +704,7 @@ onBeforeUnmount(stopPendingSearch)
               @focus="onFocus"
             />
 
-            <button v-if="query" type="button" class="clearbtn" aria-label="清空" @mousedown.prevent @click="reset">
+            <button v-if="inputQuery" type="button" class="clearbtn" aria-label="清空" @mousedown.prevent @click="reset">
               <Icon name="close" :size="13" />
             </button>
           </form>
@@ -693,20 +736,22 @@ onBeforeUnmount(stopPendingSearch)
         </div>
         <button class="findgo" @click="submitSearch">搜索</button>
       </header>
-    <div class="scroll search-scroll no-fade">
+    <div class="scroll search-scroll no-fade" ref="searchScroll">
       <div class="pad">
-          <div v-if="searched || query.trim()" class="segment result-tabs" aria-label="结果分组">
-            <button :class="{ on: tab === 'songs' }" @click="tab = 'songs'">
+          <div class="segment result-tabs" aria-label="结果分组">
+            <button :class="{ on: tab === 'songs' }" @click="selectTab('songs')">
               单曲 <em>{{ results.length }}</em>
             </button>
-            <button :class="{ on: tab === 'artists' }" @click="tab = 'artists'">
+            <button :class="{ on: tab === 'artists' }" @click="selectTab('artists')">
               歌手分组 <em>{{ artistGroups.length }}</em>
             </button>
-            <button :class="{ on: tab === 'playlists' }" @click="tab = 'playlists'">
-              本地歌单 <em>{{ playlistGroups.length }}</em>
+            <button :class="{ on: tab === 'playlists' }" @click="selectTab('playlists')">
+              歌单
             </button>
           </div>
       </div>
+      <PlaylistSearchPane v-show="tab === 'playlists'" ref="playlistPane" :query="playlistQuery" />
+      <template v-if="tab !== 'playlists'">
       <div class="pad search-filters">
         <div v-if="providers.length" class="chip-row source-filters">
           <button v-for="provider in providers" :key="provider.pluginId + ':' + provider.providerId" class="chip" :class="{ active: selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId }" @click="choose(provider)"><span v-if="selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId" class="dot" />{{ provider.name }}</button>
@@ -875,24 +920,6 @@ onBeforeUnmount(stopPendingSearch)
           <p v-if="!artistGroups.length" class="meta mt12">这批结果里没有可归类的歌手。</p>
         </div>
 
-        <div v-else class="pad mt4">
-          <button
-            v-for="playlist in playlistGroups"
-            :key="playlist.id"
-            class="songrow rowlink"
-            @click="$router.push(`/playlist/${playlist.id}`)"
-          >
-            <span class="cover plcover"><Icon name="library" :size="18" /></span>
-            <span class="meta-wrap">
-              <span class="t">{{ playlist.name }}</span>
-              <span class="a">{{ playlist.tracks.length }} 首 · 本地歌单</span>
-            </span>
-            <Icon name="chevron" :size="16" class="ink-4" />
-          </button>
-          <p v-if="!playlistGroups.length" class="meta mt12">
-            本地歌单里没有「{{ appliedQuery || query.trim() }}」，先在单曲里找找。
-          </p>
-        </div>
       </template>
 
       <section v-if="localMatches.length">
@@ -923,6 +950,7 @@ onBeforeUnmount(stopPendingSearch)
           <h3>想听点什么？</h3>
         </div>
       </div>
+      </template>
     </div>
   </div>
 </template>

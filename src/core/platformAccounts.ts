@@ -12,13 +12,30 @@ export const musicPlatforms = [
 ] as const
 type Phase = 'none' | 'saved' | 'verified'
 interface Account { phase: Phase; name: string; userId: string; busy: boolean; error: string }
-interface Session { cookies: string; name?: string; userId?: string }
+export interface PlatformSession { cookies: string; name?: string; userId?: string }
 const empty = (): Account => ({ phase: 'none', name: '', userId: '', busy: false, error: '' })
 export const platformAccounts = reactive<Record<PlatformId, Account>>({ tx: empty(), wy: empty(), kg: empty(), kw: empty(), mg: empty(), qs: empty() })
 export const platformLoginVisible = ref(false)
 const epochs: Record<PlatformId, number> = { tx: 0, wy: 0, kg: 0, kw: 0, mg: 0, qs: 0 }
 const writes = new Map<PlatformId, Promise<void>>()
 const namespace = (id: PlatformId): string => `music.platform.${id}`
+function validSession(value: any): value is PlatformSession {
+  return Boolean(value) && typeof value === 'object' && typeof value.cookies === 'string' &&
+    value.cookies.length > 0 && value.cookies.length <= 65536 && !/[\r\n]/.test(value.cookies)
+}
+/** Reads the Keystore-backed platform web session without exposing it to plugins or localStorage. */
+export async function readPlatformSession(id: PlatformId): Promise<PlatformSession | null> {
+  const raw = await secureStore.get(namespace(id), 'session')
+  if (!raw) return null
+  let value: any
+  try { value = JSON.parse(raw) } catch { throw new Error('平台会话格式无效，请重新登录') }
+  if (!validSession(value)) throw new Error('平台会话格式无效，请重新登录')
+  return {
+    cookies: value.cookies,
+    ...(typeof value.name === 'string' && value.name ? { name: value.name.slice(0, 80) } : {}),
+    ...(typeof value.userId === 'string' && value.userId ? { userId: value.userId.slice(0, 40) } : {})
+  }
+}
 function current(id: PlatformId, version: number): void { if (epochs[id] !== version) throw new Error('账号已变化，旧登录结果已取消') }
 function write(id: PlatformId, action: () => Promise<void>): Promise<void> {
   const next = (writes.get(id) || Promise.resolve()).catch(() => undefined).then(action)
@@ -40,7 +57,7 @@ export function verifiedIdentity(id: PlatformId, status: number, body: string): 
   }
   throw new Error('平台未确认登录身份，请重新登录；不会显示已登录')
 }
-async function identity(id: PlatformId, session: Session): Promise<{ userId: string; name: string } | undefined> {
+async function identity(id: PlatformId, session: PlatformSession): Promise<{ userId: string; name: string } | undefined> {
   if (!musicPlatforms.find(p => p.id === id)?.verifiesIdentity) return undefined
   const result = await verifyPlatformLogin(id, session.cookies)
   return verifiedIdentity(id, result.status, result.body)
@@ -52,7 +69,7 @@ export async function connectPlatform(id: PlatformId): Promise<void> {
   const version = ++epochs[id]
   state.busy = true; state.error = ''
   try {
-    const session: Session = { cookies: await openPlatformLogin(id) }
+    const session: PlatformSession = { cookies: await openPlatformLogin(id) }
     current(id, version)
     if (!session.cookies || session.cookies.length > 65536 || /[\r\n]/.test(session.cookies)) throw new Error('没有取得有效平台会话，原账号未修改')
     let user: { userId: string; name: string } | undefined
@@ -82,11 +99,9 @@ export async function refreshPlatformAccounts(): Promise<void> {
     state.busy = true; state.error = ''
     if (state.phase === 'verified') state.phase = 'saved'
     try {
-      const raw = await secureStore.get(namespace(id), 'session')
+      const session = await readPlatformSession(id)
       current(id, version)
-      if (!raw) { Object.assign(state, empty(), { busy: true }); return }
-      const session = JSON.parse(raw) as Session
-      if (typeof session.cookies !== 'string' || !session.cookies || session.cookies.length > 65536 || /[\r\n]/.test(session.cookies)) throw Error('Invalid session')
+      if (!session) { Object.assign(state, empty(), { busy: true }); return }
       Object.assign(state, { phase: 'saved', name: '', userId: '' })
       const user = await identity(id, session)
       current(id, version)

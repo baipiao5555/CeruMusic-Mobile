@@ -54,7 +54,7 @@ const showNav = computed(() => route.path !== '/player')
 const hasTrack = computed(() => Boolean(currentTrack()))
 const dockStyle = computed(() => ({
   '--dock-h': showNav.value
-    ? `calc(var(--tab-h) + ${hasTrack.value ? 'var(--mini-h) + ' : ''}var(--safe-bottom) + 1px)`
+    ? `calc(var(--tab-h) + ${hasTrack.value ? 'var(--mini-h) + ' : ''}var(--safe-bottom) + var(--dock-gap, 0px) + 1px)`
     : '0px'
 }))
 /** 三个主 Tab 与搜索保留状态：返回时不重复加载，也保留输入和滚动。 */

@@ -1499,4 +1499,47 @@ async function resetSettings(): Promise<void> {
 .result-empty .btn {
   margin-top: 4px;
 }
+
+@media (min-width: 768px) {
+  .scroll {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    column-gap: 28px;
+    padding-left: max(var(--pad), calc((100% - 1000px) / 2));
+    padding-right: max(var(--pad), calc((100% - 1000px) / 2));
+  }
+  .navrow,
+  .phead,
+  .metal,
+  .searchfield,
+  .jump,
+  .result-empty,
+  .flinks,
+  .fnote {
+    grid-column: 1 / -1;
+  }
+  .navrow { padding-top: 12px; }
+  .metal { margin-top: 10px; }
+  .jump {
+    min-height: 50px;
+    padding-top: 18px;
+  }
+  .scroll > section { min-width: 0; }
+  .scroll > section .group-title {
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 18px;
+  }
+  .scroll > section .pgrp,
+  .scroll > section .acc {
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .result-empty {
+    width: min(100%, 560px);
+    margin: 24px auto 0;
+  }
+  .flinks { padding-top: 30px; }
+}
 </style>

@@ -228,4 +228,36 @@ function playFavorite(index: number): void {
 .sh-input:focus { border-color: var(--tint); outline: 2px solid var(--tint-soft); }
 .sh-actions { display: flex; gap: 8px; padding-top: 14px; }
 @media (max-width: 375px) { .collection-tabs { gap: 21px; } .section-head h2 { font-size: 19px; } .sort-control select { max-width: 94px; } }
+
+@media (min-width: 768px) {
+  .playlists-head,
+  .collection-tabs,
+  .collection-section,
+  .import-actions,
+  .collection-footer {
+    width: min(100%, 980px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .playlists-head { padding-top: 6px; }
+  .collection-tabs { padding-top: 16px; padding-bottom: 14px; }
+  .liked-card {
+    width: calc(100% - var(--pad) * 2);
+    max-width: 980px;
+    margin: 0 auto 18px;
+  }
+  .collection-section .section-head { padding-top: 10px; }
+  .collection-note { max-width: 760px; }
+  .p-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px 24px;
+  }
+  .playlist-cover { border-radius: 14px; }
+  .pl .n { font-size: 15px; }
+  .empty { width: min(100%, 620px); margin-left: auto; margin-right: auto; }
+}
+
+@media (min-width: 1000px) {
+  .p-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 </style>

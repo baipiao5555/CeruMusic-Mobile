@@ -415,4 +415,81 @@ watch(providerKey, () => void load())
 .home-source-sheet { max-height:80dvh; overflow:auto; }.source-option { display:flex; align-items:center; gap:12px; justify-content:space-between; width:100%; min-height:64px; border-bottom:1px solid var(--line); }.source-option>span { min-width:0; }.source-option strong { display:block; font-size:14px; font-weight:500; }.source-option small { display:block; color:var(--ink-3); font-size:11px; margin-top:5px; }.source-option>.i { color:var(--tint); }
 [data-theme='dark'] .shortcut-tile { background:var(--surface-2); }
 @media(max-width:375px) { .home-channels { gap:17px; }.home-channels button { font-size:18px; }.home-channels .on { font-size:24px; }.home-actions .iconbtn { width:36px; }.spotlight-copy strong { font-size:20px; } }
+
+@media (min-width: 768px) {
+  .home-head,
+  .home-shortcuts,
+  .daily-entry,
+  .spotlight,
+  .home-source-footer,
+  .home-search,
+  .home-covers,
+  .home-note,
+  .empty {
+    width: min(100%, 980px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .discover-page .scroll > .pad {
+    width: min(100%, 980px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .home-head {
+    padding-left: var(--pad);
+    padding-right: var(--pad);
+  }
+  .home-search {
+    width: min(calc(100% - var(--pad) * 2), 760px);
+    margin-top: 14px;
+    margin-bottom: 22px;
+  }
+  .home-shortcuts {
+    gap: 14px;
+    margin-bottom: 26px;
+  }
+  .home-shortcuts button {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    min-height: 76px;
+    padding: 0 18px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    font-size: 13px;
+  }
+  .shortcut-tile {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+  .daily-entry {
+    width: min(calc(100% - var(--pad) * 2), 980px);
+    margin-bottom: 22px;
+  }
+  .spotlight {
+    width: min(calc(100% - var(--pad) * 2), 980px);
+    height: 184px;
+    padding: 24px;
+  }
+  .spotlight-copy { width: 56%; }
+  .spotlight-copy strong { font-size: 27px; }
+  .spotlight > img {
+    width: 200px;
+    height: 200px;
+    right: 10px;
+    bottom: -24px;
+  }
+  .home-covers .mediacard { width: 136px; }
+  .home-covers .cover {
+    width: 136px;
+    height: 136px;
+    border-radius: 12px;
+  }
+  .home-covers .ct { font-size: 13.5px; }
+  .home-skeletons { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .home-source-footer { padding-top: 28px; }
+  .empty { max-width: 560px; }
+}
 </style>

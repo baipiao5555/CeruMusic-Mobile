@@ -3,11 +3,11 @@ import { pluginState } from './plugin/manager'
 import { randomUUID } from '../shims/crypto'
 import type { Track } from './track'
 
-interface PortableTrack {
+export interface PortableTrack {
   id: string; title: string; artist: string; album: string; durationMs: number; artwork: string; qualities: string[]
   source: { manifestId: string; providerId: string; kind: string; id: string; requiresRebind: boolean }
 }
-interface PortablePlaylist { id: string; name: string; description: string; cover: string; createdAt: number; tracks: PortableTrack[] }
+export interface PortablePlaylist { id: string; name: string; description: string; cover: string; createdAt: number; tracks: PortableTrack[] }
 export interface LibrarySnapshot { schema: 'ceru.library.sync'; version: 1; createdAt: string; favorites: PortableTrack[]; playlists: PortablePlaylist[] }
 const MAX_BYTES = 8 * 1024 * 1024
 const MAX_TRACKS = 50000
@@ -19,9 +19,10 @@ function publicUrl(v: unknown): string {
 function portable(track: Track): PortableTrack {
   const p = pluginState.plugins.find(item => item.pluginId === track.pluginId)
   const imported = (track.ref?.data as any)?.syncImport
+  const importedRequiresRebind = typeof imported?.requiresRebind === 'boolean' ? imported.requiresRebind : undefined
   return { id: text(track.id), title: text(track.title), artist: text(track.artist), album: text(track.album), durationMs: Number.isFinite(track.durationMs) ? Math.max(0, track.durationMs) : 0,
     artwork: publicUrl(track.artwork), qualities: (track.qualities || []).filter(q => typeof q === 'string').slice(0, 20),
-    source: { manifestId: text(p?.manifestId || imported?.manifestId || track.pluginId), providerId: text(imported?.providerId || track.providerId), kind: text(imported?.kind || track.ref?.kind || 'track', 32), id: text(track.ref?.id || track.id), requiresRebind: Boolean(track.ref?.data || track.ref?.connectionId || track.pluginId === 'local' || track.ref?.scope !== 'provider') } }
+    source: { manifestId: text(p?.manifestId || imported?.manifestId || track.pluginId), providerId: text(imported?.providerId || track.providerId), kind: text(imported?.kind || track.ref?.kind || 'track', 32), id: text(track.ref?.id || track.id), requiresRebind: importedRequiresRebind ?? Boolean(track.ref?.data || track.ref?.connectionId || track.pluginId === 'local' || track.ref?.scope !== 'provider') } }
 }
 export function exportLibrarySnapshot(): LibrarySnapshot {
   return parseLibrarySnapshot(JSON.stringify({ schema: 'ceru.library.sync', version: 1, createdAt: new Date().toISOString(), favorites: libraryState.favorites.map(portable),
@@ -48,6 +49,11 @@ export function parseLibrarySnapshot(raw: string): LibrarySnapshot {
   return { schema: 'ceru.library.sync', version: 1, createdAt: text(v.createdAt, 64), favorites: v.favorites.map(track), playlists }
 }
 const key = (t: PortableTrack) => JSON.stringify([t.source.manifestId, t.source.providerId, t.source.id])
+/** Stable identity used to merge snapshots without trusting display names. */
+export function snapshotTrackKey(t: PortableTrack): string { return key(t) }
+export function snapshotCounts(snapshot: LibrarySnapshot): { playlists: number; tracks: number; favorites: number } {
+  return { playlists: snapshot.playlists.length, tracks: snapshot.playlists.reduce((n, p) => n + p.tracks.length, 0), favorites: snapshot.favorites.length }
+}
 export function commitLibrarySnapshot(input: LibrarySnapshot, options: { mode: 'merge' | 'replace' }): { undo(): void; counts: { playlists: number; tracks: number; favorites: number; pending: number } } {
   const snapshot = parseLibrarySnapshot(JSON.stringify(input))
   if (!['merge', 'replace'].includes(options.mode)) throw new Error('请选择合并或替换恢复方式')
@@ -62,7 +68,7 @@ export function commitLibrarySnapshot(input: LibrarySnapshot, options: { mode: '
     if (unavailable) pending++
     const providerId = unavailable ? 'sync-pending:' + t.source.providerId : t.source.providerId
     const pluginId = unavailable ? 'sync-pending' : owner!.pluginId
-    return { ...t, pluginId, providerId, providerName: owner?.providers.find(p => p.id === t.source.providerId)?.name || '待匹配音源', ref: { kind: 'track', id: t.source.id, providerId, ...(unavailable ? { data: { syncImport: { pending: true, manifestId: t.source.manifestId, providerId: t.source.providerId, kind: t.source.kind } } } : {scope:'provider'}) } } as Track
+    return { ...t, pluginId, providerId, providerName: owner?.providers.find(p => p.id === t.source.providerId)?.name || '待匹配音源', ref: { kind: 'track', id: t.source.id, providerId, ...(unavailable ? { data: { syncImport: { pending: true, manifestId: t.source.manifestId, providerId: t.source.providerId, kind: t.source.kind, requiresRebind: t.source.requiresRebind } } } : {scope:'provider'}) } } as Track
   }
   const incoming = snapshot.playlists.map(p => ({ id: p.id, name: p.name, createdAt: p.createdAt, description: p.description, cover: p.cover, tracks: p.tracks.map(bind) }))
   let playlists: LocalPlaylist[] = options.mode === 'replace' ? incoming : JSON.parse(JSON.stringify(libraryState.playlists))
@@ -77,4 +83,42 @@ export function commitLibrarySnapshot(input: LibrarySnapshot, options: { mode: '
   if (options.mode === 'merge') { const seen = new Set(favorites.filter(t=>!portable(t).source.requiresRebind).map(t => key(portable(t)))); for (const t of restoredFavorites) if (portable(t).source.requiresRebind || !seen.has(key(portable(t)))) { if(!portable(t).source.requiresRebind) seen.add(key(portable(t))); favorites.push(t) } }
   const committed = commitLibraryReplacement({ favorites, playlists })
   return { ...committed, counts: { playlists: incoming.length, tracks: incoming.reduce((n, p) => n + p.tracks.length, 0), favorites: restoredFavorites.length, pending } }
+}
+
+/**
+ * Apply a merged snapshot without discarding local-only playlist metadata.
+ * Tracks that already exist locally keep their private refs; remote-only
+ * tracks go through the same pending-binding path as a manual restore.
+ */
+export function applyLibrarySnapshot(input: LibrarySnapshot): { undo(): void; counts: { playlists: number; tracks: number; favorites: number; pending: number } } {
+  const snapshot = parseLibrarySnapshot(JSON.stringify(input))
+  const live = [...libraryState.favorites, ...libraryState.playlists.flatMap(p => p.tracks)]
+  const existingByKey = new Map<string, Track>()
+  for (const track of live) {
+    const identity = key(portable(track))
+    if (!existingByKey.has(identity)) existingByKey.set(identity, track)
+  }
+  let pending = 0
+  const bind = (t: PortableTrack): Track => {
+    const existing = existingByKey.get(key(t))
+    if (existing) {
+      return { ...existing, title: t.title, artist: t.artist, album: t.album, durationMs: t.durationMs, artwork: t.artwork, qualities: [...t.qualities] }
+    }
+    const owner = pluginState.plugins.find(p => p.manifestId === t.source.manifestId && p.providers.some(s => s.id === t.source.providerId))
+    const unavailable = !owner || t.source.requiresRebind || t.source.kind === 'local'
+    if (unavailable) pending++
+    const providerId = unavailable ? 'sync-pending:' + t.source.providerId : t.source.providerId
+    const pluginId = unavailable ? 'sync-pending' : owner!.pluginId
+    return { ...t, pluginId, providerId, providerName: owner?.providers.find(p => p.id === t.source.providerId)?.name || '待匹配音源',
+      ref: { kind: 'track', id: t.source.id, providerId, ...(unavailable ? { data: { syncImport: { pending: true, manifestId: t.source.manifestId, providerId: t.source.providerId, kind: t.source.kind, requiresRebind: t.source.requiresRebind } } } : {scope:'provider'}) } } as Track
+  }
+  const playlists = snapshot.playlists.map((p): LocalPlaylist => {
+    const existing = libraryState.playlists.find(item => item.id === p.id)
+    const tracks = p.tracks.map(bind)
+    if (existing) return { ...existing, name: p.name, description: p.description, cover: p.cover, createdAt: p.createdAt, tracks }
+    return { id: p.id, name: p.name, createdAt: p.createdAt, description: p.description, cover: p.cover, tracks }
+  })
+  const favorites = snapshot.favorites.map(bind)
+  const committed = commitLibraryReplacement({ favorites, playlists })
+  return { ...committed, counts: { playlists: playlists.length, tracks: playlists.reduce((n, p) => n + p.tracks.length, 0), favorites: favorites.length, pending } }
 }

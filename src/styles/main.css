@@ -1778,3 +1778,108 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   100% { background-position: -200% 0; }
 }
 
+/* ---------- 22. 平板 / 宽屏（≥768px） ----------
+   手机布局保持原样：宽度与导航形态的调整都锁在这个断点内。 */
+@media (min-width: 768px) {
+  :root {
+    --pad: 30px;
+    --app-max: 1080px;
+    --tab-h: 52px;
+    --mini-h: 54px;
+    --dock-gap: 26px;
+  }
+
+  html,
+  body {
+    background: var(--porcelain-2);
+  }
+
+  ion-app {
+    background: var(--porcelain-2);
+  }
+
+  /* 居中画布：不再把手机版 620px 的壳拉满平板，也不贴边。 */
+  .app-shell {
+    width: min(calc(100% - 32px), var(--app-max));
+    max-width: var(--app-max);
+    height: calc(100% - 32px);
+    margin: 16px auto;
+    border-radius: 28px;
+    box-shadow:
+      0 24px 70px -28px rgba(17, 35, 30, 0.34),
+      0 0 0 1px var(--line);
+  }
+
+  .screen {
+    border-radius: 28px;
+  }
+
+  .scroll {
+    padding-bottom: calc(var(--dock-h) + 36px);
+  }
+
+  /* 底部导航改为居中的悬浮胶囊，保留原有三个路由与文案。 */
+  .dock {
+    left: 50%;
+    right: auto;
+    bottom: calc(14px + var(--safe-bottom));
+    width: min(calc(100% - 56px), 760px);
+    transform: translateX(-50%);
+  }
+
+  .dock-inner {
+    padding-bottom: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: var(--sh-3);
+  }
+
+  .mini {
+    height: var(--mini-h);
+    padding: 0 14px 0 18px;
+  }
+
+  .mini .cover {
+    width: 36px;
+    height: 36px;
+    border-width: 2px;
+  }
+
+  .tabbar {
+    justify-content: center;
+    gap: 8px;
+    height: var(--tab-h);
+    padding: 0 10px;
+  }
+
+  .tab {
+    flex-direction: row;
+    gap: 8px;
+    min-width: 118px;
+    height: 42px;
+    padding: 0 18px;
+    border-radius: 13px;
+    font-size: 12.5px;
+  }
+
+  .tab .pillbg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .tab.on {
+    background: var(--tint-soft);
+  }
+
+  /* 平板上的弹层不再是一条贴着屏幕底边的手机抽屉。 */
+  .sheet-mask {
+    padding-bottom: 18px;
+  }
+
+  .sheet-mask .sheet {
+    width: min(100% - 48px, 600px);
+    border-radius: var(--r-xl);
+  }
+}
+

@@ -296,7 +296,7 @@ watch([() => authState.authenticated, () => authState.user?.sub], ([loggedIn]) =
         </div>
 
         <p class="p-foot">
-          「刷新目录」只读取云端歌单信息；「更新」或「全部导入」才下载歌曲列表。此页只读取澜音账号的云端歌单；QQ、网易云、酷狗、酷我、咪咕的平台登录会话不会自动出现在这里，平台歌单读取尚未接入。这是云端到本机的单向导入，不会上传本机改动，也不会同步音乐文件。本机曲目有增删时，需确认后才用云端版本覆盖。音源插件未安装时，会显示「未匹配音源」。
+          「刷新目录」只读取云端歌单信息；「更新」或「全部导入」才下载歌曲列表。此页只读取澜音账号的云端歌单；平台登录会话不会自动出现在这里。网易云平台歌单请从「我的 → 登录音乐平台 → 读取平台歌单」导入为本机歌单，其他平台暂不支持。这是云端到本机的单向导入，不会上传本机改动，也不会同步音乐文件。本机曲目有增删时，需确认后才用云端版本覆盖。音源插件未安装时，会显示「未匹配音源」。
         </p>
       </template>
 
@@ -636,5 +636,41 @@ watch([() => authState.authenticated, () => authState.user?.sub], ([loggedIn]) =
 }
 .scroll-end {
   height: 26px;
+}
+
+@media (min-width: 768px) {
+  .appbar,
+  .p-sh,
+  .p-list,
+  .p-foot,
+  .pad-x,
+  .sk-list {
+    width: min(100%, 940px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .appbar { padding-top: 10px; }
+  .p-conn {
+    width: min(calc(100% - var(--pad) * 2), 880px);
+    margin: 18px auto 0;
+  }
+  .p-addsrc {
+    width: min(calc(100% - var(--pad) * 2), 880px);
+    margin: 12px auto 0;
+  }
+  .p-sh { padding-top: 20px; }
+  .p-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 36px;
+  }
+  .p-item { min-height: 66px; }
+  .p-foot { max-width: 880px; }
+  .empty {
+    width: min(100%, 620px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .scroll-end { height: 32px; }
 }
 </style>

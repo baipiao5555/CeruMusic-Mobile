@@ -235,4 +235,47 @@ onBeforeUnmount(() => { requestSeq += 1; categorySeq += 1 })
 .browse-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:9px var(--pad); }.browse-play-all { display:flex; align-items:center; min-height:44px; gap:9px; font-size:14px; font-weight:600; }.browse-play-all>span { width:30px; height:30px; border-radius:50%; background:var(--tint); color:var(--ink-inv); display:grid; place-items:center; }.browse-play-all small { font-size:12px; color:var(--ink-3); font-weight:400; }.browse-toolbar>span { font-size:11px; color:var(--ink-3); }.browse-tracks :deep(.songrow) { padding-left:0; padding-right:0; }
 .skelrow { display:flex; align-items:center; gap:12px; min-height:64px; }.skelcov { width:44px; height:44px; flex:none; border-radius:9px; }.skellines { flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; }.skelt,.skela { height:11px; width:60%; display:block; }.skela { height:9px; width:35%; }
 @media(max-width:375px) { .browse-hero>img { width:112px; height:112px; }.browse-hero h2 { font-size:19px; }.browse-hero { gap:14px; } }
+
+@media (min-width: 768px) {
+  .browse-top,
+  .catalog-tabs,
+  .catalog-sources,
+  .catalog-categories,
+  .catalog-grid,
+  .catalog-notice,
+  .catalog-foot,
+  .browse-hero,
+  .browse-toolbar,
+  .browse-tracks,
+  .browse-page .scroll > .pad,
+  .browse-page .empty {
+    width: min(100%, 980px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .browse-top {
+    padding-left: var(--pad);
+    padding-right: var(--pad);
+  }
+  .browse-top h1 { font-size: 18px; }
+  .catalog-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 32px 24px;
+  }
+  .catalog-grid .cover { border-radius: 14px; }
+  .catalog-grid .ct { font-size: 15px; }
+  .browse-hero { padding: 28px var(--pad) 32px; }
+  .browse-hero > img {
+    width: 168px;
+    height: 168px;
+    border-radius: 14px;
+  }
+  .browse-hero h2 { font-size: 27px; }
+  .browse-toolbar { padding-top: 14px; padding-bottom: 12px; }
+  .browse-page .empty { max-width: 620px; }
+}
+
+@media (min-width: 1000px) {
+  .catalog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 </style>

@@ -433,4 +433,61 @@ function openImport(): void {
 .about-logo { width: 60px; height: 60px; border-radius: 15px; margin-bottom: 12px; }
 .about-name { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
 @media (max-width: 375px) { .library-tabs { gap: 14px; } .library-shortcuts small { font-size: 10.5px; } }
+
+@media (min-width: 768px) {
+  .library-head,
+  .profile,
+  .library-shortcuts,
+  .recent-section,
+  .music-section,
+  .tools-section {
+    width: min(100%, 980px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .library-head { padding-top: 6px; }
+  .profile { padding-top: 26px; padding-bottom: 18px; }
+  .profile-main { max-width: 680px; }
+  .library-shortcuts {
+    gap: 14px;
+    padding: 6px 0 26px;
+    border-bottom: 0;
+  }
+  .library-shortcuts button {
+    min-height: 96px;
+    gap: 9px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+  }
+  .library-shortcuts button:active { background: var(--tint-softer); }
+  .library-shortcuts span { font-size: 14px; font-weight: 600; }
+  .library-shortcuts small { font-size: 11.5px; }
+  .recent-strip {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 16px;
+    overflow: visible;
+  }
+  .recent-card { width: 100%; }
+  .recent-art img { width: 100%; height: auto; aspect-ratio: 1; border-radius: 12px; }
+  .recent-card strong { font-size: 13.5px; }
+  .asset-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 36px;
+  }
+  .asset-row,
+  .asset-open { min-height: 84px; }
+  .song-list { width: min(100%, 820px); margin: 0 auto; }
+  .playlist-actions { padding-top: 14px; }
+  .tool-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 40px;
+    border-top: 0;
+  }
+  .tool-list button { min-height: 76px; }
+  .empty { width: min(100%, 620px); margin-left: auto; margin-right: auto; }
+}
 </style>

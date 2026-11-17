@@ -991,4 +991,112 @@ onUnmounted(() => {
   .player *, .player *::after { animation-duration: .01ms !important; transition: none !important; }
   .p-record { animation: none !important; }
 }
+
+@media (min-width: 768px) {
+  .p-top {
+    padding-left: max(18px, calc((100% - 920px) / 2));
+    padding-right: max(18px, calc((100% - 920px) / 2));
+  }
+  .p-tabs {
+    width: min(100%, 520px);
+    margin: 0 auto;
+  }
+  .p-main {
+    padding-left: max(28px, calc((100% - 560px) / 2));
+    padding-right: max(28px, calc((100% - 560px) / 2));
+  }
+  .p-core {
+    width: 100%;
+    max-width: 540px;
+    margin: 0 auto;
+  }
+  .p-art {
+    max-width: 360px;
+    max-height: 360px;
+  }
+  .p-title { font-size: 25px; }
+  .p-lyric-cur { font-size: 18px; }
+  .ly-top {
+    padding-left: max(18px, calc((100% - 920px) / 2));
+    padding-right: max(18px, calc((100% - 920px) / 2));
+  }
+  .ly-box {
+    padding-left: max(32px, calc((100% - 820px) / 2));
+    padding-right: max(32px, calc((100% - 820px) / 2));
+  }
+  .ly-foot {
+    padding-left: max(28px, calc((100% - 880px) / 2));
+    padding-right: max(28px, calc((100% - 880px) / 2));
+  }
+  .ly-line { font-size: calc(24px * var(--ly-scale, 1)); }
+}
+
+/* 横屏平板：封面与歌词/控制区分两栏，避免把唱片拉到整屏宽。 */
+@media (min-width: 768px) and (orientation: landscape) {
+  .p-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px clamp(24px, 4vw, 56px) calc(16px + var(--safe-bottom));
+  }
+  .p-core {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+    grid-template-rows: minmax(0, 1fr) auto auto auto auto;
+    column-gap: clamp(28px, 4.5vw, 64px);
+    row-gap: 6px;
+    width: min(100%, 980px);
+    max-width: 980px;
+    height: 100%;
+    min-height: 0;
+    margin: 0 auto;
+  }
+  .p-art {
+    grid-column: 1;
+    grid-row: 1;
+    width: auto;
+    height: min(100%, 342px);
+    max-width: 342px;
+    max-height: 342px;
+    margin-top: 0;
+    align-self: center;
+    justify-self: center;
+  }
+  .p-meta {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: start;
+    padding-top: 4px;
+  }
+  .p-title { font-size: 24px; }
+  .p-lyric {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .p-lyric-line.focus-slot { height: 56px; }
+  .p-lyric-cur {
+    font-size: 18px;
+    line-height: 26px;
+    max-height: 52px;
+  }
+  .p-seek {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: center;
+    width: 100%;
+  }
+  .p-ctrl {
+    grid-column: 2;
+    grid-row: 4;
+    width: 100%;
+    max-width: 420px;
+    justify-self: center;
+  }
+  .p-tools {
+    grid-column: 2;
+    grid-row: 5;
+    justify-content: space-around;
+    padding-top: 2px;
+  }
+}
 </style>

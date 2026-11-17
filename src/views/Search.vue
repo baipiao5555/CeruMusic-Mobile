@@ -1253,4 +1253,21 @@ onBeforeUnmount(stopPendingSearch)
 .search-scroll .hint-empty .empty { padding-top:42px; }.search-page .group-title .en { display:none; }
 @media(max-width:375px) { .result-tabs { gap:17px; }.result-tabs>button { font-size:14px; }.result-tabs em { font-size:9px; }.modetog { padding:0 8px; }.search-filters { gap:6px; } }
 
+@media (min-width: 768px) {
+  .search-header {
+    width: min(100%, 880px);
+    margin: 0 auto;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .search-scroll > * {
+    width: min(100%, 900px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .suggest { max-height: 52vh; }
+  .result-tabs { gap: 32px; }
+  .search-page .section-head { padding-top: 6px; }
+}
+
 </style>

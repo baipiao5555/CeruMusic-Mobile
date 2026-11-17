@@ -3,18 +3,20 @@ import { secureStore } from './native/secureStore'
 import { openPlatformLogin, verifyPlatformLogin, type PlatformId } from './native/platformLogin'
 
 export const musicPlatforms = [
-  { id: 'tx', name: 'QQ音乐', mark: 'QQ', color: '#12ad70', verifiesIdentity: true },
-  { id: 'wy', name: '网易云音乐', mark: 'NE', color: '#e66379', verifiesIdentity: true },
-  { id: 'kg', name: '酷狗音乐', mark: 'KG', color: '#5782cf', verifiesIdentity: false },
-  { id: 'kw', name: '酷我音乐', mark: 'KW', color: '#d8a03c', verifiesIdentity: false }
+  { id: 'tx', name: 'QQ音乐', mark: 'QQ', color: '#12ad70', verifiesIdentity: true, webLogin: true },
+  { id: 'wy', name: '网易云音乐', mark: 'NE', color: '#e66379', verifiesIdentity: true, webLogin: true },
+  { id: 'kg', name: '酷狗音乐', mark: 'KG', color: '#5782cf', verifiesIdentity: false, webLogin: true },
+  { id: 'kw', name: '酷我音乐', mark: 'KW', color: '#d8a03c', verifiesIdentity: false, webLogin: true },
+  { id: 'mg', name: '咪咕音乐', mark: 'MG', color: '#d14e81', verifiesIdentity: false, webLogin: true },
+  { id: 'qs', name: '汽水音乐', mark: 'QS', color: '#8557da', verifiesIdentity: false, webLogin: false }
 ] as const
 type Phase = 'none' | 'saved' | 'verified'
 interface Account { phase: Phase; name: string; userId: string; busy: boolean; error: string }
 interface Session { cookies: string; name?: string; userId?: string }
 const empty = (): Account => ({ phase: 'none', name: '', userId: '', busy: false, error: '' })
-export const platformAccounts = reactive<Record<PlatformId, Account>>({ tx: empty(), wy: empty(), kg: empty(), kw: empty() })
+export const platformAccounts = reactive<Record<PlatformId, Account>>({ tx: empty(), wy: empty(), kg: empty(), kw: empty(), mg: empty(), qs: empty() })
 export const platformLoginVisible = ref(false)
-const epochs: Record<PlatformId, number> = { tx: 0, wy: 0, kg: 0, kw: 0 }
+const epochs: Record<PlatformId, number> = { tx: 0, wy: 0, kg: 0, kw: 0, mg: 0, qs: 0 }
 const writes = new Map<PlatformId, Promise<void>>()
 const namespace = (id: PlatformId): string => `music.platform.${id}`
 function current(id: PlatformId, version: number): void { if (epochs[id] !== version) throw new Error('账号已变化，旧登录结果已取消') }
@@ -45,6 +47,7 @@ async function identity(id: PlatformId, session: Session): Promise<{ userId: str
 }
 export async function connectPlatform(id: PlatformId): Promise<void> {
   const state = platformAccounts[id]
+  if (!musicPlatforms.find(p => p.id === id)?.webLogin) { state.error = '汽水音乐普通用户网页会话尚未接入，请使用官方 App 登录'; return }
   if (state.busy) return
   const version = ++epochs[id]
   state.busy = true; state.error = ''
@@ -63,6 +66,7 @@ export async function connectPlatform(id: PlatformId): Promise<void> {
 }
 export async function refreshPlatformAccounts(): Promise<void> {
   await Promise.all(musicPlatforms.map(async ({ id }) => {
+    if (!musicPlatforms.find(p => p.id === id)?.webLogin) return
     const state = platformAccounts[id]
     if (state.busy) return
     const version = ++epochs[id]

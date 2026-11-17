@@ -1,7 +1,7 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { mainFrameCapability } from './mainFrameCapability'
 
-export type PlatformId = 'tx' | 'wy' | 'kg' | 'kw'
+export type PlatformId = 'tx' | 'wy' | 'kg' | 'kw' | 'mg' | 'qs'
 interface NativePlatformLogin {
   initialize(): Promise<void>
   open(options: { platform: PlatformId; capability: string }): Promise<{ cookies: string }>

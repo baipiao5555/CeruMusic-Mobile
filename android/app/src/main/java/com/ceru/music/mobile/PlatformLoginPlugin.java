@@ -39,8 +39,10 @@ import java.util.concurrent.Executors;
 /** Fixed official pages only. The remote WebView has NO Capacitor or JavaScript bridge. */
 @CapacitorPlugin(name = "PlatformLogin")
 public class PlatformLoginPlugin extends Plugin {
+    private static final String DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
     private MainFrameGuard guard;
     private String mobileCss = "";
+    private String portalScript = "";
     private Dialog dialog;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     @Override public void load() {
@@ -50,6 +52,11 @@ public class PlatformLoginPlugin extends Plugin {
             while ((count = input.read(buffer)) != -1) { if (output.size() + count > 32768) break; output.write(buffer, 0, count); }
             mobileCss = new String(output.toByteArray(), StandardCharsets.UTF_8);
         } catch (Exception ignored) { /* Official form remains usable without cosmetic CSS. */ }
+        try (InputStream input = getContext().getResources().openRawResource(R.raw.platform_portal_login)) {
+            ByteArrayOutputStream output = new ByteArrayOutputStream(); byte[] buffer = new byte[4096]; int count;
+            while ((count = input.read(buffer)) != -1) { if (output.size() + count > 32768) break; output.write(buffer, 0, count); }
+            portalScript = new String(output.toByteArray(), StandardCharsets.UTF_8);
+        } catch (Exception ignored) { /* Compatibility view is still available. */ }
     }
     @PluginMethod public void initialize(PluginCall call) { guard.initialize(call); }
     private boolean require(PluginCall call) {
@@ -61,26 +68,45 @@ public class PlatformLoginPlugin extends Plugin {
         if ("wy".equals(id)) return "https://music.163.com/#/login";
         if ("kg".equals(id)) return "https://www.kugou.com/";
         if ("kw".equals(id)) return "https://www.kuwo.cn/";
+        if ("mg".equals(id)) return "https://music.migu.cn/v5/";
         throw new IllegalArgumentException("不支持此平台登录");
     }
     private static String title(String id) {
         if ("tx".equals(id)) return "QQ音乐";
         if ("wy".equals(id)) return "网易云音乐";
         if ("kg".equals(id)) return "酷狗音乐";
-        return "酷我音乐";
+        if ("kw".equals(id)) return "酷我音乐";
+        if ("mg".equals(id)) return "咪咕音乐";
+        throw new IllegalArgumentException("不支持此平台登录");
     }
-    /** Same QQMusic app and callback as the current official website, but no desktop homepage around it. */
+    /** QQ music uses its current official page; the old graph mobile form is no longer usable. */
     private static String entry(String id, boolean desktop, boolean wechat) {
+        if ("kg".equals(id) && !desktop) return "https://m.kugou.com/loginReg.php?act=login";
+        if ("wy".equals(id)) return site(id);
         if (!"tx".equals(id)) return site(id);
+        if (!wechat) return site(id);
         String redirect = "https://y.qq.com/portal/wx_redirect.html?login_type=" + (wechat ? "2" : "1") + "&surl=" + Uri.encode(site(id));
-        if (wechat) return Uri.parse("https://open.weixin.qq.com/connect/qrconnect").buildUpon()
+        return Uri.parse("https://open.weixin.qq.com/connect/qrconnect").buildUpon()
                 .appendQueryParameter("appid", "wx48db31d50e334801").appendQueryParameter("redirect_uri", redirect)
                 .appendQueryParameter("response_type", "code").appendQueryParameter("scope", "snsapi_login")
                 .appendQueryParameter("state", "STATE").build().toString();
-        return Uri.parse("https://graph.qq.com/oauth2.0/show").buildUpon().appendQueryParameter("which", "Login")
-                .appendQueryParameter("display", desktop ? "pc" : "mobile").appendQueryParameter("response_type", "code")
-                .appendQueryParameter("client_id", "100497308").appendQueryParameter("redirect_uri", redirect)
-                .appendQueryParameter("state", "state").appendQueryParameter("scope", "get_user_info,get_app_friends").build().toString();
+    }
+    private String mobileUserAgent() {
+        // Some login providers reject the WebView token. Keep the real engine version, but present a Chrome mobile UA.
+        return WebSettings.getDefaultUserAgent(getContext()).replace("; wv", "").replace("Version/4.0 ", "");
+    }
+    private String cookieHeader(String id, String url) {
+        CookieManager manager = CookieManager.getInstance();
+        StringBuilder raw = new StringBuilder();
+        appendCookie(raw, manager.getCookie(url));
+        if ("wy".equals(id)) appendCookie(raw, manager.getCookie("https://y.music.163.com/m/login"));
+        if ("tx".equals(id)) appendCookie(raw, manager.getCookie("https://graph.qq.com/"));
+        return raw.toString();
+    }
+    private static void appendCookie(StringBuilder raw, String value) {
+        if (value == null || value.isEmpty()) return;
+        if (raw.length() > 0) raw.append("; ");
+        raw.append(value);
     }
     private GradientDrawable rounded(int color, int radiusDp) {
         GradientDrawable shape = new GradientDrawable(); shape.setColor(color);
@@ -91,6 +117,8 @@ public class PlatformLoginPlugin extends Plugin {
         if ("wy".equals(id)) return new String[]{"MUSIC_U", "__csrf"};
         if ("kg".equals(id)) return new String[]{"KuGoo"};
         if ("kw".equals(id)) return new String[]{"userid", "sid", "websid", "username", "uname3", "logintype", "t3", "t3kwid"};
+        // Official Migu music SDK uses pacmtoken on .migu.cn with sourceid 220029.
+        if ("mg".equals(id)) return new String[]{"pacmtoken"};
         throw new IllegalArgumentException("不支持此平台登录");
     }
     private static Map<String, String> cookies(String id, String raw) {
@@ -111,15 +139,24 @@ public class PlatformLoginPlugin extends Plugin {
         }
         return result.toString();
     }
+    private static String suffix(String id) {
+        if ("tx".equals(id)) return "qq.com";
+        if ("wy".equals(id)) return "163.com";
+        if ("kg".equals(id)) return "kugou.com";
+        if ("kw".equals(id)) return "kuwo.cn";
+        if ("mg".equals(id)) return "migu.cn";
+        throw new IllegalArgumentException("不支持此平台登录");
+    }
     private static boolean allowed(String id, String raw) {
         Uri uri = Uri.parse(raw); String host = uri.getHost();
         if (!"https".equals(uri.getScheme()) || host == null || uri.getUserInfo() != null || (uri.getPort() != -1 && uri.getPort() != 443)) return false;
-        String suffix = "tx".equals(id) ? "qq.com" : "wy".equals(id) ? "163.com" : "kg".equals(id) ? "kugou.com" : "kuwo.cn";
-        return host.equals(suffix) || host.endsWith("." + suffix) || host.equals("open.weixin.qq.com");
+        String suffix = suffix(id);
+        return host.equals(suffix) || host.endsWith("." + suffix) || host.equals("open.weixin.qq.com")
+                || "mg".equals(id) && (host.equals("graph.qq.com") || host.equals("xui.ptlogin2.qq.com") || host.equals("www.cmpassport.com"));
     }
     private static void clearCookies(String id) {
         String host = Uri.parse(site(id)).getHost();
-        String suffix = "tx".equals(id) ? "qq.com" : "wy".equals(id) ? "163.com" : "kg".equals(id) ? "kugou.com" : "kuwo.cn";
+        String suffix = suffix(id);
         CookieManager manager = CookieManager.getInstance();
         // Clear this platform's temporary browser cookies, not the app's Logto or unrelated websites.
         java.util.Set<String> names = new java.util.HashSet<>(java.util.Arrays.asList(cookieNames(id)));
@@ -156,9 +193,10 @@ public class PlatformLoginPlugin extends Plugin {
             Button done = layout.findViewById(R.id.login_done);
             WebView web = layout.findViewById(R.id.login_web);
             heading.setText(title(id) + "登录");
-            brand.setText("tx".equals(id) ? "QQ" : "wy".equals(id) ? "NE" : "kg".equals(id) ? "KG" : "KW");
+            brand.setText("tx".equals(id) ? "QQ" : "wy".equals(id) ? "NE" : "kg".equals(id) ? "KG" : "kw".equals(id) ? "KW" : "MG");
             brand.setBackground(rounded(Color.parseColor("#E8F8EF"), 12));
-            final boolean[] desktop = { "kg".equals(id) || "kw".equals(id) }, wechat = { false };
+            final boolean[] desktop = { "tx".equals(id) }, wechat = { false };
+            final int[] presentationVersion = { 0 };
             if (!"tx".equals(id)) layout.findViewById(R.id.login_methods).setVisibility(View.GONE);
             WebSettings settings = web.getSettings(); settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
             settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setSaveFormData(false);
@@ -170,16 +208,16 @@ public class PlatformLoginPlugin extends Plugin {
             CookieManager.getInstance().setAcceptCookie(true);
             Runnable loadPage = () -> {
                 String target = entry(id, desktop[0], wechat[0]);
-                settings.setUserAgentString(desktop[0] ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" : WebSettings.getDefaultUserAgent(getContext()));
+                settings.setUserAgentString(desktop[0] || "kw".equals(id) ? DESKTOP_UA : mobileUserAgent());
                 origin.setText(Uri.parse(target).getHost() + " · 官方安全网页");
-                status.setText("请在官方页面完成登录，再点下方按钮。");
-                compat.setText(desktop[0] ? "手机视图" : "兼容视图");
+                status.setText("tx".equals(id) ? "在官方网页选择「密码登录」或扫码，完成后点下方按钮。" : "请在官方页面完成登录，再点下方按钮。");
+                compat.setText("tx".equals(id) ? "重新加载" : desktop[0] ? "手机视图" : "兼容视图");
                 qq.setBackground(rounded(Color.parseColor(wechat[0] ? "#F6F8F7" : "#E8F8EF"), 9));
                 wx.setBackground(rounded(Color.parseColor(wechat[0] ? "#E8F8EF" : "#F6F8F7"), 9));
-                done.setEnabled(false); progress.setVisibility(View.VISIBLE); web.loadUrl(target);
+                presentationVersion[0]++; done.setEnabled(false); progress.setVisibility(View.VISIBLE); web.loadUrl(target);
             };
             layout.findViewById(R.id.login_close).setOnClickListener(v -> window.dismiss());
-            compat.setOnClickListener(v -> { desktop[0] = !desktop[0]; loadPage.run(); });
+            compat.setOnClickListener(v -> { if ("tx".equals(id)) { loadPage.run(); return; } desktop[0] = !desktop[0]; loadPage.run(); });
             qq.setOnClickListener(v -> { wechat[0] = false; loadPage.run(); });
             wx.setOnClickListener(v -> { wechat[0] = true; loadPage.run(); });
             web.setWebChromeClient(new WebChromeClient() {
@@ -196,17 +234,36 @@ public class PlatformLoginPlugin extends Plugin {
                             // Insert only a stylesheet into the original official page. Never read/replace password inputs.
                             view.evaluateJavascript("(function(){var s=document.getElementById('ceru-mobile-style');if(!s){s=document.createElement('style');s.id='ceru-mobile-style';document.head.appendChild(s);}s.textContent=" + JSONObject.quote(mobileCss) + ";})()", null);
                         }
+                        if (("tx".equals(id) && desktop[0]) || (!desktop[0] && ("kg".equals(id) || "kw".equals(id) || "mg".equals(id)))) {
+                            preparePresentation(view, 0, presentationVersion[0]);
+                        }
+                        if (!desktop[0] && "wy".equals(id)) {
+                            // Hide only the carrier quick-login probe; its timeout toast overlays the official SMS form.
+                            view.evaluateJavascript("(function(){function h(){var f=document.querySelectorAll('iframe[src*=\\\"urs-nelogin-agent\\\"]');for(var i=0;i<f.length;i++){f[i].style.display='none';}}h();if(!window.__ceruWyHide){window.__ceruWyHide=new MutationObserver(h);window.__ceruWyHide.observe(document.documentElement,{childList:true,subtree:true});}})()", null);
+                        }
                     }
+                }
+                private void preparePresentation(WebView view, int attempt, int version) {
+                    if (version != presentationVersion[0] || dialog != window || portalScript.isEmpty()) return;
+                    done.setEnabled(false);
+                    view.evaluateJavascript(portalScript + "(" + JSONObject.quote(id) + ")", result -> {
+                        if (version != presentationVersion[0] || dialog != window) return;
+                        boolean ready = false;
+                        try { ready = new JSONObject(result).optBoolean("ready"); } catch (Exception ignored) { }
+                        if (ready) { done.setEnabled(true); return; }
+                        if (attempt < 24) view.postDelayed(() -> preparePresentation(view, attempt + 1, version), 250);
+                        else { status.setText("tx".equals(id) ? "官方登录层未加载，请点右上角重新加载。" : "专用登录视图未能加载，请切换兼容视图。"); done.setEnabled(true); }
+                    });
                 }
                 @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) { handler.cancel(); status.setText("登录网页证书错误，未放行；请检查网络。"); }
             });
             final boolean[] completed = { false };
             done.setOnClickListener(v -> {
                 if (!require(call)) { window.dismiss(); return; }
-                String raw = CookieManager.getInstance().getCookie(url);
+                String raw = cookieHeader(id, url);
                 Map<String, String> values;
                 try { values = cookies(id, raw); } catch (Exception e) { status.setText("还没有取得平台会话，请先在网页完成登录。"); return; }
-                boolean present = "tx".equals(id) ? values.containsKey("qqmusic_key") || values.containsKey("qm_keyst") || values.containsKey("wxmusic_key") : "wy".equals(id) ? values.containsKey("MUSIC_U") : "kg".equals(id) ? values.containsKey("KuGoo") : values.containsKey("sid") || values.containsKey("websid");
+                boolean present = "tx".equals(id) ? values.containsKey("qqmusic_key") || values.containsKey("qm_keyst") || values.containsKey("wxmusic_key") : "wy".equals(id) ? values.containsKey("MUSIC_U") : "kg".equals(id) ? values.containsKey("KuGoo") : "mg".equals(id) ? values.containsKey("pacmtoken") : values.containsKey("sid") || values.containsKey("websid");
                 if (!present) { status.setText("还没有取得登录会话。请先点击网页的登录入口并完成登录。"); return; }
                 JSObject result = new JSObject(); result.put("cookies", header(values)); completed[0] = true;
                 call.resolve(result); window.dismiss();

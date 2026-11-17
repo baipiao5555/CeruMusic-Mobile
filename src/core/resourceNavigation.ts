@@ -21,3 +21,4 @@ export function retainResource(owner: ProviderHandle, item: any, artwork: string
 export function resourceContext(token: unknown): ResourceContext | undefined {
   return typeof token === 'string' ? resources.get(token) : undefined
 }
+export function invalidateOwnerResources(pluginId: string): void { for (const [key, value] of resources) if (value.pluginId === pluginId) resources.delete(key) }

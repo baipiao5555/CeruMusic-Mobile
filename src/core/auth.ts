@@ -53,6 +53,20 @@ export const authState = reactive({
 
 let session: StoredSession | null = null
 let refreshing: Promise<string> | null = null
+let sessionVersion = 0
+
+/** Async cloud/login work must discard results when the account lifecycle changes. */
+export function getAuthSessionVersion(): number { return sessionVersion }
+
+function invalidateSession(): number {
+  refreshing = null
+  authState.loading = false
+  return ++sessionVersion
+}
+
+function assertSessionVersion(version: number): void {
+  if (version !== sessionVersion) throw new Error('账号状态已变化，已取消旧登录请求')
+}
 
 function persist(): void {
   try {
@@ -142,21 +156,23 @@ function applyTokens(tokens: TokenResponse): void {
 async function refreshSession(): Promise<string> {
   if (!session?.refreshToken) throw new Error('登录已过期，请重新登录')
   if (refreshing) return refreshing
+  const version = sessionVersion, refreshToken = session.refreshToken
   refreshing = (async () => {
     try {
       const tokens = await tokenRequest({
         grant_type: 'refresh_token',
         client_id: APP_ID,
-        refresh_token: session!.refreshToken!,
+        refresh_token: refreshToken,
         resource: API_RESOURCE
       })
+      assertSessionVersion(version)
       applyTokens(tokens)
       return session!.accessToken
     } catch (error) {
-      clearSession()
+      if (version === sessionVersion) clearSession()
       throw error
     } finally {
-      refreshing = null
+      if (version === sessionVersion) refreshing = null
     }
   })()
   return refreshing
@@ -172,6 +188,7 @@ export async function getAccessToken(): Promise<string> {
 }
 
 function clearSession(): void {
+  invalidateSession()
   session = null
   authState.authenticated = false
   authState.user = null
@@ -184,6 +201,7 @@ function restoreSession(): void {
     if (!raw) return
     const saved = JSON.parse(raw) as StoredSession
     if (!saved?.accessToken) return
+    invalidateSession()
     session = saved
     authState.authenticated = true
     authState.user = saved.user ?? userFromIdToken(saved.idToken)
@@ -229,10 +247,12 @@ export function buildAuthorizeUrl(challenge: string, state: string, nonce: strin
 /** Opens the Logto sign-in page in the system browser. */
 export async function login(): Promise<void> {
   authState.error = ''
+  const version = invalidateSession()
   const verifier = base64Url(randomBytes(48))
   const state = base64Url(randomBytes(24))
   const nonce = base64Url(randomBytes(24))
   const challenge = await codeChallenge(verifier)
+  assertSessionVersion(version)
   try {
     localStorage.setItem(PENDING_KEY, JSON.stringify({ verifier, state, nonce, createdAt: Date.now() }))
   } catch {}
@@ -273,6 +293,7 @@ export async function handleAuthCallback(rawUrl: string): Promise<AuthUser | nul
   const state = params.get('state') ?? ''
   if (state !== pending.state) throw new Error('登录状态校验失败，请重新登录')
 
+  const version = sessionVersion
   authState.loading = true
   try {
     const tokens = await tokenRequest({
@@ -283,17 +304,20 @@ export async function handleAuthCallback(rawUrl: string): Promise<AuthUser | nul
       code_verifier: pending.verifier,
       resource: API_RESOURCE
     })
+    assertSessionVersion(version)
     const claims = tokens.id_token ? decodeJwtPayload(tokens.id_token) : null
     if (claims?.nonce && claims.nonce !== pending.nonce) {
       throw new Error('登录校验失败，请重新登录')
     }
+    invalidateSession()
+    session = null
     applyTokens(tokens)
     try {
       localStorage.removeItem(PENDING_KEY)
     } catch {}
     return authState.user
   } finally {
-    authState.loading = false
+    if (version === sessionVersion) authState.loading = false
   }
 }
 

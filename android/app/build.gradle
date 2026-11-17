@@ -13,8 +13,8 @@ android {
         applicationId "com.ceru.music.mobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 24037
-        versionName "2.6.19"
+        versionCode 24039
+        versionName "2.6.21"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -55,11 +55,14 @@ configurations.all {
         // are already available in 1.13 and our toolchain stays on AGP 8.2.
         force 'androidx.core:core:1.13.1'
         force 'androidx.core:core-ktx:1.13.1'
+        force 'com.squareup.okio:okio:2.9.0'
     }
 }
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
+    // HttpURLConnection cannot issue WebDAV PROPFIND/MKCOL methods.
+    implementation 'com.squareup.okhttp3:okhttp:4.9.2'
     implementation 'io.github.proify.lyricon:provider:0.1.70' 
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"

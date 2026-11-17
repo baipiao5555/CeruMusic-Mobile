@@ -13,6 +13,9 @@ export interface LocalPlaylist {
   /** 云端歌单 id（来自澜音账号的云歌单） */
   cloudId?: string
   cloudUpdatedAt?: string
+  cloudOwnerId?: string
+  /** Last successfully imported identities; local additions and deletions need confirmation. */
+  cloudBaselineKeys?: string[]
   origin?: { type: 'file'; format: string; externalId?: string }
 }
 
@@ -33,6 +36,24 @@ export interface PlaylistImportResult {
 }
 
 const KEY = 'ceru.library.v1'
+
+/** A single durable write precedes reactive replacement; used by snapshot restore. */
+export function commitLibraryReplacement(next: { favorites: Track[]; playlists: LocalPlaylist[] }): { undo(): void } {
+  if (!Array.isArray(next?.favorites) || !Array.isArray(next?.playlists)) throw new Error('歌单快照格式错误')
+  const before = JSON.stringify({ favorites: libraryState.favorites, playlists: libraryState.playlists })
+  const after = JSON.stringify(next)
+  const save = (text: string): void => {
+    try { localStorage.setItem(KEY, text) } catch { throw new Error('本地保存失败，原歌单库未修改') }
+    const value = JSON.parse(text)
+    libraryState.favorites = value.favorites
+    libraryState.playlists = value.playlists
+  }
+  save(after)
+  return { undo: () => {
+    if (JSON.stringify({ favorites: libraryState.favorites, playlists: libraryState.playlists }) !== after) throw new Error('恢复后已有其他改动，不能一键撤销')
+    save(before)
+  } }
+}
 
 export const libraryState = reactive({
   favorites: [] as Track[],
@@ -191,8 +212,56 @@ export function getPlaylist(id: string): LocalPlaylist | undefined {
   return libraryState.playlists.find((item) => item.id === id)
 }
 
-export function findPlaylistByCloudId(cloudId: string): LocalPlaylist | undefined {
-  return libraryState.playlists.find((item) => item.cloudId === cloudId)
+export function findPlaylistByCloudId(cloudId: string, ownerId?: string): LocalPlaylist | undefined {
+  if (typeof ownerId !== 'string' || !ownerId.trim()) return undefined
+  return libraryState.playlists.find(item => item.cloudId === cloudId && item.cloudOwnerId === ownerId) ??
+    libraryState.playlists.find(item => item.cloudId === cloudId && !item.cloudOwnerId)
+}
+
+/** Public identity survives plugin installation changes; private references stay account scoped. */
+export function cloudTrackKey(track: Track): string {
+  const ref = track.ref
+  const identity = [track.providerId, track.id, ref?.kind || 'track']
+  return JSON.stringify(ref?.scope === 'provider' && !ref.connectionId
+    ? ['public', ...identity]
+    : ['private', ...identity, ref?.pluginId || track.pluginId || '', ref?.connectionId || ''])
+}
+
+export function commitCloudPlaylist(
+  cloud: { id: string; name: string; describe?: string; cover?: string; updatedAt?: string },
+  tracks: Track[],
+  options: { replaceLocalChanges?: boolean; ownerId?: string } = {}
+): { playlist: LocalPlaylist; updated: boolean; undo(): void } {
+  if (typeof options.ownerId !== 'string' || !options.ownerId.trim()) {
+    throw new Error('无法确认当前账号身份，原歌单未修改；请重新登录')
+  }
+  if (!cloud?.id || typeof cloud.id !== 'string' || typeof cloud.name !== 'string' || !Array.isArray(tracks) ||
+    tracks.some(track => !track || typeof track.id !== 'string' || !track.id || typeof track.providerId !== 'string' || !track.providerId)) {
+    throw new Error('云歌单数据格式错误，原歌单未修改')
+  }
+  const existing = findPlaylistByCloudId(cloud.id, options.ownerId)
+  const keys = tracks.map(cloudTrackKey).sort()
+  if (existing && !options.replaceLocalChanges) {
+    const local = existing.tracks.map(cloudTrackKey).sort()
+    const baseline = Array.isArray(existing.cloudBaselineKeys) ? [...existing.cloudBaselineKeys].sort() : keys
+    if (JSON.stringify(local) !== JSON.stringify(baseline)) {
+      throw Object.assign(new Error('本机歌单有新增或删除，已保留原歌单；如需使用云端版本，请确认覆盖'), { code: 'CLOUD_LOCAL_CHANGES' })
+    }
+  }
+  const next = JSON.parse(JSON.stringify({ favorites: libraryState.favorites, playlists: libraryState.playlists })) as
+    { favorites: Track[]; playlists: LocalPlaylist[] }
+  const id = existing?.id || randomUUID()
+  const playlist: LocalPlaylist = {
+    ...(existing ? next.playlists.find(item => item.id === id)! : { id, createdAt: Date.now() }),
+    name: cloud.name.trim() || '未命名歌单', description: cloud.describe || '', cover: cloud.cover,
+    tracks, cloudId: cloud.id, cloudUpdatedAt: cloud.updatedAt,
+    cloudBaselineKeys: keys,
+    ...(options.ownerId ? { cloudOwnerId: options.ownerId } : {})
+  }
+  if (existing) next.playlists[next.playlists.findIndex(item => item.id === id)] = playlist
+  else next.playlists.unshift(playlist)
+  const committed = commitLibraryReplacement(next)
+  return { ...committed, playlist: getPlaylist(id)!, updated: Boolean(existing) }
 }
 
 export function updatePlaylistTracks(id: string, tracks: Track[]): void {

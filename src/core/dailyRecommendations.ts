@@ -50,7 +50,7 @@ export function dailyMetadata(track: Track): Track | undefined {
   const ref = track?.ref
   if (!track || !ref || !text(track.id) || !text(track.pluginId) || !text(track.providerId)) return
   if (ref.providerId && ref.providerId !== track.providerId) return
-  if (track.providerId.startsWith('lx-pending:') || (ref.data as any)?.fileImport?.pending || ref.connectionId) return
+  if (track.providerId.startsWith('lx-pending:') || (ref.data as any)?.fileImport?.pending || (ref.data as any)?.syncImport?.pending || ref.connectionId) return
   if (ref.kind !== 'track' && !(track.pluginId === 'local' && ref.kind === 'local')) return
   const id = text(ref.id)
   if (!id || /[?#]|:\/\//.test(id)) return

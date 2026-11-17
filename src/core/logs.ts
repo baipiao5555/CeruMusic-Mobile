@@ -24,14 +24,22 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null
 let installed = false
 
 function safeString(value: unknown): string {
-  if (value instanceof Error) return value.stack || value.message
-  if (typeof value === 'string') return value
+  if (value instanceof Error) return redactLogText(value.stack || value.message)
+  if (typeof value === 'string') return redactLogText(value)
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   try {
-    return JSON.stringify(value)
+    return redactLogText(JSON.stringify(value, (key, v) => /^(?:password|passwd|cookie|authorization|token|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|secret|credential|seed|capability)$/i.test(key) ? '[redacted]' : v))
   } catch {
     return String(value)
   }
+}
+export function redactLogText(text: string): string {
+  return text.replace(/CERU_KEY-[A-Za-z0-9_-]+/g,'[redacted]')
+    .replace(/([?&](?:key|api_key|apikey|auth|token|access_token|refresh_token|password|secret|client_secret|code|nonce|state)=)[^&\s"'<>]+/gi,'$1[redacted]')
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi,'$1[redacted]')
+    .replace(/(\bAuthorization\s*[:=]\s*)Basic\s+[A-Za-z0-9._~+/=-]+/gi,'$1[redacted]')
+    .replace(/(\b(?:Cookie|Set-Cookie|Password)\s*[:=]\s*)[^\r\n]+/gi,'$1[redacted]')
+    .replace(/("(?:password|passwd|cookie|authorization|token|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret|secret|credential|seed|capability)"\s*:\s*")[^"]*"/gi,'$1[redacted]"')
 }
 
 function load(): void {
@@ -44,7 +52,7 @@ function load(): void {
     for (const item of saved) {
       if (!item || typeof item !== 'object') continue
       const level = item.level === 'error' || item.level === 'warn' ? item.level : 'info'
-      const message = String(item.message ?? '').slice(0, 2000)
+      const message = redactLogText(String(item.message ?? '')).slice(0, 2000)
       if (!message) continue
       entries.push({
         id: Number(item.id) || nextId++,
@@ -52,7 +60,7 @@ function load(): void {
         level,
         module: String(item.module ?? 'APP').slice(0, 40),
         message,
-        detail: item.detail ? String(item.detail).slice(0, MAX_DETAIL) : undefined
+        detail: item.detail ? redactLogText(String(item.detail)).slice(0, MAX_DETAIL) : undefined
       })
     }
     logState.entries = entries.slice(-MAX_ENTRIES)
@@ -109,7 +117,7 @@ export function logEvent(
 ): void {
   if (!loggingEnabled) return
   try {
-    const text = String(message ?? '').trim()
+    const text = redactLogText(String(message ?? '')).trim()
     if (!text) return
     const entry: LogEntry = {
       id: nextId++,

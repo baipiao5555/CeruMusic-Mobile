@@ -79,8 +79,9 @@ function toggleSearch(): void {
 }
 
 const ROW_TERMS: Record<string, string> = {
-  'account:login': '账号 登录 退出 澜音 同步 歌单',
+  'account:login': '账号 登录 退出 澜音 QQ音乐 酷狗 酷我 平台 同步 歌单',
   'appearance:theme': '外观 主题 跟随系统 浅色 深色 夜间',
+  'appearance:background': '背景 自定义 图片 视频 壁纸 遮罩 模糊',
   'appearance:accent': '主题色 强调色 青绿 蓝色 紫色 橙色 配色',
   'playback:quality': '播放 默认音质 音质 自动 最高 无损',
   'playback:mode': '播放模式 顺序播放 列表循环 单曲循环 随机播放',
@@ -105,6 +106,7 @@ const ROW_TERMS: Record<string, string> = {
   'download:concurrency': '同时下载数量 并发 数量 下载',
   'data:plugins': '音源插件 插件 音源',
   'data:cloud': '云端歌单 歌单 同步 云',
+  'data:sync': '同步 WebDAV 备份 恢复 安全凭据 NAS',
   'data:downloads': '下载管理 下载 离线',
   'data:logs': '运行日志 日志',
   'data:verbose': '详细日志 日志 调试',
@@ -567,9 +569,9 @@ async function resetSettings(): Promise<void> {
             <template v-else>澜</template>
           </div>
           <div class="accbody">
-            <div class="accname">{{ authState.authenticated ? displayName() : '登录同步歌单' }}</div>
+            <div class="accname">{{ authState.authenticated ? displayName() : '澜音云歌单账号' }}</div>
             <div class="accsub">
-              {{ authState.authenticated ? '账号已连接，歌单从电脑端同步' : '登录后歌单与收藏可在多端同步' }}
+              {{ authState.authenticated ? '澜音账号已连接，可读取云歌单' : '登录澜音可读取并导入云歌单' }}
             </div>
           </div>
           <button v-if="authState.authenticated" class="btn btn-ghost btn-sm" @click="signOut">
@@ -577,6 +579,7 @@ async function resetSettings(): Promise<void> {
           </button>
           <button v-else class="btn btn-ghost btn-sm" @click="signIn">登录</button>
         </div>
+        <button class="settingrow" @click="router.push('/accounts')"><span class="body"><span class="lab" style="display:block">账号与服务</span><span class="sub">澜音、QQ音乐、酷狗、酷我等 · 按音源能力开放</span></span><Icon name="chevron-right" :size="15" /></button>
       </section>
 
       <section id="settings-appearance" v-if="groupVisible('appearance')">
@@ -585,6 +588,9 @@ async function resetSettings(): Promise<void> {
           <span class="en">Appearance</span>
         </div>
         <div class="pgrp">
+          <button v-if="show('appearance:background')" class="settingrow" @click="router.push('/theme-background')">
+            <span class="ico"><Icon name="image" :size="15" /></span><span class="body"><span class="lab">自定义背景</span><span class="sub">本地图片或静音视频 · 可调遮罩与范围</span></span><Icon name="chevron-right" :size="15" />
+          </button>
           <div
             v-if="show('appearance:theme')"
             class="settingrow pickrow"
@@ -1017,6 +1023,7 @@ async function resetSettings(): Promise<void> {
             <Icon name="chevron" :size="14" />
           </button>
 
+          <button v-if="show('data:sync')" class="settingrow tap" @click="router.push('/sync-services')"><span class="ico"><Icon name="cloud" :size="15" /></span><div class="body"><div class="lab">同步与备份</div><div class="sub">WebDAV 手动备份与安全恢复</div></div><Icon name="chevron-right" :size="15" /></button>
           <button v-if="show('data:cloud')" class="settingrow tap" @click="router.push('/cloud')">
             <span class="ico"><Icon name="cloud" :size="15" /></span>
             <div class="body">
@@ -1025,7 +1032,7 @@ async function resetSettings(): Promise<void> {
                 {{
                   authState.authenticated
                     ? `已导入 ${cloudCount} 个 · 登录为 ${displayName()}`
-                    : '未登录 · 登录后从电脑同步'
+                    : '未登录 · 登录可读取云端歌单'
                 }}
               </div>
             </div>

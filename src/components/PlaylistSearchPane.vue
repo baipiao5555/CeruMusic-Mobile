@@ -12,6 +12,7 @@ const providers = computed(() => allProviders(true).filter(p => p.methods.includ
 const keyOf = (p: ProviderHandle): string => `${p.pluginId}:${p.providerId}`
 const source = ref('')
 const selected = computed(() => providers.value.find(p => keyOf(p) === source.value))
+watch(() => selected.value ? pluginState.accountEpochs[selected.value.pluginId] || 0 : 0, () => clear())
 const results = ref<any[]>([])
 const loading = ref(false)
 const error = ref('')

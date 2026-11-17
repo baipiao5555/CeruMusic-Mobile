@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import { authState, displayName, login, logout } from '@/core/auth'
@@ -12,17 +12,20 @@ import {
   notifyImportResult,
   type CloudPlaylist
 } from '@/core/cloud'
-import { libraryState } from '@/core/library'
+import { findPlaylistByCloudId, libraryState } from '@/core/library'
 import { notify } from '@/core/plugin/manager'
 import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
 const error = ref('')
 const importingAll = ref(false)
-const lastSync = ref('')
+const importingOne = ref(false)
+const lastRefresh = ref('')
+const busy = computed(() => importingAll.value || importingOne.value || cloudState.loading || Boolean(cloudState.importing))
 
 const importedCount = computed(
-  () => libraryState.playlists.filter((playlist) => playlist.cloudId).length
+  () => libraryState.playlists.filter((playlist) => playlist.cloudId &&
+    (!playlist.cloudOwnerId || playlist.cloudOwnerId === authState.user?.sub)).length
 )
 
 function formatDate(value?: string): string {
@@ -33,7 +36,7 @@ function formatDate(value?: string): string {
 }
 
 function localOf(cloud: CloudPlaylist) {
-  return libraryState.playlists.find((playlist) => playlist.cloudId === cloud.id)
+  return findPlaylistByCloudId(cloud.id, authState.user?.sub)
 }
 
 function isImported(cloud: CloudPlaylist): boolean {
@@ -56,12 +59,12 @@ function subOf(cloud: CloudPlaylist): string {
 }
 
 async function refresh(): Promise<void> {
-  if (!authState.authenticated) return
+  if (!authState.authenticated || busy.value) return
   error.value = ''
   try {
     await fetchCloudPlaylists()
     const now = new Date()
-    lastSync.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    lastRefresh.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   } catch (err: any) {
     error.value = err?.message ?? '读取云歌单失败'
   }
@@ -77,6 +80,7 @@ async function startLogin(): Promise<void> {
 }
 
 async function signOut(): Promise<void> {
+  if (busy.value) return
   const ok = await confirmAction({
     title: '退出澜音账号？',
     body: '电脑端的登录状态不受影响，已导入到本机的歌单会保留。',
@@ -86,26 +90,49 @@ async function signOut(): Promise<void> {
   if (!ok) return
   logout()
   cloudState.playlists = []
-  lastSync.value = ''
+  lastRefresh.value = ''
   notify('已退出登录')
 }
 
 async function importOne(cloud: CloudPlaylist): Promise<void> {
+  if (busy.value) return
+  importingOne.value = true
   try {
-    const result = await importCloudPlaylist(cloud)
+    let result
+    try {
+      result = await importCloudPlaylist(cloud)
+    } catch (err: any) {
+      if (err?.code !== 'CLOUD_LOCAL_CHANGES') throw err
+      const replace = await confirmAction({
+        title: `覆盖「${cloud.name}」的本机改动？`,
+        body: '本机歌单有新增或删除，或旧版歌单无法确认是否修改过。覆盖会使用完整云端版本，移除本机新增并恢复仅在本机删除的歌曲；取消会保留原歌单。',
+        confirmText: '用云端版本覆盖', cancelText: '保留本机歌单', danger: true
+      })
+      if (!replace) return
+      result = await importCloudPlaylist(cloud, { replaceLocalChanges: true })
+    }
     notifyImportResult(result)
   } catch (err: any) {
     notify(err?.message ?? '导入失败', 'error')
+  } finally {
+    importingOne.value = false
   }
 }
 
 async function importAll(): Promise<void> {
-  if (importingAll.value) return
+  if (busy.value) return
   importingAll.value = true
+  error.value = ''
   try {
     const result = await importAllCloudPlaylists()
-    notify(`已导入 ${result.playlists} 个歌单，共 ${result.tracks} 首歌曲`)
-    router.push('/playlists')
+    if (result.failed.length) {
+      error.value = `有 ${result.failed.length} 个歌单未导入，原本机歌单已保留：` +
+        result.failed.map(item => `${item.name}（${item.error}）`).join('；')
+      notify(`成功 ${result.playlists} 个歌单、${result.tracks} 首；${result.failed.length} 个失败，请查看详情并逐个更新`, 'error')
+    } else {
+      notify(`已导入或更新 ${result.playlists} 个歌单，共 ${result.tracks} 首歌曲`)
+      router.push('/playlists')
+    }
   } catch (err: any) {
     notify(err?.message ?? '导入失败', 'error')
   } finally {
@@ -119,6 +146,11 @@ function addService(): void {
 
 onMounted(() => {
   if (authState.authenticated) void refresh()
+})
+watch([() => authState.authenticated, () => authState.user?.sub], ([loggedIn]) => {
+  lastRefresh.value = ''
+  error.value = ''
+  if (loggedIn) void refresh()
 })
 </script>
 
@@ -135,7 +167,7 @@ onMounted(() => {
           class="iconbtn quiet"
           aria-label="刷新"
           title="刷新"
-          :disabled="cloudState.loading"
+          :disabled="busy"
           @click="refresh"
         >
           <Icon name="refresh" :size="19" :class="{ spin: cloudState.loading }" />
@@ -167,7 +199,7 @@ onMounted(() => {
           </div>
 
           <div class="sum">
-            <span>上次同步 <b class="num">{{ lastSync || '—' }}</b></span>
+            <span>上次刷新 <b class="num">{{ lastRefresh || '—' }}</b></span>
             <i class="d" />
             <span><b class="num">{{ cloudState.playlists.length }}</b> 个歌单</span>
             <i class="d" />
@@ -175,19 +207,19 @@ onMounted(() => {
           </div>
 
           <div class="acts">
-            <button class="p-sync" :disabled="cloudState.loading" @click="refresh">
+            <button class="p-sync" :disabled="busy" @click="refresh">
               <Icon name="refresh" :size="15" />
-              {{ cloudState.loading ? '同步中…' : '立即同步' }}
+              {{ cloudState.loading ? '刷新中…' : '刷新目录' }}
             </button>
             <button
               class="p-mini"
-              :disabled="!cloudState.playlists.length || importingAll || Boolean(cloudState.importing)"
+              :disabled="busy"
               @click="importAll"
             >
               <Icon name="download" :size="15" />
               {{ importingAll ? '导入中…' : '全部导入' }}
             </button>
-            <button class="p-mini" @click="signOut"><Icon name="logout" :size="15" />退出</button>
+            <button class="p-mini" :disabled="busy" @click="signOut"><Icon name="logout" :size="15" />退出</button>
           </div>
         </section>
 
@@ -242,15 +274,15 @@ onMounted(() => {
               </template>
               <template v-else-if="isImported(cloud) && hasRemoteUpdate(cloud)">
                 <span class="p-st new"><span class="dotg" />远端有更新</span>
-                <button class="p-go" @click="importOne(cloud)">更新</button>
+                <button class="p-go" :disabled="busy" @click="importOne(cloud)">更新</button>
               </template>
               <template v-else-if="isImported(cloud)">
                 <span class="p-st done"><Icon name="check" :size="13" />已导入</span>
-                <button class="p-go ghost" @click="importOne(cloud)">更新</button>
+                <button class="p-go ghost" :disabled="busy" @click="importOne(cloud)">更新</button>
               </template>
               <template v-else>
                 <span class="p-st idle">未导入</span>
-                <button class="p-go" :disabled="Boolean(cloudState.importing)" @click="importOne(cloud)">导入</button>
+                <button class="p-go" :disabled="busy" @click="importOne(cloud)">导入</button>
               </template>
             </div>
           </div>
@@ -264,7 +296,7 @@ onMounted(() => {
         </div>
 
         <p class="p-foot">
-          只同步歌单信息（歌曲、歌手、专辑、音源引用），不会同步音乐文件。导入后如果某首歌的音源插件没有安装，会显示「未匹配音源」。
+          「刷新目录」只读取云端歌单信息；「更新」或「全部导入」才下载歌曲列表。这是云端到本机的单向导入，不会上传本机改动，也不会同步音乐文件。本机曲目有增删时，需确认后才用云端版本覆盖。音源插件未安装时，会显示「未匹配音源」。
         </p>
       </template>
 

@@ -66,7 +66,7 @@ const selected = computed(
   () => providers.value.find((item) => item.providerId === pluginState.selectedProvider) ?? providers.value[0]
 )
 const providerKey = computed(() =>
-  selected.value ? `${selected.value.pluginId}:${selected.value.providerId}` : ''
+  selected.value ? `${selected.value.pluginId}:${selected.value.providerId}:${pluginState.accountEpochs[selected.value.pluginId] || 0}` : ''
 )
 
 const query = ref(String(route.query.q ?? ''))

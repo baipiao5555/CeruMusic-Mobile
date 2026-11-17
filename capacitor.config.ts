@@ -4,6 +4,9 @@ const config: CapacitorConfig = {
   appId: 'com.ceru.music.mobile',
   appName: '澜音',
   webDir: 'dist',
+  // Capacitor's Java dispatcher logs methodData in debug builds, including secrets.
+  // Application run logs remain available; disable only bridge/framework logging.
+  loggingBehavior: 'none',
   android: {
     allowMixedContent: true,
     backgroundColor: '#eef7f3'

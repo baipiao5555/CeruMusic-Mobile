@@ -1,10 +1,14 @@
 import { reactive, ref } from 'vue'
 import { readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
 import { PluginHost, type PluginHostHooks, type PluginNotice } from './host'
-import { requestRemote } from './network'
+import { requestRemote, validateRemoteUrl } from './network'
 import { idb, sha256Hex } from '../storage/idb'
 import { toTrack, type Track } from '../track'
 import { logEvent } from '../logs'
+import { assertAccountSummary, type AccountSummary } from '@shiqianjiang/ceru-plugin-sdk'
+import { accountSurfaceEvent, type AccountSurfaceSpec } from './accountSurface'
+import { invalidateOwnerResources } from '../resourceNavigation'
+import { secureStore } from '../native/secureStore'
 import { inspectLxPlugin } from './lx'
 
 interface PluginProviderInfo {
@@ -35,6 +39,8 @@ export interface PluginDescriptor {
   homeSections: any[]
   commands: any[]
   playlistImporters: any[]
+  accountItems: any[]
+  surfaces: any[]
   sourceUrl?: string
   format?: 'lx'
 }
@@ -57,7 +63,8 @@ export const pluginState = reactive({
   loading: true,
   initialized: false,
   selectedProvider: '' as string,
-  selectedSourcePlugin: {} as Record<string, string>
+  selectedSourcePlugin: {} as Record<string, string>,
+  accountEpochs: {} as Record<string, number>
 })
 
 export const pluginToasts = ref<
@@ -128,6 +135,7 @@ function hooksFor(): PluginHostHooks {
         }
       }),
     onNavigate: (request) => {
+      if (request.type === 'state' || request.type === 'close-view') { accountSurfaceEvent(request); return }
       navigationRequest.value = request
     },
     player: {
@@ -195,6 +203,8 @@ function descriptorFor(record: PluginRecord, host?: PluginHost): PluginDescripto
     homeSections: manifest.contributes?.homeSections ?? [],
     commands: manifest.contributes?.commands ?? [],
     playlistImporters: manifest.contributes?.playlistImporters ?? [],
+    accountItems: manifest.contributes?.accountItems ?? [],
+    surfaces: manifest.modules?.surfaces ?? [],
     sourceUrl: record.sourceUrl,
     format: manifest.format
   }
@@ -687,6 +697,8 @@ export async function disablePlugin(pluginId: string): Promise<void> {
 
 export async function removePlugin(pluginId: string): Promise<void> {
   await disablePlugin(pluginId)
+  await secureStore.clearNamespace('plugin.account.' + pluginId)
+  invalidatePluginAccountCache(pluginId)
   records.delete(pluginId)
   await idb.del('plugins', pluginId)
   await idb.del('pluginConfig', pluginId)
@@ -725,4 +737,35 @@ export function selectProvider(providerId: string, pluginId?: string): void {
     localStorage.setItem('ceru.selectedProvider', providerId)
     localStorage.setItem('ceru.selectedSourcePlugin', JSON.stringify(pluginState.selectedSourcePlugin))
   } catch {}
+}
+
+function accountHost(pluginId: string, accountId: string): { host: PluginHost; item: any } {
+  const host = hosts.get(pluginId)
+  const item = host?.getManifest().contributes?.accountItems?.find((a: any) => a.id === accountId)
+  if (!host || !item) throw new Error('账号音源已停用或未声明该登录能力')
+  return { host, item }
+}
+export async function pluginAccountSummary(pluginId: string, accountId: string): Promise<AccountSummary> {
+  const { host, item } = accountHost(pluginId, accountId)
+  const result = await host.invokeAction(item.action)
+  assertAccountSummary(result)
+  let avatarUrl: string | undefined
+  if (result.avatarUrl) { try { const u = validateRemoteUrl(result.avatarUrl); if (u.protocol === 'https:') { u.search = ''; u.hash = ''; avatarUrl = u.href } } catch { /* Never load private/credentialed avatar URLs. */ } }
+  return { signedIn: result.signedIn, displayName: result.displayName, ...(result.badge ? { badge: result.badge } : {}), ...(avatarUrl ? { avatarUrl } : {}) }
+}
+export async function logoutPluginAccount(pluginId: string, accountId: string): Promise<AccountSummary> {
+  const { host, item } = accountHost(pluginId, accountId)
+  if (!item.logoutAction) throw new Error('该音源没有提供退出动作')
+  await host.invokeAction(item.logoutAction)
+  invalidatePluginAccountCache(pluginId)
+  return pluginAccountSummary(pluginId, accountId)
+}
+export function invalidatePluginAccountCache(pluginId: string): void {
+  invalidateOwnerResources(pluginId)
+  pluginState.accountEpochs[pluginId] = (pluginState.accountEpochs[pluginId] || 0) + 1
+}
+export function getPluginAccountSurface(pluginId: string, accountId: string): AccountSurfaceSpec { return accountHost(pluginId, accountId).host.getAccountSurface(accountId) }
+export function invokePluginAccountAction(pluginId: string, accountId: string, action: string, input: any, signal?: AbortSignal): Promise<any> {
+  const { host } = accountHost(pluginId, accountId)
+  return host.invokeAction(action, input, signal)
 }

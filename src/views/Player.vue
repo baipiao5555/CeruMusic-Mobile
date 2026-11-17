@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { themeBackgroundScene } from '@/core/themeBackground'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar } from '@capacitor/status-bar'
@@ -37,6 +38,7 @@ const lyricsBox = ref<HTMLElement>()
 const lyricFollowing = ref(true)
 const showQueue = ref(false)
 const showLyrics = ref(false)
+watch(showLyrics, value => { themeBackgroundScene.value = value ? 'lyrics' : 'player' }, { immediate: true })
 /** 全屏歌词页的控件是否可见：进入即隐藏，点按/滑动再唤出。 */
 const lyricUi = ref(true)
 let lyricUiTimer: ReturnType<typeof setTimeout> | undefined
@@ -392,6 +394,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  themeBackgroundScene.value = 'main'
   if (sleepPoll) {
     clearInterval(sleepPoll)
     sleepPoll = null

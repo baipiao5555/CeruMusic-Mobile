@@ -5,11 +5,15 @@ import { idb } from '../storage/idb'
 import { createLxArtifact, inspectLxPlugin, lxLyrics, lxProviders } from './lx'
 import { lxMusicInfo, searchLxCatalog } from './lx-catalog'
 import { selectPlaybackQuality } from '../quality'
+import { secureStore } from '../native/secureStore'
+import { sha256Hex } from '../storage/idb'
+import { authState } from '../auth'
 
 const LX_RPC_METHODS = new Set([
   'http.request', 'operations.cancel', 'ui.toast',
   'permissions.query', 'permissions.request', 'permissions.getGranted', 'permissions.requestGroup'
 ])
+let profileSeedPromise: Promise<string> | undefined
 
 export interface PermissionDeclaration {
   key: string
@@ -245,7 +249,7 @@ export class PluginHost {
       return
     }
     if (type === 'state' || type === 'open-view' || type === 'close-view') {
-      this.state.hooks.onNavigate?.({ type, ...data })
+      this.state.hooks.onNavigate?.({ ...data, type, pluginId: this.pluginId })
       return
     }
   }
@@ -390,15 +394,22 @@ export class PluginHost {
       return null
     }
     if (method === 'storage.get') {
+      if (this.manifest.contributes?.accountItems?.length) {
+        const key = await sha256Hex(String(data.key))
+        const value = await secureStore.get('plugin.account.' + this.pluginId, key)
+        return value === null ? null : JSON.parse(value)
+      }
       return (await idb.get('pluginStorage', `${this.pluginId}:${data.key}`)) ?? null
     }
     if (method === 'storage.set') {
       const serialized = JSON.stringify(data.value ?? null)
       if (serialized.length > 1024 * 1024) throw new Error('插件存储内容过大')
+      if (this.manifest.contributes?.accountItems?.length) { await secureStore.set('plugin.account.' + this.pluginId, await sha256Hex(String(data.key)), serialized); return null }
       await idb.set('pluginStorage', `${this.pluginId}:${data.key}`, data.value ?? null)
       return null
     }
     if (method === 'storage.delete') {
+      if (this.manifest.contributes?.accountItems?.length) { await secureStore.remove('plugin.account.' + this.pluginId, await sha256Hex(String(data.key))); return null }
       await idb.del('pluginStorage', `${this.pluginId}:${data.key}`)
       return null
     }
@@ -409,13 +420,20 @@ export class PluginHost {
         platform: 'android',
         locale: navigator.language || 'zh-CN',
         theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-        hostApi: '1.0.0'
+        hostApi: '2.0.0'
       }
     }
     if (method === 'services.app.openExternal') {
       const url = validateRemoteUrl(String(data.args?.[0] ?? ''))
       window.open(url.href, '_blank', 'noopener')
       return null
+    }
+    if (method === 'services.account.openLogin') { this.state.hooks.onNavigate?.({ type: 'navigate', request: { page: 'account' }, pluginId: this.pluginId }); return null }
+    if (method === 'services.account.getSession' || method === 'services.account.getProfile') {
+      const allowed = this.declarations.some(p => p.name === 'account.profile' && this.status(p.key) === 'granted')
+      if (!allowed) throw new Error('音源未获澜音公开账号摘要权限')
+      const profile = authState.authenticated && authState.user ? { id: await this.profileIdentity(authState.user.sub), displayName: String(authState.user.nickname || authState.user.name || authState.user.username || '澜音用户').slice(0,200), identityScope: 'plugin' } : null
+      return method.endsWith('getSession') ? { loggedIn: authState.authenticated, profile } : profile
     }
     if (method.startsWith('services.player.') || method.startsWith('services.queue.')) {
       const name = method.slice(method.lastIndexOf('.') + 1)
@@ -459,6 +477,7 @@ export class PluginHost {
     }
     if (method.startsWith('services.capabilities.')) {
       const services = [
+        { service: 'account', methods: ['getSession', 'getProfile', 'openLogin'] },
         { service: 'app', methods: ['getInfo', 'openSettings', 'openExternal'] },
         { service: 'player', methods: ['getState', 'play', 'pause', 'next', 'previous', 'seek', 'setVolume', 'setMode'] },
         { service: 'queue', methods: ['get', 'append', 'replace', 'remove', 'reorder'] },
@@ -583,6 +602,14 @@ export class PluginHost {
     return this.manifest
   }
 
+  private async profileIdentity(subject: string): Promise<string> {
+    profileSeedPromise ??= (async () => { let seed = await secureStore.get('host.profile.identity', 'seed'); if (!seed) { seed = [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2,'0')).join(''); await secureStore.set('host.profile.identity','seed',seed) }; return seed })().catch(error => { profileSeedPromise = undefined; throw error })
+    const seed = await profileSeedPromise
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(seed), {name:'HMAC',hash:'SHA-256'}, false, ['sign'])
+    const digest = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(this.pluginId + ':' + subject))
+    return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('')
+  }
+
   getProviderMethods(): Record<string, string[]> {
     return Object.fromEntries([...this.providerMethods].map(([id, methods]) => [id, [...methods]]))
   }
@@ -626,14 +653,29 @@ export class PluginHost {
     return icons
   }
 
-  async invokeAction(actionId: string, input: any = {}): Promise<any> {
+  async invokeAction(actionId: string, input: any = {}, signal?: AbortSignal): Promise<any> {
     await this.ensureReady()
     if (!this.core) throw new Error('插件未启动')
-    return this.core.invokeAction(actionId, input, {
+    if (!this.actionIds.has(actionId)) throw new Error('音源没有注册该账号动作')
+    const controller = new AbortController()
+    const abort = () => controller.abort(signal?.reason)
+    if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true })
+    const timer = setTimeout(() => controller.abort(), 60000)
+    try { return await this.core.invokeAction(actionId, input, {
       id: randomId(),
       deadlineAt: Date.now() + 60_000,
-      signal: new AbortController().signal
-    })
+      signal: controller.signal
+    }) } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
+  }
+
+  getAccountSurface(accountId: string): any {
+    const item = this.manifest.contributes?.accountItems?.find((a: any) => a.id === accountId)
+    const surface = this.manifest.modules?.surfaces?.find((s: any) => s.id === item?.view)
+    if (!item || !surface) throw new Error('该音源未声明平台登录界面')
+    if (!['web', 'native'].includes(surface.kind)) throw new Error('该音源登录界面的 Schema 凭据流程尚待适配')
+    return { pluginId: this.pluginId, accountId, title: item.title, surface: JSON.parse(JSON.stringify(surface)),
+      manifest: JSON.parse(JSON.stringify({ ...this.manifest, config: {} })), code: surface.kind === 'web' ? this.artifact?.modules?.[surface.entry] : undefined,
+      resources: this.artifact?.resources || {} }
   }
 
   async importPlaylist(

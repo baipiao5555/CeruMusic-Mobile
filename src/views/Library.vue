@@ -273,6 +273,8 @@ function openImport(): void {
       <section class="tools-section">
         <div class="section-head"><h2>音乐工具</h2></div>
         <div class="tool-list">
+          <button @click="router.push('/accounts')"><Icon name="user" :size="21" /><span><strong>账号与服务</strong><small>澜音与音乐平台 · 按音源能力开放</small></span><Icon name="chevron-right" :size="16" /></button>
+          <button @click="router.push('/sync-services')"><Icon name="cloud" :size="21" /><span><strong>同步与备份</strong><small>WebDAV · 专用目录 · 安全凭据</small></span><Icon name="chevron-right" :size="16" /></button>
           <button @click="router.push('/cloud')"><Icon name="cloud" :size="21" /><span><strong>云端歌单</strong><small>{{ cloudCount }} 个本地副本 · 从澜音账号导入</small></span><Icon name="chevron-right" :size="16" /></button>
           <button @click="router.push('/plugins')"><Icon name="plugin" :size="21" /><span><strong>音源插件</strong><small>{{ pluginState.plugins.length }} 个已安装 · {{ runningPlugins }} 个运行中</small></span><Icon name="chevron-right" :size="16" /></button>
           <button @click="openImport"><Icon name="folder" :size="21" /><span><strong>导入歌单</strong><small>{{ importers.length ? `支持 ${importers.length} 个插件导入源` : '由已安装的音源插件提供导入能力' }}</small></span><Icon name="chevron-right" :size="16" /></button>

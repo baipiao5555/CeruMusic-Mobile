@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
@@ -9,6 +9,8 @@ import { IonApp } from '@ionic/vue'
 import BottomNav from '@/components/BottomNav.vue'
 import ConfirmSheet from '@/components/ConfirmSheet.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
+import ThemeBackground from '@/components/ThemeBackground.vue'
+import { backgroundAppliesToRoute, themeBackgroundScene, themeBackgroundState } from '@/core/themeBackground'
 import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, checkAllPluginUpdates, navigationRequest, notify } from '@/core/plugin/manager'
 import { handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
@@ -38,6 +40,9 @@ import { routeDirection } from '@/router/transition'
 
 const router = useRouter()
 const route = useRoute()
+const backgroundScene = computed(() => route.path === '/player' ? themeBackgroundScene.value : 'main')
+const customBackgroundActive = computed(() => Boolean(themeBackgroundState.url) && backgroundAppliesToRoute(route.path, backgroundScene.value))
+const backgroundForeground = ref(document.visibilityState !== 'hidden')
 const showNav = computed(() => route.path !== '/player')
 const hasTrack = computed(() => Boolean(currentTrack()))
 const dockStyle = computed(() => ({
@@ -86,6 +91,7 @@ async function promptAvailableUpdate(): Promise<void> {
 }
 
 function onAppVisibilityChange(): void {
+  backgroundForeground.value = appActive && document.visibilityState !== 'hidden'
   if (document.visibilityState === 'visible') void promptAvailableUpdate()
 }
 
@@ -117,6 +123,7 @@ function scheduleStatusBarSync(): void {
     .finally(() => window.setTimeout(() => void syncStatusBar(), 300))
   void NativeApp.addListener('appStateChange', ({ isActive }) => {
     appActive = isActive
+    backgroundForeground.value = isActive && document.visibilityState !== 'hidden'
     if (isActive) {
       void syncStatusBar()
       void promptAvailableUpdate()
@@ -344,13 +351,18 @@ watch(navigationRequest, (request) => {
     const page = request.request?.page
     if (page === 'search') router.push({ path: '/search', query: { q: request.request?.query ?? '' } })
     else if (page === 'settings') router.push('/settings')
+    else if (page === 'account') router.push('/accounts')
+  } else if (request.type === 'open-view') {
+    const owner = pluginState.plugins.find(p => p.pluginId === request.pluginId && p.enabled && p.running)
+    if (owner?.accountItems.some(a => a.view === request.surfaceId)) router.push('/accounts')
   }
 })
 </script>
 
 <template>
   <ion-app>
-    <div class="app-shell" :style="dockStyle">
+    <div class="app-shell" :class="{ 'custom-theme-active': customBackgroundActive }" :style="dockStyle">
+    <ThemeBackground :page-path="route.path" :scene="backgroundScene" :foreground="backgroundForeground" />
     <router-view v-slot="{ Component }">
       <transition
         :name="
@@ -412,3 +424,9 @@ watch(navigationRequest, (request) => {
     </div>
   </ion-app>
 </template>
+
+<style>
+.app-shell.custom-theme-active > .screen{background:transparent}
+.app-shell.custom-theme-active .screen.player .p-bg,.app-shell.custom-theme-active .screen.player .ly-bg{display:none}
+.app-shell.custom-theme-active .screen.player .ly{background:transparent}
+</style>

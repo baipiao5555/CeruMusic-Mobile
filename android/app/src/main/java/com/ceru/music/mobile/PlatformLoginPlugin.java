@@ -68,7 +68,7 @@ public class PlatformLoginPlugin extends Plugin {
         if ("wy".equals(id)) return "https://music.163.com/#/login";
         if ("kg".equals(id)) return "https://www.kugou.com/";
         if ("kw".equals(id)) return "https://www.kuwo.cn/";
-        if ("mg".equals(id)) return "https://music.migu.cn/v5/";
+        if ("mg".equals(id)) return "https://passport.migu.cn/login?sourceid=220029&forceAuthn=true&hideRegister=1&hideForgetPass=1&callbackURL=PostToken";
         throw new IllegalArgumentException("不支持此平台登录");
     }
     private static String title(String id) {
@@ -101,6 +101,8 @@ public class PlatformLoginPlugin extends Plugin {
         appendCookie(raw, manager.getCookie(url));
         if ("wy".equals(id)) appendCookie(raw, manager.getCookie("https://y.music.163.com/m/login"));
         if ("tx".equals(id)) appendCookie(raw, manager.getCookie("https://graph.qq.com/"));
+        if ("kg".equals(id)) appendCookie(raw, manager.getCookie("https://m.kugou.com/loginReg.php?act=login"));
+        if ("mg".equals(id)) appendCookie(raw, manager.getCookie("https://music.migu.cn/v5/"));
         return raw.toString();
     }
     private static void appendCookie(StringBuilder raw, String value) {
@@ -169,9 +171,13 @@ public class PlatformLoginPlugin extends Plugin {
             manager.setCookie(site(id), name + "=; Max-Age=0; Path=/; Secure");
             manager.setCookie(site(id), name + "=; Max-Age=0; Path=/; Secure; Domain=" + host);
             manager.setCookie(site(id), name + "=; Max-Age=0; Path=/; Secure; Domain=." + suffix);
+            if ("kg".equals(id)) manager.setCookie("https://m.kugou.com/loginReg.php?act=login", name + "=; Max-Age=0; Path=/; Secure");
+            if ("mg".equals(id)) manager.setCookie("https://music.migu.cn/v5/", name + "=; Max-Age=0; Path=/; Secure");
         }
         manager.flush();
         WebStorage.getInstance().deleteOrigin("https://" + host);
+        if ("kg".equals(id)) WebStorage.getInstance().deleteOrigin("https://m.kugou.com");
+        if ("mg".equals(id)) WebStorage.getInstance().deleteOrigin("https://music.migu.cn");
     }
     @SuppressWarnings("deprecation")
     @PluginMethod public void open(PluginCall call) {
@@ -234,7 +240,7 @@ public class PlatformLoginPlugin extends Plugin {
                             // Insert only a stylesheet into the original official page. Never read/replace password inputs.
                             view.evaluateJavascript("(function(){var s=document.getElementById('ceru-mobile-style');if(!s){s=document.createElement('style');s.id='ceru-mobile-style';document.head.appendChild(s);}s.textContent=" + JSONObject.quote(mobileCss) + ";})()", null);
                         }
-                        if (("tx".equals(id) && desktop[0]) || (!desktop[0] && ("kg".equals(id) || "kw".equals(id) || "mg".equals(id)))) {
+                        if (("tx".equals(id) && desktop[0]) || (!desktop[0] && ("kg".equals(id) || "kw".equals(id)))) {
                             preparePresentation(view, 0, presentationVersion[0]);
                         }
                         if (!desktop[0] && "wy".equals(id)) {
@@ -300,7 +306,7 @@ public class PlatformLoginPlugin extends Plugin {
                     String key = values.getOrDefault("qm_keyst", values.getOrDefault("qqmusic_key", values.getOrDefault("wxmusic_key", "")));
                     String uin = values.getOrDefault("qqmusic_uin", values.getOrDefault("uin", values.getOrDefault("wxuin", "0"))).replaceFirst("^o0*", "");
                     int hash = 5381; for (char c : key.toCharArray()) hash += (hash << 5) + c;
-                    comm.put("uin", uin).put("authst", key).put("g_tk", hash & 0x7fffffff).put("tmeLoginType", key.startsWith("W_X") ? 1 : 2);
+                    comm.put("uin", uin).put("authst", key).put("g_tk", hash & 0x7fffffff).put("tmeLoginType", key.startsWith("W_X") ? 2 : 1);
                     JSONObject payload = new JSONObject().put("comm", comm).put("req", new JSONObject().put("module", "music.UserInfo.userInfoServer").put("method", "GetLoginUserInfo").put("param", new JSONObject()));
                     connection.setRequestMethod("POST"); connection.setDoOutput(true); connection.setRequestProperty("Content-Type", "application/json");
                     try (java.io.OutputStream output = connection.getOutputStream()) { output.write(payload.toString().getBytes(StandardCharsets.UTF_8)); }

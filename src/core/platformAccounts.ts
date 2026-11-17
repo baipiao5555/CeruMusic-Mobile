@@ -55,11 +55,20 @@ export async function connectPlatform(id: PlatformId): Promise<void> {
     const session: Session = { cookies: await openPlatformLogin(id) }
     current(id, version)
     if (!session.cookies || session.cookies.length > 65536 || /[\r\n]/.test(session.cookies)) throw new Error('没有取得有效平台会话，原账号未修改')
-    const user = await identity(id, session)
+    let user: { userId: string; name: string } | undefined
+    let identityWarning = ''
+    try {
+      user = await identity(id, session)
+    } catch (error) {
+      // QQ's web session is still useful even if the optional identity endpoint rejects it.
+      // Keep the session and label it unverified instead of discarding a completed web login.
+      if (id !== 'tx') throw error
+      identityWarning = 'QQ 网页会话已保存，但身份核验失败；平台歌单可能仍无法读取。'
+    }
     current(id, version)
     await write(id, async () => { current(id, version); await secureStore.set(namespace(id), 'session', JSON.stringify({ ...session, ...user })) })
     current(id, version)
-    Object.assign(state, { phase: user ? 'verified' : 'saved', name: user?.name || '', userId: user?.userId || '' })
+    Object.assign(state, { phase: user ? 'verified' : 'saved', name: user?.name || '', userId: user?.userId || '', error: identityWarning })
   } catch (error: any) {
     if (epochs[id] === version) state.error = error?.message === 'LOGIN_CANCELLED' ? '' : '登录未完成或身份核验失败，原账号未修改。请检查网页和网络后重试。'
   } finally { if (epochs[id] === version) state.busy = false }

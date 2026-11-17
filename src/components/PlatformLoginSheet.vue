@@ -43,7 +43,7 @@ onMounted(() => { void refreshPlatformAccounts() })
           <p v-if="platformAccounts[p.id].error" class="platform-error" role="alert">{{ platformAccounts[p.id].error }}</p>
         </div>
         <p v-if="error" class="platform-error" role="alert">{{error}}</p>
-        <p class="login-note">{{ supportsPlatformLogin() ? '仅在你点“完成登录”后获取平台会话；复制的凭据在本机 Keystore 加密保存，不交给音源。' : 'Web 预览不获取平台会话。请安装 Android 客户端使用；不会冒充网页登录成功。' }}<br>平台登录不等于已接入本人歌单读取或会员播放。酷狗、酷我、咪咕暂不显示“已登录”；汽水需官方 App 登录。</p>
+        <p class="login-note">{{ supportsPlatformLogin() ? '仅在你点“完成登录”后获取平台会话；复制的凭据在本机 Keystore 加密保存，不交给音源。' : 'Web 预览不获取平台会话。请安装 Android 客户端使用；不会冒充网页登录成功。' }}<br>平台登录只保存官方网页会话，不会自动把平台歌单加入“云端歌单”；当前云端歌单仍只读取澜音账号。平台歌单读取/导入尚未接入，平台登录也不等于会员播放权限。</p>
       </div>
     </section>
   </div>

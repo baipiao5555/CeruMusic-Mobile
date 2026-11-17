@@ -15,6 +15,7 @@ import { allImporters, pluginState } from '@/core/plugin/manager'
 import { logState } from '@/core/logs'
 import { downloadState } from '@/core/downloads'
 import { authState, displayName } from '@/core/auth'
+import { platformLoginVisible } from '@/core/platformAccounts'
 import { confirmAction } from '@/core/confirm'
 
 const router = useRouter()
@@ -50,7 +51,7 @@ const cloudCount = computed(() => playlists.value.filter((playlist) => playlist.
 const profileSub = computed(() =>
   authState.authenticated
     ? `已登录澜音 · ${cloudCount.value} 个云端导入歌单`
-    : '本地账户 · 未登录澜音'
+    : '点击登录 · 澜音与音乐平台'
 )
 
 const allTracks = computed(() => {
@@ -124,6 +125,7 @@ watch(
   },
   { immediate: true }
 )
+watch(() => route.query.login, value => { if (value === '1') platformLoginVisible.value = true }, { immediate: true })
 
 function openPlaylist(playlist: LocalPlaylist): void {
   router.push('/playlist/' + playlist.id)
@@ -165,7 +167,7 @@ function openImport(): void {
       </header>
 
       <section class="profile">
-        <button class="profile-main" aria-label="账户与云端歌单" @click="router.push('/cloud')">
+        <button class="profile-main" aria-label="登录与管理音乐平台" @click="platformLoginVisible = true">
           <img class="avatar" :src="profileAvatar" alt="" @error="($event.target as HTMLImageElement).src = '/logo.png'" />
           <span class="profile-copy">
             <strong>{{ profileName }}</strong>
@@ -273,7 +275,6 @@ function openImport(): void {
       <section class="tools-section">
         <div class="section-head"><h2>音乐工具</h2></div>
         <div class="tool-list">
-          <button @click="router.push('/accounts')"><Icon name="user" :size="21" /><span><strong>账号与服务</strong><small>澜音与音乐平台 · 按音源能力开放</small></span><Icon name="chevron-right" :size="16" /></button>
           <button @click="router.push('/sync-services')"><Icon name="cloud" :size="21" /><span><strong>同步与备份</strong><small>WebDAV · 专用目录 · 安全凭据</small></span><Icon name="chevron-right" :size="16" /></button>
           <button @click="router.push('/cloud')"><Icon name="cloud" :size="21" /><span><strong>云端歌单</strong><small>{{ cloudCount }} 个本地副本 · 从澜音账号导入</small></span><Icon name="chevron-right" :size="16" /></button>
           <button @click="router.push('/plugins')"><Icon name="plugin" :size="21" /><span><strong>音源插件</strong><small>{{ pluginState.plugins.length }} 个已安装 · {{ runningPlugins }} 个运行中</small></span><Icon name="chevron-right" :size="16" /></button>

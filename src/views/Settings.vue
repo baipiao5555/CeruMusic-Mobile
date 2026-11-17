@@ -14,6 +14,7 @@ import {
 import { notify, pluginState } from '@/core/plugin/manager'
 import { availableQualities, qualityDescription, qualityLabel } from '@/core/quality'
 import { authState, displayName, login, logout } from '@/core/auth'
+import { platformLoginVisible } from '@/core/platformAccounts'
 import { downloadSummary, formatDownloadTemplate } from '@/core/downloads'
 import { libraryState } from '@/core/library'
 import { updateState } from '@/core/updater'
@@ -579,7 +580,7 @@ async function resetSettings(): Promise<void> {
           </button>
           <button v-else class="btn btn-ghost btn-sm" @click="signIn">登录</button>
         </div>
-        <button class="settingrow" @click="router.push('/accounts')"><span class="body"><span class="lab" style="display:block">账号与服务</span><span class="sub">澜音、QQ音乐、酷狗、酷我等 · 按音源能力开放</span></span><Icon name="chevron-right" :size="15" /></button>
+        <button class="settingrow" @click="platformLoginVisible = true"><span class="body"><span class="lab" style="display:block">音乐平台登录</span><span class="sub">官方网页登录 · 与澜音账号独立</span></span><Icon name="chevron-right" :size="15" /></button>
       </section>
 
       <section id="settings-appearance" v-if="groupVisible('appearance')">

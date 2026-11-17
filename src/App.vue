@@ -10,6 +10,11 @@ import BottomNav from '@/components/BottomNav.vue'
 import ConfirmSheet from '@/components/ConfirmSheet.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import ThemeBackground from '@/components/ThemeBackground.vue'
+import PlatformLoginSheet from '@/components/PlatformLoginSheet.vue'
+import PluginAccountSurface from '@/components/PluginAccountSurface.vue'
+import { platformLoginVisible } from '@/core/platformAccounts'
+import { getPluginAccountSurface, invalidatePluginAccountCache } from '@/core/plugin/manager'
+import type { AccountSurfaceSpec } from '@/core/plugin/accountSurface'
 import { backgroundAppliesToRoute, themeBackgroundScene, themeBackgroundState } from '@/core/themeBackground'
 import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, checkAllPluginUpdates, navigationRequest, notify } from '@/core/plugin/manager'
 import { handleAuthCallback, initAuth } from '@/core/auth'
@@ -39,6 +44,8 @@ import { logEvent } from '@/core/logs'
 import { routeDirection } from '@/router/transition'
 
 const router = useRouter()
+const accountSurface = ref<AccountSurfaceSpec>()
+function closeAccountSurface(): void { if (accountSurface.value) invalidatePluginAccountCache(accountSurface.value.pluginId); accountSurface.value = undefined }
 const route = useRoute()
 const backgroundScene = computed(() => route.path === '/player' ? themeBackgroundScene.value : 'main')
 const customBackgroundActive = computed(() => Boolean(themeBackgroundState.url) && backgroundAppliesToRoute(route.path, backgroundScene.value))
@@ -198,7 +205,8 @@ function onTabTouchEnd(event: TouchEvent): void {
 
 /** Android back gesture/button: close sheets, walk up the tab chain, exit only from 发现. */
 function handleBackNavigation(): void {
-  const mask = document.querySelector('.sheet-mask') as HTMLElement | null
+  const masks = document.querySelectorAll<HTMLElement>('.sheet-mask')
+  const mask = masks[masks.length - 1]
   if (mask) {
     mask.click()
     return
@@ -351,10 +359,14 @@ watch(navigationRequest, (request) => {
     const page = request.request?.page
     if (page === 'search') router.push({ path: '/search', query: { q: request.request?.query ?? '' } })
     else if (page === 'settings') router.push('/settings')
-    else if (page === 'account') router.push('/accounts')
+    else if (page === 'account') platformLoginVisible.value = true
   } else if (request.type === 'open-view') {
     const owner = pluginState.plugins.find(p => p.pluginId === request.pluginId && p.enabled && p.running)
-    if (owner?.accountItems.some(a => a.view === request.surfaceId)) router.push('/accounts')
+    const item = owner?.accountItems.find(a => a.view === request.surfaceId)
+    if (owner && item) {
+      try { accountSurface.value = getPluginAccountSurface(owner.pluginId, item.id) }
+      catch { notify('音源账号界面无法打开', 'error') }
+    }
   }
 })
 </script>
@@ -420,6 +432,8 @@ watch(navigationRequest, (request) => {
       </div>
     </div>
 
+    <PlatformLoginSheet v-if="platformLoginVisible" @close="platformLoginVisible = false" />
+    <PluginAccountSurface v-if="accountSurface" :spec="accountSurface" @close="closeAccountSurface" />
     <ConfirmSheet />
     </div>
   </ion-app>

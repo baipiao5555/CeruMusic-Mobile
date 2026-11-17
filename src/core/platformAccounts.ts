@@ -1,0 +1,90 @@
+import { reactive, ref } from 'vue'
+import { secureStore } from './native/secureStore'
+import { openPlatformLogin, verifyPlatformLogin, type PlatformId } from './native/platformLogin'
+
+export const musicPlatforms = [
+  { id: 'tx', name: 'QQ音乐', mark: 'QQ', color: '#12ad70', verifiesIdentity: true },
+  { id: 'wy', name: '网易云音乐', mark: 'NE', color: '#e66379', verifiesIdentity: true },
+  { id: 'kg', name: '酷狗音乐', mark: 'KG', color: '#5782cf', verifiesIdentity: false },
+  { id: 'kw', name: '酷我音乐', mark: 'KW', color: '#d8a03c', verifiesIdentity: false }
+] as const
+type Phase = 'none' | 'saved' | 'verified'
+interface Account { phase: Phase; name: string; userId: string; busy: boolean; error: string }
+interface Session { cookies: string; name?: string; userId?: string }
+const empty = (): Account => ({ phase: 'none', name: '', userId: '', busy: false, error: '' })
+export const platformAccounts = reactive<Record<PlatformId, Account>>({ tx: empty(), wy: empty(), kg: empty(), kw: empty() })
+export const platformLoginVisible = ref(false)
+const epochs: Record<PlatformId, number> = { tx: 0, wy: 0, kg: 0, kw: 0 }
+const writes = new Map<PlatformId, Promise<void>>()
+const namespace = (id: PlatformId): string => `music.platform.${id}`
+function current(id: PlatformId, version: number): void { if (epochs[id] !== version) throw new Error('账号已变化，旧登录结果已取消') }
+function write(id: PlatformId, action: () => Promise<void>): Promise<void> {
+  const next = (writes.get(id) || Promise.resolve()).catch(() => undefined).then(action)
+  writes.set(id, next); return next
+}
+const uid = (value: unknown): string => /^(?:[1-9]\d*)$/.test(String(value)) ? String(value) : ''
+export function verifiedIdentity(id: PlatformId, status: number, body: string): { userId: string; name: string } {
+  if (status !== 200) throw new Error('平台身份核验未成功，未标记已登录')
+  let data: any
+  try { data = JSON.parse(body) } catch { throw new Error('平台返回了无效的身份信息') }
+  if (id === 'wy' && data.code === 200 && uid(data.account?.id) && uid(data.profile?.userId) === uid(data.account.id)) {
+    return { userId: uid(data.account.id), name: String(data.profile.nickname || '网易云用户').slice(0, 80) }
+  }
+  if (id === 'tx' && data.code === 0 && data.req?.code === 0) {
+    const info = data.req.data
+    // Require the login-user response, not a publicly readable profile page.
+    const userId = uid(info?.musicid || info?.uin || info?.userInfo?.musicid || info?.userInfo?.uin)
+    if (userId) return { userId, name: String(info?.nick || info?.nickname || info?.userInfo?.nick || 'QQ音乐用户').slice(0, 80) }
+  }
+  throw new Error('平台未确认登录身份，请重新登录；不会显示已登录')
+}
+async function identity(id: PlatformId, session: Session): Promise<{ userId: string; name: string } | undefined> {
+  if (!musicPlatforms.find(p => p.id === id)?.verifiesIdentity) return undefined
+  const result = await verifyPlatformLogin(id, session.cookies)
+  return verifiedIdentity(id, result.status, result.body)
+}
+export async function connectPlatform(id: PlatformId): Promise<void> {
+  const state = platformAccounts[id]
+  if (state.busy) return
+  const version = ++epochs[id]
+  state.busy = true; state.error = ''
+  try {
+    const session: Session = { cookies: await openPlatformLogin(id) }
+    current(id, version)
+    if (!session.cookies || session.cookies.length > 65536 || /[\r\n]/.test(session.cookies)) throw new Error('没有取得有效平台会话，原账号未修改')
+    const user = await identity(id, session)
+    current(id, version)
+    await write(id, async () => { current(id, version); await secureStore.set(namespace(id), 'session', JSON.stringify({ ...session, ...user })) })
+    current(id, version)
+    Object.assign(state, { phase: user ? 'verified' : 'saved', name: user?.name || '', userId: user?.userId || '' })
+  } catch (error: any) {
+    if (epochs[id] === version) state.error = error?.message === 'LOGIN_CANCELLED' ? '' : '登录未完成或身份核验失败，原账号未修改。请检查网页和网络后重试。'
+  } finally { if (epochs[id] === version) state.busy = false }
+}
+export async function refreshPlatformAccounts(): Promise<void> {
+  await Promise.all(musicPlatforms.map(async ({ id }) => {
+    const state = platformAccounts[id]
+    if (state.busy) return
+    const version = ++epochs[id]
+    state.busy = true; state.error = ''
+    if (state.phase === 'verified') state.phase = 'saved'
+    try {
+      const raw = await secureStore.get(namespace(id), 'session')
+      current(id, version)
+      if (!raw) { Object.assign(state, empty(), { busy: true }); return }
+      const session = JSON.parse(raw) as Session
+      if (typeof session.cookies !== 'string' || !session.cookies || session.cookies.length > 65536 || /[\r\n]/.test(session.cookies)) throw Error('Invalid session')
+      Object.assign(state, { phase: 'saved', name: '', userId: '' })
+      const user = await identity(id, session)
+      current(id, version)
+      if (user) Object.assign(state, { phase: 'verified', ...user })
+    } catch { if (epochs[id] === version) state.error = '平台身份未核验；请检查网络或重新登录。' }
+    finally { if (epochs[id] === version) state.busy = false }
+  }))
+}
+export async function disconnectPlatform(id: PlatformId): Promise<void> {
+  const version = ++epochs[id], state = platformAccounts[id]
+  state.busy = true
+  try { await write(id, () => secureStore.remove(namespace(id), 'session')); current(id, version); Object.assign(state, empty()) }
+  catch { if (epochs[id] === version) { state.busy = false; state.error = '本机会话清除失败，请重试' } }
+}

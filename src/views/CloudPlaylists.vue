@@ -141,7 +141,7 @@ async function importAll(): Promise<void> {
 }
 
 function addService(): void {
-  notify('当前版本只支持澜音云端账号，WebDAV / S3 接入在后续版本')
+  void router.push('/sync-services')
 }
 
 onMounted(() => {
@@ -226,7 +226,7 @@ watch([() => authState.authenticated, () => authState.user?.sub], ([loggedIn]) =
         <button class="p-addsrc" @click="addService">
           <Icon name="plus" :size="15" />
           添加其他服务
-          <span class="dim">WebDAV / S3 / OneDrive</span>
+          <span class="dim">WebDAV 备份与恢复</span>
         </button>
 
         <div class="p-sh">

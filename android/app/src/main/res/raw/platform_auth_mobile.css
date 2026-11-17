@@ -1,0 +1,14 @@
+/* Presentation only. Keep the official form, callbacks, permissions and captcha intact. */
+html, body { background: #fff !important; color: #172b25 !important; font-family: Roboto, "Microsoft YaHei", sans-serif !important; }
+.page_header { background: #fff !important; border: 0 !important; box-shadow: none !important; padding: 15px 20px !important; }
+.page_header h1 { font-size: 17px !important; color: #172b25 !important; }
+.page_content { padding: 4px 20px 20px !important; }
+.input_wrap { border: 0 !important; box-shadow: none !important; background: transparent !important; }
+.input_wrap .inner_wrap { border: 1px solid #e1e9e4 !important; border-radius: 11px !important; margin: 0 0 10px !important; background: #fff !important; min-height: 50px !important; }
+.input_id, .input_pwd, .input_code { color: #172b25 !important; font-size: 15px !important; font-family: inherit !important; min-height: 50px !important; box-sizing: border-box !important; padding: 12px !important; }
+.input_id::placeholder, .input_pwd::placeholder, .input_code::placeholder { color: #8a9890 !important; }
+.btn_login { background: #12ad70 !important; border: 0 !important; box-shadow: none !important; border-radius: 11px !important; min-height: 48px !important; line-height: 48px !important; font-size: 15px !important; color: #fff !important; }
+.authorized_form_list { color: #73817b !important; font-size: 12px !important; margin-top: 24px !important; }
+.api_list { border: 1px solid #e4ece7 !important; border-radius: 12px !important; box-shadow: none !important; background: #fff !important; }
+.api_list li { background: #fff !important; color: #4d6256 !important; }
+footer { color: #8a9890 !important; font-size: 10px !important; }

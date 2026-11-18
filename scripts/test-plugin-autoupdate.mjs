@@ -30,6 +30,7 @@ exports.activate = function (core) {
 }`
 
 const SOURCE_URL = 'https://plugins.example.com/ceru/autoupdate.js'
+const APP_URL = process.env.CERU_TEST_URL ?? 'http://127.0.0.1:5180'
 let served = plugin('1.0.0')
 
 const browser = await chromium.launch({
@@ -64,7 +65,7 @@ const installedVersion = () =>
     return plugin ? plugin.version : ''
   })
 
-await page.goto('http://127.0.0.1:5180/', { waitUntil: 'networkidle' })
+await page.goto(APP_URL + '/', { waitUntil: 'networkidle' })
 await page.waitForTimeout(3000)
 
 // 1) 以「从链接安装」的方式装 1.0.0（会记录 sourceUrl）

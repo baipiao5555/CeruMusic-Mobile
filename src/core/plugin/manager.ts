@@ -42,6 +42,8 @@ export interface PluginDescriptor {
   accountItems: any[]
   surfaces: any[]
   sourceUrl?: string
+  /** Effective URL used for auto-update; local files may get this from metadata. */
+  updateUrl?: string
   format?: 'lx'
 }
 
@@ -55,6 +57,7 @@ interface PluginRecord {
   denied: string[]
   installedAt: number
   sourceUrl?: string
+  updateUrl?: string
   loadError?: string
 }
 
@@ -206,6 +209,7 @@ function descriptorFor(record: PluginRecord, host?: PluginHost): PluginDescripto
     accountItems: manifest.contributes?.accountItems ?? [],
     surfaces: manifest.modules?.surfaces ?? [],
     sourceUrl: record.sourceUrl,
+    updateUrl: record.updateUrl ?? record.sourceUrl,
     format: manifest.format
   }
 }
@@ -422,7 +426,18 @@ export async function initPlugins(): Promise<void> {
       selectedProvider = localStorage.getItem('ceru.selectedProvider') || ''
     } catch {}
     const list = await idb.all<PluginRecord>('plugins')
-    for (const record of list) records.set(record.pluginId, record)
+    for (const record of list) {
+      records.set(record.pluginId, record)
+      // 旧版本只给链接安装的插件记录更新地址。升级后补全一次，
+      // 让文件安装的插件也能使用 manifest 里声明的更新地址。
+      if (!record.updateUrl) {
+        const updateUrl = record.sourceUrl ?? manifestUpdateUrl(record.manifest)
+        if (updateUrl) {
+          record.updateUrl = updateUrl
+          await save(record).catch(() => undefined)
+        }
+      }
+    }
     refresh()
     for (const record of list) {
       if (!record.enabled) continue
@@ -442,9 +457,27 @@ export async function initPlugins(): Promise<void> {
   }
 }
 
+function manifestUpdateUrl(manifest: any): string | undefined {
+  const explicit = manifest?.updateUrl ?? manifest?.updateurl
+  if (typeof explicit === 'string' && /^https?:\/\//i.test(explicit.trim())) {
+    return explicit.trim()
+  }
+  const homepage = manifest?.homepage
+  // 只有明确指向脚本文件的 homepage 才作为更新地址，避免把项目主页当 JS 下载。
+  if (typeof homepage === 'string' && /^https?:\/\/.+\.(?:js|mjs)(?:[?#].*)?$/i.test(homepage.trim())) {
+    return homepage.trim()
+  }
+  return undefined
+}
+
 export async function installPlugin(
   code: string,
-  options: { enable?: boolean; grantDeclared?: boolean; sourceUrl?: string } = {}
+  options: {
+    enable?: boolean
+    grantDeclared?: boolean
+    sourceUrl?: string
+    updateUrl?: string
+  } = {}
 ): Promise<PluginDescriptor> {
   const manifest = inspectPlugin(code)
   if (manifest.format !== 'lx' && manifest.manifestVersion !== 2) throw new Error('只支持澜音 v2 插件或洛雪音源')
@@ -465,7 +498,12 @@ export async function installPlugin(
     grants,
     denied: existing?.denied ?? [],
     installedAt: existing?.installedAt ?? Date.now(),
-    sourceUrl: options.sourceUrl ?? existing?.sourceUrl
+    sourceUrl: options.sourceUrl ?? existing?.sourceUrl,
+    updateUrl:
+      options.updateUrl ??
+      options.sourceUrl ??
+      existing?.updateUrl ??
+      manifestUpdateUrl(manifest)
   }
   const oldHost = hosts.get(pluginId)
   if (oldHost) {
@@ -500,14 +538,15 @@ function comparePluginVersions(a: string, b: string): number {
   return 0
 }
 
-/** Re-downloads a URL-installed plugin and replaces it when the manifest version is newer. */
+/** Re-downloads a plugin with an update URL and replaces it when the manifest version is newer. */
 export async function checkPluginUpdate(
   pluginId: string
 ): Promise<{ updated: boolean; previousVersion: string; version: string }> {
   const record = records.get(pluginId)
   if (!record) throw new Error('插件不存在')
-  if (!record.sourceUrl) throw new Error('这个插件不是从链接安装的，无法自动检查更新')
-  const code = await fetchPluginCode(record.sourceUrl)
+  const updateUrl = record.updateUrl || record.sourceUrl
+  if (!updateUrl) throw new Error('这个插件没有更新地址，无法自动检查更新')
+  const code = await fetchPluginCode(updateUrl)
   const manifest = inspectPlugin(code)
   if (manifest.id !== record.manifest.id) throw new Error('更新文件与已安装音源不一致')
   const previousVersion = String(record.manifest.version ?? '')
@@ -518,9 +557,25 @@ export async function checkPluginUpdate(
   await installPlugin(code, {
     enable: record.enabled,
     grantDeclared: true,
-    sourceUrl: record.sourceUrl
+    sourceUrl: record.sourceUrl,
+    updateUrl
   })
   return { updated: true, previousVersion, version }
+}
+
+/** Allows a file-installed plugin to get a remote update source. */
+export async function setPluginUpdateUrl(pluginId: string, url: string): Promise<PluginDescriptor> {
+  const record = records.get(pluginId)
+  if (!record) throw new Error('插件不存在')
+  const value = url.trim()
+  if (!/^https?:\/\//i.test(value)) throw new Error('更新地址必须是公网 HTTP(S) 链接')
+  const code = await fetchPluginCode(value)
+  const manifest = inspectPlugin(code)
+  if (manifest.id !== record.manifest.id) throw new Error('更新地址返回的音源与已安装的不一致')
+  record.updateUrl = value
+  await save(record)
+  refresh()
+  return descriptorFor(record, hosts.get(pluginId))
 }
 
 const PLUGIN_UPDATE_CLOCK_KEY = 'ceru.pluginUpdate.lastChecked'
@@ -550,14 +605,16 @@ function markUpdateChecked(): void {
 }
 
 /**
- * 自动检查「从链接安装」的插件：有新版本就替换并提示。
+ * 自动检查带有更新地址的插件（链接安装或手动绑定）：有新版本就替换并提示。
  * 默认 6 小时内只跑一次，force 可以无视节流；单个插件失败不影响其它插件。
  */
 export async function checkAllPluginUpdates(
   options: { force?: boolean; quiet?: boolean } = {}
 ): Promise<PluginUpdateSummary[]> {
   if (!options.force && Date.now() - readUpdateClock() < PLUGIN_UPDATE_INTERVAL) return []
-  const targets = [...records.values()].filter((record) => record.sourceUrl && record.enabled)
+  const targets = [...records.values()].filter(
+    (record) => (record.updateUrl || record.sourceUrl) && record.enabled
+  )
   const results: PluginUpdateSummary[] = []
   for (const record of targets) {
     const name = String(record.manifest?.name ?? record.pluginId)

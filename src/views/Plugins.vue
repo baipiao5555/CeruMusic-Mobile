@@ -12,6 +12,7 @@ import {
   installDemoPlugin,
   installPlugin,
   checkPluginUpdate,
+  setPluginUpdateUrl,
   checkAllPluginUpdates,
   pluginState,
   removePlugin,
@@ -32,6 +33,9 @@ const editing = ref<PluginDescriptor | null>(null)
 const configValues = ref<Record<string, any>>({})
 const expanded = ref('')
 const sourceExpanded = ref('')
+const updateUrlDraft = ref<Record<string, string>>({})
+const savingUpdate = ref('')
+const editingUpdateUrl = ref<Record<string, boolean>>({})
 
 const installed = computed(() => pluginState.plugins)
 const activeSource = computed(() =>
@@ -177,6 +181,37 @@ async function checkUpdate(plugin: PluginDescriptor): Promise<void> {
   }
 }
 
+async function saveUpdateUrl(plugin: PluginDescriptor): Promise<void> {
+  const value = String(updateUrlDraft.value[plugin.pluginId] ?? '').trim()
+  if (!value) {
+    error.value = '请输入更新地址'
+    return
+  }
+  savingUpdate.value = plugin.pluginId
+  error.value = ''
+  info.value = ''
+  try {
+    await setPluginUpdateUrl(plugin.pluginId, value)
+    info.value = `${plugin.name} 的更新地址已保存`
+    updateUrlDraft.value[plugin.pluginId] = ''
+    editingUpdateUrl.value[plugin.pluginId] = false
+  } catch (err: any) {
+    error.value = err?.message ?? '保存更新地址失败'
+  } finally {
+    savingUpdate.value = ''
+  }
+}
+
+function editUpdateUrl(plugin: PluginDescriptor): void {
+  updateUrlDraft.value[plugin.pluginId] = plugin.updateUrl ?? ''
+  editingUpdateUrl.value[plugin.pluginId] = true
+}
+
+function cancelEditUpdateUrl(plugin: PluginDescriptor): void {
+  editingUpdateUrl.value[plugin.pluginId] = false
+  updateUrlDraft.value[plugin.pluginId] = ''
+}
+
 async function autoCheckUpdates(): Promise<void> {
   if (sessionStorage.getItem('ceru.pluginAutoUpdateChecked') === '1') return
   sessionStorage.setItem('ceru.pluginAutoUpdateChecked', '1')
@@ -198,7 +233,7 @@ async function checkAll(): Promise<void> {
   try {
     const results = await checkAllPluginUpdates({ force: true, quiet: true })
     if (!results.length) {
-      info.value = '没有可自动更新的插件（只有从链接安装的插件才记录更新地址）'
+      info.value = '没有可自动更新的插件（链接安装或填写过更新地址的插件才会自动更新）'
     } else {
       const updated = results.filter((item) => item.updated)
       const failed = results.filter((item) => item.error)
@@ -444,7 +479,13 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
                 <div v-else class="psub">
                   <span class="truncate">{{ plugin.author || '未知作者' }}</span>
                   <span class="dot" />
-                  <span>{{ plugin.sourceUrl ? '链接订阅' : '文件安装' }}</span>
+                  <span>{{
+                    plugin.updateUrl
+                      ? plugin.sourceUrl
+                        ? '链接订阅 · 自动更新'
+                        : '文件安装 · 自动更新'
+                      : '文件安装'
+                  }}</span>
                 </div>
               </div>
               <button
@@ -475,9 +516,52 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
                 </span>
                 <span v-if="plugin.format === 'lx'" class="badge">洛雪 LX</span>
               </div>
+              <div
+                v-if="!plugin.updateUrl || editingUpdateUrl[plugin.pluginId]"
+                class="update-url-form"
+              >
+                <p>
+                  {{
+                    plugin.updateUrl
+                      ? '修改后会用新地址检查更新，地址返回的音源必须与当前已安装的一致。'
+                      : '本地文件没有自动更新地址。填入同一音源的 .js 地址后，应用会按版本自动检查更新。'
+                  }}
+                </p>
+                <div class="update-url-row">
+                  <input
+                    v-model="updateUrlDraft[plugin.pluginId]"
+                    type="url"
+                    placeholder="https://example.com/plugin.js"
+                    aria-label="音源更新地址"
+                    @keydown.enter.prevent="saveUpdateUrl(plugin)"
+                  />
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    :disabled="savingUpdate === plugin.pluginId"
+                    @click="saveUpdateUrl(plugin)"
+                  >
+                    {{ savingUpdate === plugin.pluginId ? '保存中…' : '保存地址' }}
+                  </button>
+                  <button
+                    v-if="plugin.updateUrl"
+                    class="btn btn-ghost btn-sm"
+                    :disabled="savingUpdate === plugin.pluginId"
+                    @click="cancelEditUpdateUrl(plugin)"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+              <p v-else class="update-url-note">
+                <Icon name="refresh" :size="12" />
+                <span class="update-url-text">
+                  自动更新地址：<span class="truncate">{{ plugin.updateUrl }}</span>
+                </span>
+                <button class="update-url-edit" @click="editUpdateUrl(plugin)">修改</button>
+              </p>
               <div class="pacts">
                 <button
-                  v-if="plugin.sourceUrl"
+                  v-if="plugin.updateUrl"
                   class="btn btn-ghost btn-sm"
                   :disabled="busy === plugin.pluginId"
                   @click="checkUpdate(plugin)"
@@ -512,8 +596,8 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
           </div>
           澜音 v2 插件和洛雪 LX 音源均在独立沙箱中运行。洛雪音源的歌曲目录由应用提供，播放地址由音源解析。
           出于安全考虑，插件网络请求仅允许访问公网 HTTP(S) 地址，不能访问本机或局域网。
-          从链接安装的插件会记录更新地址，应用启动时自动检查新版本（6 小时内只查一次，可在设置里关掉），
-          也可以点上面的「检查更新」立刻检查。从文件安装的插件没有更新地址，需要重新从链接安装一次才能自动更新。
+          从链接安装的插件会记录更新地址；从文件安装的插件可以在详情里填写同一音源的 .js 地址，
+          之后同样会按版本自动更新（6 小时内只查一次，可在设置里关掉），也可以点上面的「检查更新」立刻检查。
         </div>
       </div>
     </div>
@@ -994,6 +1078,65 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 9px;
+}
+.update-url-form {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--porcelain-2);
+}
+.update-url-form p {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-3);
+  word-break: break-word;
+}
+.update-url-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.update-url-row input {
+  flex: 1 1 128px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--porcelain);
+  color: var(--ink);
+  font-size: 12px;
+}
+.update-url-row input:focus {
+  border-color: var(--tint);
+  outline: none;
+}
+.update-url-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--porcelain-2);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.update-url-text {
+  flex: 1;
+  min-width: 0;
+}
+.update-url-edit {
+  flex: none;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--tint);
+  font-size: 11px;
 }
 .badge.on {
   color: var(--tint);

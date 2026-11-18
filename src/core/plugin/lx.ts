@@ -18,6 +18,7 @@ export function inspectLxPlugin(code: string): any | null {
     author: fields.author || '',
     description: fields.description || '',
     homepage: fields.homepage || '',
+    updateUrl: fields.updateUrl || fields.updateurl || '',
     permissions: [{ key: 'network', name: 'network.request', reason: '访问音源服务与歌曲目录' }],
     contributes: { providers: [] }
   }

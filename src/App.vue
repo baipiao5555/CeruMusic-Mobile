@@ -326,7 +326,7 @@ onMounted(async () => {
     pluginState.loading = false
   }
   if (pluginState.selectedProvider) selectProvider(pluginState.selectedProvider)
-  // 从链接安装的音源插件：启动后静默检查一次新版本（6 小时内不重复）。
+  // 带更新地址的音源插件：启动后静默检查一次新版本（6 小时内不重复）。
   if (settingsState.pluginAutoUpdate) void checkAllPluginUpdates()
   window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
     if (settingsState.theme === 'system') {

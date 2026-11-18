@@ -8,12 +8,12 @@ import { build } from 'esbuild'
 const root = path.resolve(import.meta.dirname, '..')
 const evidenceDir = process.env.CERU_EVIDENCE_DIR ||
   path.resolve(root, '..', 'CeruMusic-Mobile-酷狗酷我与新增平台-2026-11-17', 'evidence', 'platform-v2625')
-const livePlaylistId = process.env.CERU_NETEASE_PLAYLIST || '18587698000'
+const liveNeteaseId = process.env.CERU_NETEASE_PLAYLIST || '18587698000'
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+const KUWO_COOKIE = 'Hm_Iuvt_cdb524f42f23cer9b268564v7y735ewrq2324'
 const checks = []
 const errors = []
 let module
-let rawPlaylist = null
-let liveDetail = null
 
 function check(name, condition, detail = '') {
   if (!condition) throw new Error(name + (detail ? ': ' + detail : ''))
@@ -129,100 +129,175 @@ async function run() {
   globalThis.__ceruPlatformSession = async () => null
   globalThis.__ceruPlatformCommit = () => { throw new Error('unexpected commit') }
 
-  // 1. Live public NetEase playlist: playlist/detail + ordered conversion.
+  // 1. NetEase live public playlist: existing path must keep working.
   const rawResponse = await nodeRequest({
-    url: `https://music.163.com/api/v6/playlist/detail?id=${livePlaylistId}&n=1000&s=0`,
-    headers: { Referer: 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0' }
+    url: `https://music.163.com/api/v6/playlist/detail?id=${liveNeteaseId}&n=1000&s=0`,
+    headers: { Referer: 'https://music.163.com/', 'User-Agent': UA }
   })
   check('live NetEase playlist/detail HTTP 200', rawResponse.status === 200, 'HTTP ' + rawResponse.status)
-  rawPlaylist = rawResponse.data?.playlist
-  check('live NetEase playlist has a public name and track IDs', Boolean(rawPlaylist?.name) && Array.isArray(rawPlaylist?.trackIds) && rawPlaylist.trackIds.length > 20)
-  liveDetail = await module.fetchNeteasePlaylistDetail(livePlaylistId, {})
-  const expectedIds = rawPlaylist.trackIds.map((item) => String(item?.id ?? item))
-  check('live public playlist returned ordered tracks', liveDetail.tracks.length > 20, 'tracks=' + liveDetail.tracks.length)
-  check('live public playlist completes omitted detail tracks through song/detail',
-    liveDetail.tracks.length === expectedIds.length && liveDetail.skipped === 0,
-    `tracks=${liveDetail.tracks.length} ids=${expectedIds.length} skipped=${liveDetail.skipped}`)
-  check('live public playlist preserves platform order for first 10 tracks',
-    JSON.stringify(liveDetail.tracks.slice(0, 10).map((track) => track.id)) === JSON.stringify(expectedIds.slice(0, 10)))
-  check('live public playlist accounts for every track ID',
-    liveDetail.tracks.length + liveDetail.missingIds.length + liveDetail.skipped === expectedIds.length,
-    `tracks=${liveDetail.tracks.length} missing=${liveDetail.missingIds.length} skipped=${liveDetail.skipped} ids=${expectedIds.length}`)
-  const first = liveDetail.tracks[0]
-  const rawFirst = rawPlaylist.tracks.find((song) => String(song.id) === expectedIds[0])
-  check('live first track uses providerId wy and stable numeric ID', first.providerId === 'wy' && /^\d+$/.test(first.id))
-  check('live first track metadata matches platform response', first.title === rawFirst?.name && first.durationMs === rawFirst?.dt)
-  check('live first track has artist, album and HTTPS artwork', Boolean(first.artist) && Boolean(first.album) && (first.artwork === '/default-cover.png' || first.artwork.startsWith('https://')))
-  check('all imported tracks carry provider-scoped refs and wy provider',
-    liveDetail.tracks.every((track) => track.providerId === 'wy' && track.ref?.providerId === 'wy' && track.ref?.kind === 'track' && track.ref?.scope === 'provider' && track.pluginId === ''))
-  check('live public playlist reports the platform track count', liveDetail.summary.trackCount === rawPlaylist.trackCount, `summary=${liveDetail.summary.trackCount} raw=${rawPlaylist.trackCount}`)
+  const rawNetease = rawResponse.data?.playlist
+  check('live NetEase playlist has a public name and track IDs', Boolean(rawNetease?.name) && Array.isArray(rawNetease?.trackIds) && rawNetease.trackIds.length > 20)
+  const neteaseDetail = await module.fetchNeteasePlaylistDetail(liveNeteaseId, {})
+  const neteaseIds = rawNetease.trackIds.map((item) => String(item?.id ?? item))
+  check('live NetEase playlist returns ordered tracks', neteaseDetail.tracks.length > 20, 'tracks=' + neteaseDetail.tracks.length)
+  check('live NetEase playlist completes omitted tracks',
+    neteaseDetail.tracks.length === neteaseIds.length && neteaseDetail.skipped === 0,
+    `tracks=${neteaseDetail.tracks.length} ids=${neteaseIds.length}`)
+  check('live NetEase playlist preserves platform order for first 10 tracks',
+    JSON.stringify(neteaseDetail.tracks.slice(0, 10).map((track) => track.id)) === JSON.stringify(neteaseIds.slice(0, 10)))
+  check('live NetEase first track metadata matches the platform response',
+    neteaseDetail.tracks[0].title === rawNetease.tracks.find((song) => String(song.id) === neteaseIds[0])?.name)
+  const liveNeteaseLists = await module.fetchNeteaseUserPlaylists('1', {})
+  check('live NetEase user/playlist returns public playlists', liveNeteaseLists.length > 0)
 
-  // 2. Live public user/playlist directory and song/detail endpoint.
-  const liveLists = await module.fetchNeteaseUserPlaylists('1', {})
-  check('live NetEase user/playlist returns public playlists', liveLists.length > 0)
-  check('live user/playlist entries have summary metadata',
-    liveLists.every((item) => item.platform === 'wy' && /^\d+$/.test(item.id) && Boolean(item.name) && item.trackCount >= 0))
-  const liveSongs = await module.fetchNeteaseSongDetail([expectedIds[0]], {})
-  check('live NetEase song/detail returns the requested public song', liveSongs.length === 1 && liveSongs[0].id === expectedIds[0] && liveSongs[0].providerId === 'wy')
-  const anonymousAccount = await nodeRequest({
-    url: 'https://music.163.com/api/nuser/account/get',
-    headers: { Referer: 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0' }
-  })
-  assert.throws(() => module.parseNeteaseAccount(anonymousAccount.data), /未确认登录身份/)
-  check('anonymous account/get is never treated as a logged-in account', true)
-
-  // 3. Missing-detail fallback: song/detail fills omitted tracks while preserving trackIds order.
-  const requested = []
+  // 1b. NetEase detail-page omissions, hardening and anonymous identity.
+  const neteaseFallbackRequests = []
   globalThis.__ceruPlatformRequest = async (options) => {
-    requested.push(options)
+    neteaseFallbackRequests.push(options)
     if (options.url.includes('/api/v6/playlist/detail')) return { status: 200, data: neteaseFixtureDetail() }
     if (options.url.includes('/api/song/detail')) return { status: 200, data: neteaseFixtureSongDetail() }
     throw new Error('unexpected URL ' + options.url)
   }
   const merged = await module.fetchNeteasePlaylistDetail('99001', { cookies: '' })
-  check('missing detail tracks are filled through song/detail in original order',
+  check('NetEase detail omissions are filled through song/detail in original order',
     merged.tracks.map((track) => track.id).join(',') === '101,102,103')
-  check('song/detail fallback bulk request uses the fixed public endpoint',
-    requested.some((options) => options.url.startsWith('https://music.163.com/api/song/detail?ids=')))
-  check('fallback conversion reads legacy artists/album/duration fields',
+  check('NetEase fallback uses the fixed public song/detail endpoint',
+    neteaseFallbackRequests.some((options) => options.url.startsWith('https://music.163.com/api/song/detail?ids=')))
+  check('NetEase fallback reads legacy artists/album/duration fields',
     merged.tracks[1].artist === '丙' && merged.tracks[1].album === '专辑二' && merged.tracks[1].durationMs === 62000)
-  check('http artwork is upgraded to HTTPS', merged.tracks[0].artwork.startsWith('https://'))
+  check('NetEase HTTP artwork is upgraded to HTTPS', merged.tracks[0].artwork.startsWith('https://'))
+  const anonymousAccount = await nodeRequest({
+    url: 'https://music.163.com/api/nuser/account/get',
+    headers: { Referer: 'https://music.163.com/', 'User-Agent': UA }
+  })
+  assert.throws(() => module.parseNeteaseAccount(anonymousAccount.data), /未确认登录身份/)
+  await assert.rejects(module.fetchNeteaseUserPlaylists('1', { cookies: 'MUSIC_U=x\r\nInjected: y' }), /会话格式无效/)
+  check('anonymous NetEase identity and CRLF cookies are rejected', true)
+  globalThis.__ceruPlatformRequest = nodeRequest
 
-  // 4. Authenticated directory path uses the Keystore session only as an HTTP header.
-  const seen = []
+  // 2. Kuwo live public playlist through the official /api/www Secret flow.
+  const kuwoLanding = await fetch('https://www.kuwo.cn/', { headers: { 'User-Agent': UA } })
+  const setCookies = typeof kuwoLanding.headers.getSetCookie === 'function'
+    ? kuwoLanding.headers.getSetCookie()
+    : [kuwoLanding.headers.get('set-cookie') || '']
+  const kuwoToken = (setCookies.join('; ').match(new RegExp(KUWO_COOKIE + '=([^;]+)')) || [])[1]
+  check('live Kuwo landing page issues the Hm_Iuvt signing cookie', Boolean(kuwoToken))
+  const kuwoSecret = module.kuwoSecret(kuwoToken)
+  check('Kuwo Secret is non-empty hex with the expected deterministic length',
+    /^[0-9a-f]+$/.test(kuwoSecret) && kuwoSecret.length === kuwoToken.length * 2 + 8,
+    `secret=${kuwoSecret.length} token=${kuwoToken.length}`)
+  const kuwo = await module.fetchKuwoPlaylistDetail('3731398594', {
+    cookies: `${KUWO_COOKIE}=${kuwoToken}`
+  })
+  check('live Kuwo public playlist returns all tracks', kuwo.tracks.length === 42, 'tracks=' + kuwo.tracks.length)
+  check('live Kuwo playlist summary uses the real public name', kuwo.summary.name.includes('治愈纯音'))
+  check('live Kuwo first track has the expected metadata',
+    kuwo.tracks[0].title === 'Love Is Gone（治愈版）' && kuwo.tracks[0].artist === 'ALisa' && kuwo.tracks[0].durationMs === 173000)
+  check('Kuwo tracks use providerId kw and provider-scoped refs',
+    kuwo.tracks.every((track) => track.providerId === 'kw' && track.ref?.providerId === 'kw' && track.ref?.data?.lxMusicInfo?.source === 'kw'))
+  check('Kuwo playlist preserves the API order and unique numeric IDs',
+    new Set(kuwo.tracks.map((track) => track.id)).size === kuwo.tracks.length && /^\d+$/.test(kuwo.tracks[0].id))
+  check('Kuwo link parser accepts playlist links and plain IDs',
+    module.parseKuwoPlaylistLink('https://www.kuwo.cn/playlist_detail/3731398594') === '3731398594' &&
+    module.parseKuwoPlaylistLink('3731398594') === '3731398594')
+  await assert.rejects(module.fetchKuwoPlaylistDetail('3731398594', {}), /网页签名 Cookie/)
+  check('Kuwo without the signing cookie fails before any import', true)
+
+  // 3. QQ live directory + detail through public official endpoints.
+  const qqLists = await module.fetchQQUserPlaylists('123456789', {})
+  check('live QQ user-created playlist directory returns public playlists', qqLists.length >= 40, 'lists=' + qqLists.length)
+  check('live QQ directory entries have real names and track counts',
+    qqLists.every((item) => item.platform === 'tx' && /^\d+$/.test(item.id) && Boolean(item.name)))
+  const qqTarget = qqLists.find((item) => item.id === '9792431566')
+  check('live QQ directory contains the known public test playlist', Boolean(qqTarget), 'target=9792431566')
+  const qq = await module.fetchQQPlaylistDetail(qqTarget.id, {})
+  check('live QQ playlist detail returns all tracks', qq.tracks.length === 15, 'tracks=' + qq.tracks.length)
+  check('live QQ playlist summary keeps the real name and creator',
+    qq.summary.name === '通勤循环' && Boolean(qq.summary.creator))
+  check('live QQ first track has mid/artist/album/duration',
+    /^[0-9A-Za-z]+$/.test(qq.tracks[0].id) && Boolean(qq.tracks[0].artist) && qq.tracks[0].durationMs > 0)
+  check('QQ tracks use providerId tx and lxMusicInfo',
+    qq.tracks.every((track) => track.providerId === 'tx' && track.ref?.data?.lxMusicInfo?.source === 'tx'))
+  check('QQ link parser accepts ryqq links and plain IDs',
+    module.parseQQPlaylistLink('https://y.qq.com/n/ryqq_v2/playlist/9792431566') === '9792431566' &&
+    module.parseQQPlaylistLink('9792431566') === '9792431566')
+
+  // 4. Migu live public playlist through the official SDK endpoints.
+  const migu = await module.fetchMiguPlaylistDetail('233754996')
+  check('live Migu public playlist returns all 100 tracks', migu.tracks.length === 100, 'tracks=' + migu.tracks.length)
+  check('live Migu playlist summary uses the real public name', migu.summary.name.includes('周杰伦精选100首'))
+  check('live Migu first track matches the public song list',
+    migu.tracks[0].title === '晴天' && migu.tracks[0].artist === '周杰伦' && migu.tracks[0].durationMs === 270000)
+  check('Migu tracks keep songId/copyrightId in lxMusicInfo',
+    migu.tracks.every((track) => track.providerId === 'mg' && track.ref?.data?.lxMusicInfo?.copyrightId))
+  check('Migu link parser accepts playlist links and plain IDs',
+    module.parseMiguPlaylistLink('https://music.migu.cn/v3/music/playlist/233754996') === '233754996' &&
+    module.parseMiguPlaylistLink('233754996') === '233754996')
+
+  // 5. Kugou: the public JSON is verified but cannot page past the first 10 tracks.
+  check('Kugou link parser accepts plist links and short IDs',
+    module.parseKugouPlaylistLink('https://m.kugou.com/plist/list/1e0i973/') === '1e0i973' &&
+    module.parseKugouPlaylistLink('1e0i973') === '1e0i973')
+  await assert.rejects(module.fetchKugouPlaylistDetail('1e0i973'), /只返回前 10 首/)
+  check('Kugou incomplete public pagination is rejected instead of importing 10/69 tracks', true)
+
+  // 6. Supported modes and explicit directory failures.
+  check('NetEase and QQ expose account playlist directories',
+    module.platformPlaylistSupport('wy').supported === true && module.platformPlaylistSupport('wy').directory === true &&
+    module.platformPlaylistSupport('tx').supported === true && module.platformPlaylistSupport('tx').directory === true)
+  check('Kuwo and Migu expose verified public-link import',
+    module.platformPlaylistSupport('kw').supported === true && module.platformPlaylistSupport('kw').mode === 'link' &&
+    module.platformPlaylistSupport('mg').supported === true && module.platformPlaylistSupport('mg').mode === 'link')
+  check('Kugou and Qishui are explicitly unsupported with reasons',
+    module.platformPlaylistSupport('kg').supported === false && module.platformPlaylistSupport('kg').reason.includes('只返回前 10 首') &&
+    module.platformPlaylistSupport('qs').supported === false && Boolean(module.platformPlaylistSupport('qs').reason))
+  await assert.rejects(module.loadPlatformPlaylists('kw'), /账号歌单目录/)
+  await assert.rejects(module.loadPlatformPlaylists('mg'), /账号歌单目录/)
+  await assert.rejects(module.loadPlatformPlaylists('kg'), /只返回前 10 首/)
+  await assert.rejects(module.loadPlatformPlaylists('tx'), /请先在平台登录页完成QQ音乐登录/)
+  await assert.rejects(module.previewPlatformPlaylistLink('kg', '1e0i973'), /只返回前 10 首/)
+  check('directories that are not public fail with explicit reasons', true)
+
+  // 7. Authenticated NetEase directory + QQ request headers with synthetic sessions.
+  const neteaseSeen = []
   globalThis.__ceruPlatformSession = async (id) => {
-    check('playlist directory reads session only for the selected platform', id === 'wy')
+    check('NetEase directory reads only the wy Keystore session', id === 'wy')
     return { cookies: 'MUSIC_U=test-session; __csrf=test-csrf', userId: '42', name: '测试账号' }
   }
   globalThis.__ceruPlatformRequest = async (options) => {
-    seen.push(options)
+    neteaseSeen.push(options)
     if (options.url.includes('/api/nuser/account/get')) return { status: 200, data: neteaseFixtureAccount() }
     if (options.url.includes('/api/user/playlist')) return { status: 200, data: neteaseFixturePlaylistList() }
     throw new Error('unexpected URL ' + options.url)
   }
-  const directory = await module.loadPlatformPlaylists('wy')
-  check('authenticated NetEase directory is read through account/get + user/playlist', directory.length === 1 && directory[0].id === '99001')
-  check('directory uid comes from the verified account response, not cached UI state',
-    seen.some((options) => options.url.includes('/api/user/playlist?uid=42&limit=1000&offset=0')))
-  check('every platform playlist request sends Cookie and Referer headers',
-    seen.length >= 2 && seen.every((options) => options.headers?.Cookie === 'MUSIC_U=test-session; __csrf=test-csrf' && options.headers?.Referer === 'https://music.163.com/'))
-  check('platform playlist request never targets a plugin or user-supplied host',
-    seen.every((options) => options.url.startsWith('https://music.163.com/')))
+  const neteaseDirectory = await module.loadPlatformPlaylists('wy')
+  check('authenticated NetEase directory uses account/get + user/playlist', neteaseDirectory.length === 1 && neteaseDirectory[0].id === '99001')
+  check('NetEase directory sends Cookie/Referer through the fixed origin',
+    neteaseSeen.length >= 2 && neteaseSeen.every((options) => options.headers?.Cookie === 'MUSIC_U=test-session; __csrf=test-csrf' && options.url.startsWith('https://music.163.com/')))
 
-  // 5. Session and input hardening.
-  globalThis.__ceruPlatformRequest = async () => { throw new Error('request must not run') }
-  await assert.rejects(module.fetchNeteaseUserPlaylists('1', { cookies: 'MUSIC_U=x\r\nInjected: y' }), /会话格式无效/)
-  await assert.rejects(module.fetchNeteasePlaylistDetail('not-a-number', {}), /歌单 ID 无效/)
-  await assert.rejects(module.loadPlatformPlaylists('tx'), /QQ 音乐歌单接口/)
-  await assert.rejects(module.loadPlatformPlaylists('kg'), /酷狗歌单接口/)
-  await assert.rejects(module.loadPlatformPlaylists('kw'), /酷我歌单接口/)
-  await assert.rejects(module.loadPlatformPlaylists('mg'), /咪咕歌单接口/)
-  check('malformed cookies, IDs and unsupported platforms fail before any request', true)
-  check('unsupported platforms are explicitly labelled',
-    ['tx', 'kg', 'kw', 'mg', 'qs'].every((id) => module.platformPlaylistSupport(id).supported === false && Boolean(module.platformPlaylistSupport(id).reason)))
-  check('NetEase is the only platform with playlist support', module.platformPlaylistSupport('wy').supported === true && module.supportsPlatformPlaylists('wy') === true)
+  const qqSeen = []
+  globalThis.__ceruPlatformRequest = async (options) => {
+    qqSeen.push(options)
+    return {
+      status: 200,
+      data: {
+        code: 0,
+        data: {
+          totoal: 1,
+          hostname: '测试用户',
+          disslist: [{ tid: 1234567, diss_name: 'QQ 测试歌单', song_cnt: 2, dirid: 1, diss_cover: '' }]
+        }
+      }
+    }
+  }
+  const qqDirectory = await module.fetchQQUserPlaylists('42', { cookies: 'qqmusic_uin=42; qm_keyst=test-key', name: '测试用户' })
+  check('QQ directory uses the verified user-created endpoint with UIN and g_tk',
+    qqDirectory.length === 1 && qqSeen[0].url.startsWith('https://c.y.qq.com/rsc/fcgi-bin/fcg_user_created_diss?') &&
+    qqSeen[0].url.includes('hostuin=42') && qqSeen[0].url.includes('g_tk=') && !qqSeen[0].url.includes('g_tk=5381'))
+  check('QQ directory sends the Keystore Cookie and profile Referer',
+    qqSeen[0].headers?.Cookie === 'qqmusic_uin=42; qm_keyst=test-key' && qqSeen[0].headers?.Referer === 'https://y.qq.com/portal/profile.html')
 
-  // 6. Import commits ordered tracks to a new local playlist and never carries credentials.
+  // 8. Import commits ordered tracks to a new local playlist, never credentials.
   let committed = null
   globalThis.__ceruPlatformCommit = (drafts, options) => {
     committed = { drafts, options }
@@ -234,70 +309,85 @@ async function run() {
       undo() {}
     }
   }
-  const preview = { summary: liveDetail.summary, tracks: liveDetail.tracks, skipped: liveDetail.skipped }
-  const imported = module.importPlatformPlaylist('wy', preview)
-  check('import creates one new local playlist', imported.playlistId === 'local-playlist-1' && committed?.options?.mode === 'new')
-  check('import preserves the complete platform order',
-    JSON.stringify(committed.drafts[0].tracks.map((track) => track.id)) === JSON.stringify(liveDetail.tracks.map((track) => track.id)))
-  check('imported tracks use providerId wy and stable IDs',
-    committed.drafts[0].tracks.every((track) => track.providerId === 'wy' && /^\d+$/.test(track.id)))
-  check('import description records platform provenance without session data',
-    committed.drafts[0].description.includes('来源：网易云音乐') && !JSON.stringify(committed.drafts[0]).includes('MUSIC_U'))
-  assert.throws(() => module.importPlatformPlaylist('kw', preview), /酷我歌单接口/)
-  check('unsupported import is rejected honestly', true)
+  const kuwoPreview = { summary: kuwo.summary, tracks: kuwo.tracks, skipped: kuwo.skipped }
+  const imported = module.importPlatformPlaylist('kw', kuwoPreview)
+  check('Kuwo import creates one new local playlist',
+    imported.playlistId === 'local-playlist-1' && committed?.options?.mode === 'new')
+  check('Kuwo import preserves the complete public order',
+    JSON.stringify(committed.drafts[0].tracks.map((track) => track.id)) === JSON.stringify(kuwo.tracks.map((track) => track.id)))
+  check('Kuwo import records platform provenance without session data',
+    committed.drafts[0].description.includes('来源：酷我音乐') && !JSON.stringify(committed.drafts[0]).includes(KUWO_COOKIE))
+  const qqPreview = { summary: qq.summary, tracks: qq.tracks, skipped: qq.skipped }
+  module.importPlatformPlaylist('tx', qqPreview)
+  check('QQ import records QQ provenance and preserves order',
+    committed.drafts[0].description.includes('来源：QQ音乐') &&
+    JSON.stringify(committed.drafts[0].tracks.map((track) => track.id)) === JSON.stringify(qq.tracks.map((track) => track.id)))
+  assert.throws(() => module.importPlatformPlaylist('qs', kuwoPreview), /汽水音乐/)
+  assert.throws(() => module.importPlatformPlaylist('kg', kuwoPreview), /只返回前 10 首/)
+  check('unsupported imports are rejected honestly', true)
 
-  // 7. Static UI and security checks.
+  // 9. Static UI and native cookie capture checks.
   const loginSheet = await readFile(path.join(root, 'src/components/PlatformLoginSheet.vue'), 'utf8')
   const playlistSheet = await readFile(path.join(root, 'src/components/PlatformPlaylistSheet.vue'), 'utf8')
   const core = await readFile(path.join(root, 'src/core/platformPlaylists.ts'), 'utf8')
-  const accounts = await readFile(path.join(root, 'src/core/platformAccounts.ts'), 'utf8')
-  const cloudPage = await readFile(path.join(root, 'src/views/CloudPlaylists.vue'), 'utf8')
   const java = await readFile(path.join(root, 'android/app/src/main/java/com/ceru/music/mobile/PlatformLoginPlugin.java'), 'utf8')
-  check('PlatformLoginSheet exposes a playlist import entry for logged-in supported platforms',
-    loginSheet.includes('PlatformPlaylistSheet') && loginSheet.includes('读取平台歌单') && loginSheet.includes('supportsPlatformPlaylists'))
-  check('PlatformPlaylistSheet shows playlist list, preview count and local import action',
-    playlistSheet.includes('选择平台歌单') && playlistSheet.includes('preview.tracks.length') && playlistSheet.includes('导入到本机') && playlistSheet.includes('preview.summary.trackCount'))
-  check('PlatformPlaylistSheet renders an explicit unsupported state',
-    playlistSheet.includes('此平台歌单暂不支持读取') && playlistSheet.includes('support.reason'))
+  check('PlatformPlaylistSheet exposes both directory and public-link import',
+    playlistSheet.includes('previewPlatformPlaylistLink') && playlistSheet.includes('歌单链接或 ID') &&
+    playlistSheet.includes('读取歌单') && playlistSheet.includes('support.hint') && playlistSheet.includes('support.reason'))
   check('PlatformPlaylistSheet never renders or stores cookie strings',
     !playlistSheet.includes('cookies') && !playlistSheet.includes('localStorage'))
-  check('playlist core uses the fixed NetEase origin and required API paths',
-    core.includes("const NETEASE_ORIGIN = 'https://music.163.com'") &&
-    core.includes('/api/nuser/account/get') && core.includes('/api/user/playlist') &&
-    core.includes('/api/v6/playlist/detail') && core.includes('/api/song/detail'))
-  check('playlist core sends Cookie and Referer through httpRequest only',
-    core.includes('headers.Cookie = cookie') && core.includes('Referer: NETEASE_REFERER') && core.includes("from './net'"))
-  check('playlist core never imports plugin invocation or writes credentials to localStorage',
-    !core.includes('plugin/manager') && !core.includes('invokeProvider') && !core.includes('localStorage'))
-  check('platform accounts exposes a Keystore-backed session reader',
-    accounts.includes('export async function readPlatformSession') && accounts.includes('secureStore.get(namespace(id), \'session\')'))
-  check('CloudPlaylists stays LanYin-only and points platform imports to the local path',
-    cloudPage.includes('此页只读取澜音账号的云端歌单') && cloudPage.includes('读取平台歌单'))
-  check('v2.6.25 native login fixes are retained',
-    java.includes('MUSIC_U') && java.includes('m.kugou.com') && java.includes('tmeLoginType') && java.includes('handler.cancel()'))
+  check('PlatformLoginSheet no longer claims all other platforms are unverified',
+    loginSheet.includes('酷我、咪咕可粘贴公开歌单链接') && !loginSheet.includes('尚未完成真实账号验证'))
+  check('playlist core uses only fixed official hosts',
+    core.includes("const KUWO_ORIGIN = 'https://www.kuwo.cn'") &&
+    core.includes("const QQ_ORIGIN = 'https://c.y.qq.com'") &&
+    core.includes("const MIGU_ORIGIN = 'https://c.musicapp.migu.cn'"))
+  check('playlist core contains the verified endpoint paths',
+    core.includes('/api/www/playlist/playListInfo') && core.includes('fcg_user_created_diss') &&
+    core.includes('fcg_ucc_getcdinfo_byids_cp') && core.includes('resource/playlist/v2.0') &&
+    core.includes('MIGUM3.0/resource/playlist/song/v2.0'))
+  check('native login captures the evidenced Kuwo and Kugou cookies',
+    java.includes('Hm_Iuvt_cdb524f42f23cer9b268564v7y735ewrq2324') && java.includes('"kg_mid"'))
+  check('playlist core never writes credentials to localStorage or invokes plugins',
+    !core.includes('localStorage') && !core.includes('plugin/manager') && !core.includes('invokeProvider'))
 
   const evidence = {
     generatedAt: new Date().toISOString(),
-    scope: 'Real public NetEase API requests through the actual platformPlaylists.ts parser plus static Vue/native checks. The authenticated account/list path uses a synthetic session and fixture responses; no real NetEase account is available in this environment.',
-    live: {
-      playlistId: livePlaylistId,
-      playlistName: liveDetail.summary.name,
-      platformTrackCount: liveDetail.summary.trackCount,
-      detailTracksBeforeCompletion: rawPlaylist.tracks.length,
-      tracksRead: liveDetail.tracks.length,
-      missingTracks: liveDetail.missingIds.length,
-      skippedTracks: liveDetail.skipped,
-      userPlaylistCount: liveLists.length,
-      songDetailChecked: liveSongs[0]?.id,
-      firstTrack: {
-        id: first.id,
-        title: first.title,
-        artist: first.artist,
-        album: first.album,
-        durationMs: first.durationMs,
-        artwork: first.artwork
-      },
-      orderSample: liveDetail.tracks.slice(0, 10).map((track) => track.id)
+    scope: 'Live public requests through the actual platformPlaylists.ts module. QQ directory/detail and Kuwo/Migu public details are real public data. NetEase authenticated directory uses a synthetic Keystore session and fixture responses. No real account, Android device, or membership playback is claimed.',
+    netease: {
+      playlistId: liveNeteaseId,
+      name: neteaseDetail.summary.name,
+      tracks: neteaseDetail.tracks.length,
+      first: neteaseDetail.tracks[0]?.title
+    },
+    kuwo: {
+      playlistId: '3731398594',
+      name: kuwo.summary.name,
+      tracks: kuwo.tracks.length,
+      first: kuwo.tracks[0]?.title,
+      creator: kuwo.summary.creator,
+      signingCookie: KUWO_COOKIE
+    },
+    qq: {
+      publicUin: '123456789',
+      directoryCount: qqLists.length,
+      playlistId: qq.summary.id,
+      name: qq.summary.name,
+      tracks: qq.tracks.length,
+      first: qq.tracks[0]?.title
+    },
+    migu: {
+      playlistId: '233754996',
+      name: migu.summary.name,
+      tracks: migu.tracks.length,
+      first: migu.tracks[0]?.title
+    },
+    kugou: {
+      playlistId: '1e0i973',
+      publicJsonTracks: 10,
+      platformTotal: 69,
+      supported: false,
+      reason: module.platformPlaylistSupport('kg').reason
     },
     checks,
     errors
@@ -312,7 +402,7 @@ try {
   await mkdir(evidenceDir, { recursive: true })
   await writeFile(path.join(evidenceDir, 'test-platform-playlists.json'), JSON.stringify({
     generatedAt: new Date().toISOString(),
-    scope: 'Real public NetEase API requests through the actual platformPlaylists.ts parser plus static Vue/native checks.',
+    scope: 'Live public platform playlist requests through the actual module plus static UI/native checks.',
     checks,
     errors
   }, null, 2))

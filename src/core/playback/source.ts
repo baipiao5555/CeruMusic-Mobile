@@ -3,6 +3,7 @@ import { allProviders, invokeProvider, type ProviderHandle } from '../plugin/man
 import { selectPlaybackQuality } from '../quality'
 import { localAudioUrl } from '../cache/audioCache'
 import type { Track } from '../track'
+import { isWebDavTrack, resolveWebDavTrackSource } from '../sync/webdavMedia'
 
 export function providerForTrack(track: Track): ProviderHandle | undefined {
   return (
@@ -23,6 +24,9 @@ export async function resolveTrackSource(
   track: Track,
   requestedQuality = ''
 ): Promise<TrackSource> {
+  // WebDAV 音乐库：地址由连接目录 + 相对路径重建，Basic 凭据每次从安全仓库读取。
+  // 带 Authorization 的音频会由 playableUrl 完整下载为 blob 后再播放，不是 Range 边下边播。
+  if (isWebDavTrack(track)) return resolveWebDavTrackSource(track)
   // 本机音乐：不走插件，直接交给本机小服务按 MediaStore id 出流。
   if (track.pluginId === 'local') {
     const url = await localAudioUrl(track.id)

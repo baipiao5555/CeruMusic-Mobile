@@ -51,11 +51,11 @@ onMounted(() => { void refreshPlatformAccounts() })
             <span class="row-action">{{ !p.webLogin ? '说明' : platformAccounts[p.id].busy ? '处理中' : platformAccounts[p.id].phase === 'none' ? '登录' : '重登录' }}</span>
           </button>
           <button v-if="platformAccounts[p.id].phase !== 'none'" class="clear-session" :disabled="platformAccounts[p.id].busy" :aria-label="'清除'+p.name+'本机会话'" @click="remove(p.id)"><Icon name="logout" :size="17" /></button>
-          <button v-if="platformAccounts[p.id].phase !== 'none' && supportsPlatformPlaylists(p.id)" class="platform-extra" :disabled="platformAccounts[p.id].busy" @click="openPlaylists(p.id)"><Icon name="playlist" :size="15" /> 读取平台歌单</button>
+          <button v-if="supportsPlatformPlaylists(p.id)" class="platform-extra" :disabled="platformAccounts[p.id].busy" @click="openPlaylists(p.id)"><Icon name="playlist" :size="15" /> 读取平台歌单</button>
           <p v-if="platformAccounts[p.id].error" class="platform-error" role="alert">{{ platformAccounts[p.id].error }}</p>
         </div>
         <p v-if="error" class="platform-error" role="alert">{{error}}</p>
-        <p class="login-note">{{ supportsPlatformLogin() ? '仅在你点“完成登录”后获取平台会话；复制的凭据在本机 Keystore 加密保存，不交给音源。' : 'Web 预览不获取平台会话。请安装 Android 客户端使用；不会冒充网页登录成功。' }}<br>网易云登录后可点“读取平台歌单”，把平台歌单导入为本机歌单；仍不会写入澜音云端歌单。QQ、酷狗、酷我、咪咕的平台歌单读取尚未完成真实账号验证，因此会明确标注不支持。平台登录不等于会员播放权限。</p>
+        <p class="login-note">{{ supportsPlatformLogin() ? '仅在你点“完成登录”后获取平台会话；复制的凭据在本机 Keystore 加密保存，不交给音源。' : 'Web 预览不获取平台会话。请安装 Android 客户端使用；不会冒充网页登录成功。' }}<br>网易云与 QQ 音乐可读取账号歌单目录；酷我、咪咕可粘贴公开歌单链接预览并导入，其中酷我需要先登录以取得网页签名 Cookie。酷狗与汽水当前明确标注不支持，不会展示残缺歌单。导入仍只写入本机歌单，不会写入澜音云端歌单。平台登录不等于会员播放权限。</p>
       </div>
     </section>
   </div>

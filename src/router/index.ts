@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/theme-background', name: 'theme-background', component: () => import('@/views/ThemeBackground.vue') },
     { path: '/accounts', redirect: { path: '/library', query: { login: '1' } } },
     { path: '/sync-services', name: 'sync-services', component: () => import('@/views/SyncServices.vue') },
+    { path: '/webdav-music', name: 'webdav-music', component: () => import('@/views/WebDavMusic.vue') },
     { path: '/plugins', name: 'plugins', component: () => import('@/views/Plugins.vue') },
     { path: '/cloud', name: 'cloud', component: () => import('@/views/CloudPlaylists.vue') },
     { path: '/downloads', name: 'downloads', component: () => import('@/views/Downloads.vue') },

@@ -5,7 +5,7 @@ import Icon from '@/components/Icon.vue'
 import { confirmAction } from '@/core/confirm'
 import { authState, displayName } from '@/core/auth'
 import { secureStore, type SecureStoreStatus } from '@/core/native/secureStore'
-import { listConnections, saveConnection, removeConnection, testConnection, createBackup, publishCurrentBackup, listBackups, readBackup, commitRestore, currentBackupFile, syncNow, getSyncStatus, setSyncSettings, type WebDavConnection, type RemotePreview, type WebDavSyncStatus, type SyncResult } from '@/core/sync/webdav'
+import { listConnections, saveConnection, removeConnection, testConnection, createBackup, publishCurrentBackup, listBackups, readBackup, commitRestore, currentBackupFile, syncNow, getSyncStatus, setSyncSettings, listSyncTombstones, restoreSyncTombstone, type WebDavConnection, type RemotePreview, type WebDavSyncStatus, type SyncResult, type SyncTombstoneView } from '@/core/sync/webdav'
 
 const router = useRouter()
 const store = ref<SecureStoreStatus>()
@@ -30,8 +30,8 @@ const restoreMode = ref<'merge' | 'replace'>('merge')
 const lastCommit = ref<ReturnType<typeof commitRestore>>()
 const syncStatus = ref<WebDavSyncStatus>()
 const lastSync = ref<SyncResult>()
-const autoNextAt = ref<number>()
-let autoTimer: ReturnType<typeof setInterval> | undefined
+const tombstones = ref<SyncTombstoneView[]>([])
+const lastTombstoneRestore = ref<ReturnType<typeof restoreSyncTombstone>>()
 const previewTracks = computed(() => preview.value?.snapshot.playlists.reduce((sum, item) => sum + item.tracks.length, 0) || 0)
 const remoteText = computed(() => {
   const status = syncStatus.value
@@ -40,8 +40,10 @@ const remoteText = computed(() => {
   return `${status.remotePlaylists || 0} 个歌单 / ${status.remoteFavorites || 0} 首收藏`
 })
 const nextSyncText = computed(() => {
-  if (!syncStatus.value?.enabled) return '未启用'
-  return autoNextAt.value ? formatTime(autoNextAt.value) : '等待安排'
+  const status = syncStatus.value
+  if (!status?.enabled) return '未启用'
+  const delay = Math.max(1, status.autoSyncMinutes || 3) * 60000
+  return status.lastAttemptAt ? `约 ${formatTime(status.lastAttemptAt + delay)}` : `启动后约 ${Math.max(1, status.autoSyncMinutes || 3)} 分钟`
 })
 const syncBadge = computed(() => {
   const status = syncStatus.value
@@ -49,6 +51,7 @@ const syncBadge = computed(() => {
   if (status.lastError) return '上次失败'
   if (!status.hasBaseline) return '待首次同步'
   if (status.conflicts) return `${status.conflicts} 个冲突副本`
+  if (status.tombstones) return `${status.tombstones} 条删除记录`
   return status.enabled ? '自动同步已启用' : '已建立基线'
 })
 const syncBadgeClass = computed(() => ({ neutral: !syncStatus.value?.hasBaseline || Boolean(syncStatus.value?.lastError), error: Boolean(syncStatus.value?.lastError) }))
@@ -57,38 +60,25 @@ function formatTime(value?: number): string {
   try { const date = new Date(value); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}` }
   catch { return '—' }
 }
+function tombstoneKind(item: SyncTombstoneView): string { return item.kind === 'playlist' ? '歌单' : item.kind === 'track' ? '歌单曲目' : '收藏' }
+function tombstoneTime(item: SyncTombstoneView): string { return formatTime(Date.parse(item.deletedAt)) }
+function shortDevice(value?: string): string { return value ? value.slice(0, 8) : '未知' }
 function shortEtag(value?: string): string { return value && value.length > 30 ? `${value.slice(0, 16)}…${value.slice(-8)}` : value || '—' }
 watch(file, () => { preview.value = undefined; lastCommit.value = undefined }, { flush: 'sync' })
-onMounted(async () => { try { store.value = await secureStore.status() } catch { message.value = '安全仓库不可用，不能保存同步凭据。请更新客户端。' } refreshSyncStatus(); restartAutoTimer() })
-onUnmounted(() => stopAutoTimer())
+function onBackgroundSyncStatus(): void { refreshSyncStatus() }
+onMounted(async () => { window.addEventListener('ceru:sync-status', onBackgroundSyncStatus); try { store.value = await secureStore.status() } catch { message.value = '安全仓库不可用，不能保存同步凭据。请更新客户端。' } refreshSyncStatus() })
+onUnmounted(() => window.removeEventListener('ceru:sync-status', onBackgroundSyncStatus))
 function refreshConnections(): void { connections.value = listConnections() }
-function refreshSyncStatus(): void { syncStatus.value = selected.value ? getSyncStatus(selected.value) : undefined }
-function choose(connection: WebDavConnection): void { selectedId.value = connection.id; files.value = []; file.value = ''; preview.value = undefined; lastCommit.value = undefined; lastSync.value = undefined; message.value = ''; refreshSyncStatus(); restartAutoTimer() }
+function refreshSyncStatus(): void {
+  syncStatus.value = selected.value ? getSyncStatus(selected.value) : undefined
+  tombstones.value = selected.value ? listSyncTombstones(selected.value) : []
+}
+function choose(connection: WebDavConnection): void { selectedId.value = connection.id; files.value = []; file.value = ''; preview.value = undefined; lastCommit.value = undefined; lastSync.value = undefined; lastTombstoneRestore.value = undefined; message.value = ''; refreshSyncStatus() }
 async function run(operation: () => Promise<void>): Promise<void> {
   if (busy.value) return
   busy.value = true; message.value = ''
   try { await operation() } catch (error: any) { message.value = error?.message || '同步操作失败，未修改本地资料。' }
   finally { busy.value = false; refreshConnections(); refreshSyncStatus() }
-}
-function stopAutoTimer(): void { if (autoTimer !== undefined) { clearInterval(autoTimer); autoTimer = undefined } autoNextAt.value = undefined }
-function restartAutoTimer(): void {
-  stopAutoTimer()
-  const status = syncStatus.value
-  if (!selected.value || !status?.enabled) return
-  const delay = Math.max(1, status.autoSyncMinutes || 3) * 60000
-  autoNextAt.value = Date.now() + delay
-  autoTimer = setInterval(() => { void autoSyncTick() }, delay)
-}
-async function autoSyncTick(): Promise<void> {
-  const status = syncStatus.value, connection = selected.value
-  if (!connection || !status?.enabled) { stopAutoTimer(); return }
-  const delay = Math.max(1, status.autoSyncMinutes || 3) * 60000
-  if (busy.value || document.visibilityState === 'hidden' || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
-    autoNextAt.value = Date.now() + delay
-    return
-  }
-  await run(async () => { const result = await syncNow(connection); lastSync.value = result; message.value = result.summary })
-  autoNextAt.value = Date.now() + delay
 }
 async function save(): Promise<void> {
   if (!store.value) return
@@ -101,9 +91,9 @@ async function sync(): Promise<void> {
   await run(async () => {
     const result = await syncNow(connection)
     lastSync.value = result
+    lastTombstoneRestore.value = undefined
     message.value = result.conflicts.length ? `${result.summary} 冲突副本：${result.conflicts.map(item => item.copyName).join('、')}` : result.summary
   })
-  restartAutoTimer()
 }
 async function toggleAutoSync(event: Event): Promise<void> {
   const connection = selected.value
@@ -111,11 +101,10 @@ async function toggleAutoSync(event: Event): Promise<void> {
   const enabled = (event.target as HTMLInputElement).checked
   await run(async () => {
     syncStatus.value = await setSyncSettings(connection, { enabled })
-    message.value = enabled ? '已启用自动双向同步：页面打开时每 3 分钟检查一次。' : '已关闭自动双向同步。'
+    message.value = enabled ? '已启用应用级自动双向同步：离开同步页后仍会按间隔检查；Android 保活仍受系统后台策略限制。' : '已关闭自动双向同步。'
   })
   const checkbox = event.target as HTMLInputElement
   if (syncStatus.value?.enabled !== enabled) checkbox.checked = syncStatus.value?.enabled === true
-  restartAutoTimer()
 }
 async function undoSync(): Promise<void> {
   const undo = lastSync.value?.undo
@@ -131,14 +120,28 @@ async function list(): Promise<void> { if (selected.value) await run(async () =>
 async function read(): Promise<void> { if (selected.value && file.value) await run(async () => { preview.value = await readBackup(selected.value!, file.value); lastCommit.value = undefined; message.value = '已读取白名单快照预览，尚未修改本地库。' }) }
 async function restore(): Promise<void> {
   const expected = preview.value, mode = restoreMode.value, owner = selectedId.value
-  if (!expected || !(await confirmAction({ title: mode === 'replace' ? '替换本地歌单与收藏？' : '合并到本地歌单与收藏？', body: '只恢复白名单元数据。缺音源或私有引用保留为待匹配；不恢复登录凭据、音源脚本或媒体文件。', confirmText: '确认恢复', danger: mode === 'replace' }))) return
-  await run(async () => { if (preview.value !== expected || selectedId.value !== owner || file.value !== expected.file) throw new Error('恢复预览已失效，请重新读取。'); lastCommit.value = commitRestore(expected, mode); const count = lastCommit.value.counts; message.value = `已恢复 ${count.playlists} 个歌单、${count.tracks} 首歌单曲目、${count.favorites} 首收藏；${count.pending} 首待匹配。可撤销，原库变化后将拒绝撤销。` })
+  if (!expected || !(await confirmAction({ title: mode === 'replace' ? '替换本地歌单与收藏？' : '合并到本地歌单与收藏？', body: '只恢复白名单元数据。缺音源或私有引用保留为待匹配；不恢复登录凭据、音源脚本或媒体文件。若此连接已有双向同步基线，恢复后缺失的本地项可能在下一次同步作为删除传播；请先检查删除记录。', confirmText: '确认恢复', danger: mode === 'replace' }))) return
+  await run(async () => { if (preview.value !== expected || selectedId.value !== owner || file.value !== expected.file) throw new Error('恢复预览已失效，请重新读取。'); lastCommit.value = commitRestore(expected, mode); lastTombstoneRestore.value = undefined; const count = lastCommit.value.counts; message.value = `已恢复 ${count.playlists} 个歌单、${count.tracks} 首歌单曲目、${count.favorites} 首收藏；${count.pending} 首待匹配。可撤销，原库变化后将拒绝撤销。` })
 }
 async function undo(): Promise<void> { if (lastCommit.value) await run(async () => { lastCommit.value!.undo(); lastCommit.value = undefined; message.value = '已撤销本次恢复。' }) }
+async function restoreDeletion(item: SyncTombstoneView): Promise<void> {
+  const connection = selected.value, owner = selectedId.value
+  if (!connection || !item.restorable) return
+  if (!(await confirmAction({ title: `恢复${tombstoneKind(item)}？`, body: `将「${item.name}」恢复到本机；删除记录会从本机列表移除，并在下次双向同步时重新发布。不会恢复账号凭据、音源脚本或媒体文件。`, confirmText: '恢复并保留原库' }))) return
+  await run(async () => {
+    if (selectedId.value !== owner) throw new Error('连接已切换，请重新选择删除记录。')
+    const restored = restoreSyncTombstone(connection, item.key)
+    lastTombstoneRestore.value = restored
+    lastSync.value = undefined
+    message.value = `已恢复${tombstoneKind(item)}「${restored.name}」；下次同步会重新发布并清除远端删除记录。可先撤销。`
+  })
+}
+async function undoRestoreDeletion(): Promise<void> {
+  if (lastTombstoneRestore.value) await run(async () => { lastTombstoneRestore.value!.undo(); lastTombstoneRestore.value = undefined; message.value = '已撤销本次删除记录恢复，删除记录仍保留。' })
+}
 async function remove(): Promise<void> {
   if (!selected.value || !(await confirmAction({ title: '移除此同步连接？', body: '只移除本机连接与安全凭据，不删除任何远端备份。', danger: true }))) return
   await run(async () => { await removeConnection(selected.value!); selectedId.value = ''; preview.value = undefined; files.value = []; lastCommit.value = undefined; message.value = '本机连接和安全凭据已移除，未删除远端文件。' })
-  stopAutoTimer()
 }
 </script>
 
@@ -153,17 +156,28 @@ async function remove(): Promise<void> {
       </div></section>
 
       <section class="config-card"><div class="config-heading"><h3>WebDAV · {{selected ? selected.name : '连接配置'}}</h3><span v-if="selected" class="status-badge" :class="{neutral:!selected.testedAt}">{{selected.testedAt?'已测试':'未测试'}}</span></div><p v-if="selected" class="endpoint">{{selected.origin}}{{selected.basePath}}</p><p v-else>连接你的 NAS 或自建服务，不要求澜音登录。</p><div class="sync-modes"><span class="selected">双向同步</span><span class="selected">手动备份 / 恢复</span></div></section>
+      <button v-if="selected" class="sync-action secondary full add-connection" :disabled="busy" @click="router.push('/webdav-music')"><Icon name="music" :size="17" />打开 WebDAV 音乐库</button>
       <p v-if="message && !showAdd" class="sync-message" role="status">{{message}}</p>
 
       <section v-if="connections.length" class="connection-picker"><div class="sync-section-head"><h2>我的连接</h2><span>{{connections.length}} 个</span></div><div class="sync-connections"><button v-for="connection in connections" :key="connection.id" class="connection-chip" :class="{active:selectedId===connection.id}" :disabled="busy" @click="choose(connection)">{{connection.name}}</button></div></section>
 
       <section v-if="selected" class="two-way-card"><div class="config-heading"><h3>双向同步</h3><span class="status-badge" :class="syncBadgeClass">{{syncBadge}}</span></div><p class="meta">上次同步：{{formatTime(syncStatus?.lastSyncedAt)}} · 下次自动：{{nextSyncText}}</p>
-        <div class="sync-status-grid"><div><span>本地基线</span><strong>{{syncStatus?.hasBaseline ? `${syncStatus.baselinePlaylists} 个歌单 / ${syncStatus.baselineFavorites} 首收藏` : '尚无'}}</strong></div><div><span>远端</span><strong>{{remoteText}}</strong></div><div><span>冲突</span><strong>{{syncStatus?.conflicts || 0}} 个副本</strong></div></div>
+        <div class="sync-status-grid"><div><span>本地基线</span><strong>{{syncStatus?.hasBaseline ? `${syncStatus.baselinePlaylists} 个歌单 / ${syncStatus.baselineFavorites} 首收藏` : '尚无'}}</strong></div><div><span>远端</span><strong>{{remoteText}}</strong></div><div><span>冲突</span><strong>{{syncStatus?.conflicts || 0}} 个副本</strong></div><div><span>删除记录</span><strong>{{syncStatus?.tombstones || 0}} 条</strong></div></div>
+        <p v-if="syncStatus?.tombstones" class="meta deletion-breakdown">歌单 {{syncStatus.tombstonePlaylists}} · 歌单曲目 {{syncStatus.tombstoneTracks}} · 收藏 {{syncStatus.tombstoneFavorites}}；保留完整可移植内容，可逐项恢复。</p>
+        <p v-if="lastSync" class="meta deletion-result">本次远端删除记录 {{lastSync.remoteTombstones.total}} 条（歌单 {{lastSync.remoteTombstones.playlists}} / 曲目 {{lastSync.remoteTombstones.tracks}} / 收藏 {{lastSync.remoteTombstones.favorites}}）{{lastSync.deletionConflicts.length ? `；删除与编辑冲突 ${lastSync.deletionConflicts.length} 项，已保留内容` : ''}}。</p>
+        <p v-if="lastSync?.deletionConflicts.length" class="meta deletion-result" role="status">删除冲突已保留：{{lastSync.deletionConflicts.map(item => `${item.name}（${item.action === 'kept-local' ? '保留本地' : '保留远端'}）`).join('、')}}。</p>
         <p v-if="syncStatus?.remoteEtag" class="meta etag">远端版本 {{shortEtag(syncStatus.remoteEtag)}} · 读取于 {{formatTime(syncStatus.remoteAt)}}</p>
         <p v-if="syncStatus?.lastError" class="sync-message" role="alert">{{syncStatus.lastError}}</p>
         <div class="sync-buttons" :class="{single: !lastSync?.undo}"><button class="sync-action primary" :disabled="busy" @click="sync">立即双向同步</button><button v-if="lastSync?.undo" class="sync-action secondary" :disabled="busy" @click="undoSync">撤销本次拉取</button></div>
-        <label class="auto-sync"><input type="checkbox" :checked="syncStatus?.enabled" :disabled="busy" @change="toggleAutoSync" /><span>自动同步（页面打开时每 3 分钟检查一次）</span></label>
-        <p class="meta">同一时间只启用一个自动同步目标。首次同步安全合并；同一歌单两边都改时保留「冲突副本」；首版不传播删除。</p>
+        <label class="auto-sync"><input type="checkbox" :checked="syncStatus?.enabled" :disabled="busy" @change="toggleAutoSync" /><span>应用级自动同步（每 3 分钟检查，离开此页仍生效）</span></label>
+        <p class="meta">同一时间只启用一个自动同步目标。删除仅在另一侧自上次基线未修改时传播；删除撞上编辑时保留内容并提示。删除项不会静默消失，可在下方删除记录中恢复。</p>
+      </section>
+
+      <section v-if="selected" class="tombstone-card"><div class="config-heading"><h3>删除记录</h3><span class="status-badge" :class="{neutral:!tombstones.length}">{{tombstones.length}} 条</span></div><p class="meta">仅包含已传播或双方确认的删除。每条记录保留歌单/曲目/收藏的可移植副本、删除时间与设备标识，不会上传凭据或媒体文件。</p>
+        <div v-if="tombstones.length" class="tombstone-list"><div v-for="item in tombstones" :key="item.key" class="tombstone-row"><div class="tombstone-copy"><strong>{{item.name}}</strong><small>{{tombstoneKind(item)}} · {{tombstoneTime(item)}} · 设备 {{shortDevice(item.deviceId)}}<template v-if="item.playlistName"> · 原歌单「{{item.playlistName}}」</template></small><small v-if="item.restoreHint" class="restore-hint">{{item.restoreHint}}</small></div><button class="sync-action secondary tombstone-restore" :disabled="busy||!item.restorable" @click="restoreDeletion(item)">{{item.restorable?'恢复':'不可恢复'}}</button></div></div>
+        <p v-else class="meta">暂无删除记录。另一侧删除且本侧自基线未修改时，会在这里出现并提示。</p>
+        <p class="meta">删除记录不会自动清理；长期累积会占用同步快照空间，请保留手动备份并适时恢复需要的内容。</p>
+        <button v-if="lastTombstoneRestore" class="sync-action secondary full" :disabled="busy" @click="undoRestoreDeletion">撤销上次删除记录恢复</button>
       </section>
 
       <section v-if="selected" class="sync-operations"><div class="config-heading"><h3>手动备份与恢复</h3><span class="meta">独立文件</span></div><div class="sync-buttons"><button class="sync-action secondary" :disabled="busy" @click="test">测试读写与 ETag</button><button class="sync-action primary" :disabled="busy" @click="backup">保存独立新备份</button><button class="sync-action secondary" :disabled="busy" @click="publish">条件更新当前备份</button><button class="sync-action secondary" :disabled="busy" @click="list">列出备份</button></div><p class="meta">测试只读写本次临时文件。未经 ETag 验证，不启用双向同步或覆盖已有备份。</p>
@@ -175,7 +189,7 @@ async function remove(): Promise<void> {
       <div class="sync-summary"><Icon name="info" :size="16" /><p>只同步歌单与收藏，不上传账号凭据、音源或音乐文件。双向同步与手动备份/恢复并存。</p></div>
       <button class="sync-action primary full add-connection" :disabled="busy || !store" @click="showAdd=true"><Icon name="plus" :size="17" />添加连接</button>
       <p class="footer-hint">{{store?.persistent?'凭据仅在本机加密保存':'Web 版凭据仅本次会话保留'}}</p>
-      <section v-if="showHelp" class="sync-help"><h3>同步说明</h3><p>不要求澜音登录；手动操作或启用自动同步时才会请求服务。</p><p v-if="store?.persistent">敏感凭据由 Android Keystore AES-GCM 加密保存。</p><p v-else>Web 版凭据只保存在本次会话内存，重开后需重新配置。跨域服务需提供 CORS，HTTPS 页面不能连接 HTTP。</p><p>只授权确认的 origin 和专用目录，不访问上级目录或跟随重定向，不忽略 HTTPS 证书错误。请先在服务端创建专用目录。</p><p>双向同步以上次成功基线做三方比较；同一歌单两边都改时保留「冲突副本 日期 时间」，不覆盖任何一方。首版不传播删除，删除项会保留。远端损坏、401/403、重定向、超时或离线时不会修改本地库。条件写必须通过真实 ETag 验证。S3、OneDrive、Google Drive 尚未接入。</p></section>
+      <section v-if="showHelp" class="sync-help"><h3>同步说明</h3><p>不要求澜音登录；手动操作或启用自动同步时才会请求服务。</p><p v-if="store?.persistent">敏感凭据由 Android Keystore AES-GCM 加密保存。</p><p v-else>Web 版凭据只保存在本次会话内存，重开后需重新配置。跨域服务需提供 CORS，HTTPS 页面不能连接 HTTP。</p><p>只授权确认的 origin 和专用目录，不访问上级目录或跟随重定向，不忽略 HTTPS 证书错误。请先在服务端创建专用目录。</p><p>双向同步以上次成功基线做三方比较；同一歌单两边都改时保留「冲突副本 日期 时间」，不覆盖任何一方。删除带 tombstone：只有另一侧自基线未修改时才传播；删除撞上编辑时保留内容并报告。删除项保留在「删除记录」中，可逐项恢复。远端损坏、401/403、重定向、超时或离线时不会修改本地库。条件写必须通过真实 ETag 验证。S3、OneDrive、Google Drive 尚未接入。</p></section>
     </main>
   </div>
 
@@ -193,7 +207,7 @@ async function remove(): Promise<void> {
 .sync-header{display:flex;align-items:center;gap:6px;padding:8px 14px 10px;min-height:56px}.sync-header h1{font-size:22px;line-height:1.3;font-weight:750;letter-spacing:-.5px;margin:0;flex:1}.help-button{font-size:12px;min-height:44px;padding:0 7px;color:var(--ink-3)}.sync-content{padding:0 var(--pad) 18px}.cloud-card{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:6px 10px;width:100%;text-align:left;padding:13px;border:1px solid var(--line-2);border-radius:16px;background:var(--surface)}.cloud-caption{grid-column:1/3;color:var(--ink-3);font-size:10px;line-height:1.7;margin-top:2px;overflow-wrap:anywhere}.cloud-card>.i{justify-self:end;align-self:center;color:var(--ink-3)}.service-icon{display:grid;place-items:center;flex:none;width:36px;height:36px;font-weight:700;font-size:11px;border-radius:11px}.green{color:var(--tint);background:var(--tint-soft)}.amber{color:#c79230;background:#fff3da}.blue{color:#597fcb;background:#eaf0ff}.service-copy{flex:1;min-width:0;align-self:center}.service-copy strong,.service-copy small{display:block}.service-copy strong{font-size:13px;font-weight:650;line-height:1.4}.service-copy small{font-size:10px;line-height:1.7;color:var(--ink-3);margin-top:3px}.status-badge{align-self:center;padding:3px 6px;border-radius:6px;font-size:10px;line-height:1.4;white-space:nowrap;color:var(--brand-strong);background:var(--tint-soft)}.status-badge.neutral{color:var(--ink-3);background:var(--surface-2)}.services-section{margin-top:17px}.sync-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.sync-section-head h2{font-size:16px;margin:0;font-weight:700}.sync-section-head>span{font-size:10px;color:var(--ink-3)}.service-list{border:1px solid var(--line-2);border-radius:16px;padding:0 12px;background:var(--surface)}.service-row{display:flex;align-items:center;gap:10px;width:100%;min-height:60px;padding:10px 0;border-bottom:1px solid var(--line-2);text-align:left}.service-row:last-child{border:0}.service-row:disabled{opacity:1;cursor:default}.service-radio{width:15px;height:15px;border:1px solid var(--line-2);border-radius:50%;flex:none}.service-radio.selected{border:5px solid var(--tint)}.config-card{margin-top:13px;padding:13px;border-radius:13px;background:var(--surface-2)}.config-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.config-heading h3{font-size:12px;margin:0;font-weight:650}.config-card>p{font-size:10px;line-height:1.7;color:var(--ink-3);margin:5px 0 0}.endpoint{overflow-wrap:anywhere}.sync-modes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.sync-modes span{display:block;padding:8px 3px;border:1px solid var(--line-2);border-radius:8px;text-align:center;font-size:10px;color:var(--ink-3)}.sync-modes .selected{border-color:var(--tint-soft);background:var(--tint-soft);color:var(--brand-strong)}.sync-summary{display:flex;gap:8px;padding:11px 12px;margin-top:12px;border-radius:12px;background:var(--surface-2);color:var(--ink-3);font-size:10px;line-height:1.8}.sync-summary>.i{flex:none;margin-top:2px;color:var(--tint)}.sync-summary p{margin:0}.sync-action{display:flex;align-items:center;justify-content:center;gap:6px;border-radius:10px;min-height:44px;padding:10px 12px;line-height:1.5;font-size:12px;font-weight:600}.sync-action.primary{background:var(--tint);color:#fff}.sync-action.secondary{background:var(--surface);color:var(--ink-2);border:1px solid var(--line-2)}.sync-action:disabled{opacity:.48}.sync-action.full{width:100%}.add-connection{margin-top:14px;border-radius:11px}.footer-hint{color:var(--ink-3);text-align:center;font-size:10px;line-height:1.6;margin:8px 0 0}.connection-picker{margin-top:17px}.sync-connections{display:flex;flex-wrap:wrap;gap:8px}.connection-chip{min-height:36px;padding:8px 12px;border:1px solid var(--line-2);border-radius:10px;font-size:11px;color:var(--ink-3)}.connection-chip.active{color:var(--brand-strong);background:var(--tint-soft);border-color:var(--tint-soft)}.sync-operations{margin-top:12px;padding:13px;border:1px solid var(--line-2);border-radius:14px;background:var(--surface)}.sync-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 0 10px}.meta{font-size:10px;line-height:1.8;color:var(--ink-3)}.sync-operations label,.sync-form label{display:block;font-size:11px;color:var(--ink-2);margin:12px 0}.sync-operations select,.sync-form input:not([type=checkbox]){display:block;width:100%;box-sizing:border-box;min-height:44px;padding:10px 12px;margin-top:6px;border:1px solid var(--line-2);border-radius:10px;background:var(--surface);color:var(--ink);font-size:13px;outline:none}.sync-form input:focus,.sync-operations select:focus{border-color:var(--tint)}.sync-preview{margin-top:12px;padding:12px;background:var(--surface-2);border-radius:12px}.sync-preview h3,.sync-help h3{font-size:13px;margin:0 0 7px}.sync-preview>p{font-size:11px;line-height:1.7;margin:5px 0}.remove-connection{width:100%;font-size:11px;color:var(--cinnabar);min-height:44px;margin-top:6px}.sync-message{font-size:11px;line-height:1.8;color:var(--cinnabar);margin:12px 0;overflow-wrap:anywhere}.sync-help{padding:13px;background:var(--surface-2);border-radius:12px;margin-top:14px;font-size:11px;line-height:1.8;color:var(--ink-3)}.sync-help p{margin:6px 0}.add-sheet{max-height:88vh;overflow:auto;background:var(--surface-solid);padding-bottom:calc(16px + var(--safe-bottom))}.add-sheet-content{padding:0 var(--pad)}.form-intro{margin:0 0 8px;font-size:11px;line-height:1.8;color:var(--ink-3)}.sync-form .check{display:flex;gap:8px;line-height:1.8;align-items:flex-start;font-size:11px}.check input{flex:none;width:16px;height:16px;margin-top:3px;accent-color:var(--tint)}.risk{color:var(--cinnabar)!important}
 .two-way-card{margin-top:12px;padding:13px;border:1px solid var(--line-2);border-radius:14px;background:var(--surface)}
 .sync-operations>.config-heading,.two-way-card>.config-heading{margin-bottom:8px}
-.sync-status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:9px 0}
+.sync-status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:9px 0}
 .sync-status-grid>div{min-width:0;padding:8px;border-radius:9px;background:var(--surface-2)}
 .sync-status-grid span{display:block;font-size:9px;line-height:1.5;color:var(--ink-3)}
 .sync-status-grid strong{display:block;margin-top:2px;font-size:11px;line-height:1.6;font-weight:650;overflow-wrap:anywhere}
@@ -202,4 +216,15 @@ async function remove(): Promise<void> {
 .auto-sync input{flex:none;width:16px;height:16px;margin-top:3px;accent-color:var(--tint)}
 .etag{overflow-wrap:anywhere}
 .sync-buttons.single{grid-template-columns:1fr}
+.deletion-breakdown,.deletion-result{margin:5px 0;overflow-wrap:anywhere}
+.tombstone-card{margin-top:12px;padding:13px;border:1px solid var(--line-2);border-radius:14px;background:var(--surface)}
+.tombstone-card>.config-heading{margin-bottom:8px}
+.tombstone-list{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+.tombstone-row{display:flex;align-items:center;gap:9px;padding:9px;border-radius:10px;background:var(--surface-2)}
+.tombstone-copy{min-width:0;flex:1}
+.tombstone-copy strong,.tombstone-copy small{display:block;overflow-wrap:anywhere}
+.tombstone-copy strong{font-size:12px;line-height:1.5;font-weight:650}
+.tombstone-copy small{font-size:9px;line-height:1.7;color:var(--ink-3)}
+.tombstone-copy .restore-hint{color:var(--cinnabar)}
+.tombstone-restore{flex:none;min-height:38px;padding:8px 10px;font-size:11px}
 </style>

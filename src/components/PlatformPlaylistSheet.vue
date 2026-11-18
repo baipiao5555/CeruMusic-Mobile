@@ -9,6 +9,7 @@ import {
   loadPlatformPlaylists,
   platformPlaylistSupport,
   previewPlatformPlaylist,
+  previewPlatformPlaylistLink,
   type PlatformPlaylistPreview,
   type PlatformPlaylistSummary
 } from '@/core/platformPlaylists'
@@ -17,13 +18,15 @@ const props = defineProps<{ platform: PlatformId }>()
 const emit = defineEmits<{ close: [navigate?: boolean] }>()
 const router = useRouter()
 const support = computed(() => platformPlaylistSupport(props.platform))
+const isDirectory = computed(() => support.value.supported && support.value.directory)
 const platformName = computed(() => musicPlatforms.find((item) => item.id === props.platform)?.name || '音乐平台')
-const state = ref<'loading' | 'ready' | 'error'>('loading')
+const state = ref<'loading' | 'ready' | 'error'>(isDirectory.value ? 'loading' : 'ready')
 const playlists = ref<PlatformPlaylistSummary[]>([])
 const selectedId = ref('')
 const preview = ref<PlatformPlaylistPreview | null>(null)
 const previewLoading = ref(false)
 const importing = ref(false)
+const linkInput = ref('')
 const error = ref('')
 const notice = ref('')
 const imported = ref<{
@@ -38,7 +41,10 @@ let requestToken = 0
 onBeforeUnmount(() => { requestToken++ })
 
 async function load(): Promise<void> {
-  if (!support.value.supported) return
+  if (!isDirectory.value) {
+    state.value = 'ready'
+    return
+  }
   const token = ++requestToken
   state.value = 'loading'
   error.value = ''
@@ -56,6 +62,28 @@ async function load(): Promise<void> {
     if (token !== requestToken) return
     state.value = 'error'
     error.value = reason instanceof Error ? reason.message : '读取平台歌单失败，请稍后重试'
+  }
+}
+
+async function readLink(): Promise<void> {
+  const link = linkInput.value.trim()
+  if (!link || previewLoading.value || importing.value) return
+  const token = ++requestToken
+  preview.value = null
+  previewLoading.value = true
+  error.value = ''
+  notice.value = ''
+  imported.value = null
+  try {
+    const result = await previewPlatformPlaylistLink(props.platform, link)
+    if (token !== requestToken) return
+    preview.value = result
+    selectedId.value = result.summary.id
+  } catch (reason) {
+    if (token !== requestToken) return
+    error.value = reason instanceof Error ? reason.message : '读取歌单失败，请检查链接和网络后重试'
+  } finally {
+    if (token === requestToken) previewLoading.value = false
   }
 }
 
@@ -120,7 +148,7 @@ function openPlaylist(): void {
   emit('close', true)
 }
 
-onMounted(() => { void load() })
+onMounted(() => { if (isDirectory.value) void load() })
 </script>
 
 <template>
@@ -142,76 +170,97 @@ onMounted(() => { void load() })
         </div>
 
         <template v-else>
-          <p class="pp-note">使用本机加密保存的平台会话读取官方歌单。凭据只用于请求网易云接口，不会交给音源插件或写入普通本地存储。导入只保存曲目信息，播放仍取决于已安装的网易云音源插件。</p>
+          <p class="pp-note">{{ support.hint }}</p>
 
-          <div v-if="state === 'loading'" class="pp-loading" role="status"><span class="dotg live" />正在读取歌单目录…</div>
-          <div v-else-if="state === 'error' && !playlists.length" class="pp-error" role="alert">
-            <span>{{ error }}</span>
-            <button class="pp-retry" @click="load">重试</button>
-          </div>
-          <div v-else-if="!playlists.length" class="pp-empty">
-            <div class="pp-empty-glyph"><Icon name="playlist" :size="28" /></div>
-            <strong>没有读取到歌单</strong>
-            <p>这个账号下没有可读取的歌单，或平台返回了空目录。</p>
-            <button class="btn btn-ghost btn-sm" @click="load">重新读取</button>
-          </div>
-
-          <template v-else>
-            <div class="pp-list-head"><strong>选择平台歌单</strong><span>{{ playlists.length }} 个</span></div>
-            <div class="pp-list" aria-label="平台歌单列表">
-              <button
-                v-for="item in playlists"
-                :key="item.id"
-                class="pp-item"
-                :class="{ on: selectedId === item.id }"
-                :aria-pressed="selectedId === item.id"
-                :disabled="importing"
-                @click="choose(item)"
-              >
-                <img :src="item.cover" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
-                <span class="pp-item-copy">
-                  <strong>{{ item.name }}</strong>
-                  <small>{{ item.trackCount }} 首<span v-if="item.creator"> · {{ item.creator }}</span></small>
-                </span>
-                <span class="pp-state">{{ selectedId === item.id ? '已选择' : '查看' }}</span>
-              </button>
+          <template v-if="isDirectory">
+            <div v-if="state === 'loading'" class="pp-loading" role="status"><span class="dotg live" />正在读取歌单目录…</div>
+            <div v-else-if="state === 'error' && !playlists.length" class="pp-error" role="alert">
+              <span>{{ error }}</span>
+              <button class="pp-retry" @click="load">重试</button>
             </div>
-
-            <div v-if="previewLoading" class="pp-loading"><span class="dotg live" />正在读取曲目…</div>
-            <div v-else-if="preview" class="pp-preview" role="status">
-              <div class="pp-preview-head">
-                <strong>{{ preview.summary.name }}</strong>
-                <span>{{ preview.tracks.length }} / {{ preview.summary.trackCount }} 首</span>
+            <div v-else-if="!playlists.length" class="pp-empty">
+              <div class="pp-empty-glyph"><Icon name="playlist" :size="28" /></div>
+              <strong>没有读取到歌单</strong>
+              <p>这个账号下没有可读取的歌单，或平台返回了空目录。</p>
+              <button class="btn btn-ghost btn-sm" @click="load">重新读取</button>
+            </div>
+            <template v-else>
+              <div class="pp-list-head"><strong>选择平台歌单</strong><span>{{ playlists.length }} 个</span></div>
+              <div class="pp-list" aria-label="平台歌单列表">
+                <button
+                  v-for="item in playlists"
+                  :key="item.id"
+                  class="pp-item"
+                  :class="{ on: selectedId === item.id }"
+                  :aria-pressed="selectedId === item.id"
+                  :disabled="importing"
+                  @click="choose(item)"
+                >
+                  <img :src="item.cover" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
+                  <span class="pp-item-copy">
+                    <strong>{{ item.name }}</strong>
+                    <small>{{ item.trackCount }} 首<span v-if="item.creator"> · {{ item.creator }}</span></small>
+                  </span>
+                  <span class="pp-state">{{ selectedId === item.id ? '已选择' : '查看' }}</span>
+                </button>
               </div>
-              <p v-if="preview.skipped" class="pp-warn">有 {{ preview.skipped }} 首缺少有效歌曲信息，导入时会跳过。</p>
-              <ol v-if="preview.tracks.length" class="pp-tracks">
-                <li v-for="(track, index) in preview.tracks.slice(0, 6)" :key="track.providerId + ':' + track.id">
-                  <span class="pp-index">{{ index + 1 }}</span>
-                  <span class="pp-track-copy"><strong>{{ track.title }}</strong><small>{{ track.artist }}<template v-if="track.album"> · {{ track.album }}</template></small></span>
-                </li>
-              </ol>
-              <p v-if="preview.tracks.length > 6" class="pp-more">仅预览前 6 首；导入会保留完整歌单顺序。</p>
-              <p v-if="!preview.tracks.length" class="pp-warn">这个歌单没有可导入的歌曲。</p>
-            </div>
-
-            <div v-if="error" class="pp-error" role="alert">{{ error }}</div>
-            <p v-if="notice" class="pp-notice" role="status">{{ notice }}</p>
-
-            <div v-if="imported" class="pp-done">
-              <strong>已导入到本机歌单</strong>
-              <p>「{{ imported.name }}」已新增 {{ imported.importedTracks }} 首<span v-if="imported.skippedTracks">，跳过 {{ imported.skippedTracks }} 首重复曲目</span>。平台歌单不会与澜音云歌单混在一起。</p>
-              <div class="pp-actions">
-                <button class="btn btn-ghost" @click="undo">撤销本次导入</button>
-                <button class="btn btn-primary" @click="openPlaylist">查看歌单</button>
-              </div>
-            </div>
-            <div v-else class="pp-actions">
-              <button class="btn btn-ghost" @click="emit('close')">取消</button>
-              <button class="btn btn-primary" :disabled="!preview || !preview.tracks.length || importing" @click="commit">
-                {{ importing ? '导入中…' : '导入到本机' }}
-              </button>
-            </div>
+            </template>
           </template>
+
+          <div v-else class="pp-link">
+            <label for="platform-playlist-link">歌单链接或 ID</label>
+            <div class="pp-link-row">
+              <input
+                id="platform-playlist-link"
+                v-model="linkInput"
+                type="url"
+                inputmode="text"
+                autocomplete="off"
+                placeholder="粘贴歌单链接或 ID"
+                :disabled="previewLoading || importing"
+                @keyup.enter="readLink"
+              />
+              <button class="btn btn-primary btn-sm" :disabled="!linkInput.trim() || previewLoading || importing" @click="readLink">
+                {{ previewLoading ? '读取中…' : '读取歌单' }}
+              </button>
+            </div>
+            <p class="pp-link-reason">{{ support.reason }}</p>
+          </div>
+
+          <div v-if="previewLoading" class="pp-loading"><span class="dotg live" />正在读取曲目…</div>
+          <div v-else-if="preview" class="pp-preview" role="status">
+            <div class="pp-preview-head">
+              <strong>{{ preview.summary.name }}</strong>
+              <span>{{ preview.tracks.length }} / {{ preview.summary.trackCount }} 首</span>
+            </div>
+            <p v-if="preview.skipped" class="pp-warn">有 {{ preview.skipped }} 首缺少有效歌曲信息，导入时会跳过。</p>
+            <ol v-if="preview.tracks.length" class="pp-tracks">
+              <li v-for="(track, index) in preview.tracks.slice(0, 6)" :key="track.providerId + ':' + track.id">
+                <span class="pp-index">{{ index + 1 }}</span>
+                <span class="pp-track-copy"><strong>{{ track.title }}</strong><small>{{ track.artist }}<template v-if="track.album"> · {{ track.album }}</template></small></span>
+              </li>
+            </ol>
+            <p v-if="preview.tracks.length > 6" class="pp-more">仅预览前 6 首；导入会保留完整歌单顺序。</p>
+            <p v-if="!preview.tracks.length" class="pp-warn">这个歌单没有可导入的歌曲。</p>
+          </div>
+
+          <div v-if="error && !(isDirectory && state === 'error' && !playlists.length)" class="pp-error" role="alert">{{ error }}</div>
+          <p v-if="notice" class="pp-notice" role="status">{{ notice }}</p>
+
+          <div v-if="imported" class="pp-done">
+            <strong>已导入到本机歌单</strong>
+            <p>「{{ imported.name }}」已新增 {{ imported.importedTracks }} 首<span v-if="imported.skippedTracks">，跳过 {{ imported.skippedTracks }} 首重复曲目</span>。平台歌单不会与澜音云歌单混在一起。</p>
+            <div class="pp-actions">
+              <button class="btn btn-ghost" @click="undo">撤销本次导入</button>
+              <button class="btn btn-primary" @click="openPlaylist">查看歌单</button>
+            </div>
+          </div>
+          <div v-else class="pp-actions">
+            <button class="btn btn-ghost" @click="emit('close')">取消</button>
+            <button class="btn btn-primary" :disabled="!preview || !preview.tracks.length || importing" @click="commit">
+              {{ importing ? '导入中…' : '导入到本机' }}
+            </button>
+          </div>
         </template>
       </div>
     </section>
@@ -255,5 +304,12 @@ onMounted(() => { void load() })
 .pp-done>strong{font-size:13px}.pp-done>p{margin:6px 0 0;font-size:11px;line-height:1.7;color:var(--ink-3)}
 .pp-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
 .pp-actions .btn{width:100%;min-height:44px}
+.pp-link{padding:12px;border:1px solid var(--line-2);border-radius:13px;background:var(--surface-2)}
+.pp-link label{display:block;margin-bottom:8px;font-size:11px;font-weight:600;color:var(--ink-2)}
+.pp-link-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.pp-link-row input{min-width:0;min-height:40px;padding:0 10px;border:1px solid var(--line-2);border-radius:9px;background:var(--surface);font-size:12px;color:var(--ink)}
+.pp-link-row input:disabled{opacity:.6}
+.pp-link-row .btn{min-height:40px;white-space:nowrap}
+.pp-link-reason{margin:9px 0 0;font-size:10px;line-height:1.7;color:var(--ink-3)}
 @media (max-width:360px){.pp-actions{grid-template-columns:1fr}.pp-list{max-height:34vh}}
 </style>

@@ -36,6 +36,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(LocalMediaPlugin.class);
         registerPlugin(SecretStorePlugin.class);
         registerPlugin(SyncHttpPlugin.class);
+        registerPlugin(SyncKeepAlivePlugin.class);
         registerPlugin(PlatformLoginPlugin.class);
         super.onCreate(savedInstanceState);
 

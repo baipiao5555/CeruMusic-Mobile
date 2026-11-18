@@ -82,6 +82,7 @@ const server = http.createServer(async (req, res) => {
     remote.delete(pathname); res.writeHead(204); return res.end()
   }
   if (req.method === 'GET' || req.method === 'HEAD') {
+    if (mode === 'delay-get' && req.method === 'GET') { mode = 'normal'; await new Promise(resolve => setTimeout(resolve, 120)) }
     const headers = { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(existing.body) }
     if (mode !== 'no-etag') headers.ETag = existing.etag
     res.writeHead(200, headers)
@@ -142,6 +143,10 @@ function libraryView(env) {
 }
 const libraryText = env => JSON.stringify(libraryView(env))
 const trackIds = (view, playlistId) => (view.playlists.find(item => item.id === playlistId)?.tracks || []).map(track => track.id)
+const hasPlaylist = (view, id) => view.playlists.some(item => item.id === id)
+const favoriteTrackIds = view => view.favorites.map(track => track.id)
+const remoteTombstones = () => remoteView()?.tombstones || []
+const remoteTombstone = (kind, id, playlistId = '') => remoteTombstones().find(item => item.kind === kind && item.id === id && (item.playlistId || '') === playlistId)
 const redact = value => typeof value === 'string' ? value.replaceAll(PASSWORD, '[redacted]') : value
 const short = value => typeof value === 'string' && value.length > 260 ? `${value.slice(0, 260)}…(${value.length} chars)` : value
 const check = (name, actual, expected = true) => {
@@ -170,6 +175,7 @@ try {
   setLibrary(b, [], [])
   const first = await a.webdav.syncNow(ca)
   check('first sync creates remote snapshot', first.pushed && !first.pulled)
+  check('remote snapshot uses the v2 tombstone envelope', [remoteView().version, Array.isArray(remoteView().tombstones)], [2, true])
   check('remote snapshot starts with local playlist', remoteView().playlists.map(item => item.id), ['p1'])
   check('first remote upload uses If-None-Match', requests.some(item => item.method === 'PUT' && item.path === CURRENT && item.ifNoneMatch && !item.ifMatch))
   const statusA = a.webdav.getSyncStatus(ca)
@@ -225,16 +231,180 @@ try {
   check('favorites merge by stable key on A', favoriteIds.includes('fa2') && favoriteIds.includes('fb2'))
   check('favorites merge by stable key on B', libraryView(b).favorites.map(track => track.id).includes('fb2'))
 
-  const remoteP1 = remoteView().playlists.find(item => item.id === 'p1')
-  a.library.playlists = a.library.playlists.filter(item => item.id !== 'p1')
-  const localDelete = await a.webdav.syncNow(ca)
-  check('local playlist deletion is not pushed', remoteView().playlists.some(item => item.id === 'p1'))
-  check('local playlist deletion is restored instead of losing data', localDelete.pulled && libraryView(a).playlists.some(item => item.id === 'p1'))
-  check('remote playlist content stayed present', Boolean(remoteP1))
-  a.library.favorites = a.library.favorites.filter(track => track.id !== 'fa')
+  const sharePlaylist = async (id, name, tracks = [makeTrack(`${id}-track`, `${name}曲`)]) => {
+    a.library.playlists = [makePlaylist(id, name, tracks), ...a.library.playlists.filter(item => item.id !== id)]
+    await a.webdav.syncNow(ca)
+    await b.webdav.syncNow(cb)
+  }
+
+  await sharePlaylist('p-del-a', 'A删除歌单', [makeTrack('t-del-a', 'A删除曲')])
+  a.library.playlists = a.library.playlists.filter(item => item.id !== 'p-del-a')
+  const aDelete = await a.webdav.syncNow(ca)
+  check('A playlist deletion is pushed only after baseline agreement', aDelete.pushed && aDelete.stats.deletedPlaylists === 1)
+  check('A deletion removes the remote playlist', hasPlaylist(libraryView(a), 'p-del-a'), false)
+  check('remote snapshot keeps a playlist tombstone', remoteTombstones().filter(item => item.kind === 'playlist' && item.id === 'p-del-a').length, 1)
+  const aTombstone = remoteTombstone('playlist', 'p-del-a')
+  check('playlist tombstone retains restore payload, timestamp and device', Boolean(aTombstone?.playlist?.tracks.some(track => track.id === 't-del-a')) && /^\d{4}-\d{2}-\d{2}T/.test(aTombstone?.deletedAt || '') && Boolean(aTombstone?.deviceId))
+  const aAfterDelete = a.webdav.getSyncStatus(ca)
+  check('A status exposes deletion counts', aAfterDelete.tombstonePlaylists === 1 && aAfterDelete.tombstones >= 1)
+  const bDeletePull = await b.webdav.syncNow(cb)
+  check('B applies A deletion when B was unchanged', bDeletePull.pulled && !hasPlaylist(libraryView(b), 'p-del-a'))
+  check('B result counts the propagated deletion', bDeletePull.stats.deletedPlaylists === 1)
+  check('B sync result exposes remote tombstones', bDeletePull.remoteTombstones.total >= 1 && bDeletePull.remoteTombstones.playlists === 1)
+  const bTombstone = b.webdav.listSyncTombstones(cb).find(item => item.kind === 'playlist' && item.id === 'p-del-a')
+  check('B can review the tombstone locally', Boolean(bTombstone?.restorable) && Boolean(bTombstone?.playlist?.tracks.length))
+  const restoredPlaylist = b.webdav.restoreSyncTombstone(cb, bTombstone.key)
+  check('local tombstone restore returns the full playlist', hasPlaylist(libraryView(b), 'p-del-a'))
+  check('restored tombstone leaves the review list', b.webdav.listSyncTombstones(cb).some(item => item.key === bTombstone.key), false)
+  restoredPlaylist.undo()
+  check('tombstone restore can be undone', !hasPlaylist(libraryView(b), 'p-del-a') && b.webdav.listSyncTombstones(cb).some(item => item.key === bTombstone.key))
+
+  await sharePlaylist('p-del-b', 'B删除歌单', [makeTrack('t-del-b', 'B删除曲')])
+  b.library.playlists = b.library.playlists.filter(item => item.id !== 'p-del-b')
+  const bDelete = await b.webdav.syncNow(cb)
+  check('B playlist deletion is pushed', bDelete.pushed && bDelete.stats.deletedPlaylists === 1)
+  check('B deletion removes the remote playlist', remoteView().playlists.some(item => item.id === 'p-del-b'), false)
+  const aDeletePull = await a.webdav.syncNow(ca)
+  check('A applies B deletion when A was unchanged', aDeletePull.pulled && !hasPlaylist(libraryView(a), 'p-del-b'))
+  check('A records B deletion in status', a.webdav.getSyncStatus(ca).tombstonePlaylists >= 2)
+
+  await sharePlaylist('p-del-both', '双方删除歌单', [makeTrack('t-del-both', '双方删除曲')])
+  a.library.playlists = a.library.playlists.filter(item => item.id !== 'p-del-both')
+  b.library.playlists = b.library.playlists.filter(item => item.id !== 'p-del-both')
   await a.webdav.syncNow(ca)
-  check('local favorite deletion is not pushed', remoteView().favorites.some(track => track.id === 'fa'))
-  check('local favorite deletion is restored from remote', libraryView(a).favorites.some(track => track.id === 'fa'))
+  const firstBothTombstone = remoteTombstone('playlist', 'p-del-both')
+  const bothDelete = await b.webdav.syncNow(cb)
+  check('both deleting the same playlist is detected', bothDelete.stats.bothDeletedPlaylists === 1)
+  check('both deletion leaves one tombstone', remoteTombstones().filter(item => item.kind === 'playlist' && item.id === 'p-del-both').length, 1)
+  check('both deletion preserves the first deletion attribution', remoteTombstone('playlist', 'p-del-both')?.deviceId, firstBothTombstone.deviceId)
+  check('both deletion leaves neither library with the playlist', hasPlaylist(libraryView(a), 'p-del-both') || hasPlaylist(libraryView(b), 'p-del-both'), false)
+
+  await sharePlaylist('p-del-edit', '删除撞编辑', [makeTrack('t-del-edit', '编辑保留曲')])
+  a.library.playlists = a.library.playlists.filter(item => item.id !== 'p-del-edit')
+  b.library.playlists.find(item => item.id === 'p-del-edit').name = 'B编辑后的歌单'
+  const editDelete = await a.webdav.syncNow(ca)
+  check('delete half of a delete-vs-edit race reaches remote once', editDelete.stats.deletedPlaylists === 1 && !remoteView().playlists.some(item => item.id === 'p-del-edit'))
+  const editRestore = await b.webdav.syncNow(cb)
+  check('edited side restores instead of being silently deleted', editRestore.deletionConflicts.length === 1 && hasPlaylist(libraryView(b), 'p-del-edit'))
+  check('delete-vs-edit keeps the edited name', libraryView(b).playlists.find(item => item.id === 'p-del-edit').name, 'B编辑后的歌单')
+  check('delete-vs-edit is pushed back to remote', remoteView().playlists.find(item => item.id === 'p-del-edit')?.name, 'B编辑后的歌单')
+  check('delete-vs-edit clears the playlist tombstone remotely', Boolean(remoteTombstone('playlist', 'p-del-edit')), false)
+  const aEditRestore = await a.webdav.syncNow(ca)
+  check('the deleting client converges on the edited version', libraryView(a).playlists.find(item => item.id === 'p-del-edit')?.name, 'B编辑后的歌单')
+  check('restored tombstone is counted once', aEditRestore.stats.restoredTombstones, 1)
+
+  await sharePlaylist('p-del-track', '曲目删除歌单', [makeTrack('t-del-1', '删除曲目1'), makeTrack('t-del-2', '保留曲目2')])
+  a.library.playlists.find(item => item.id === 'p-del-track').tracks = a.library.playlists.find(item => item.id === 'p-del-track').tracks.filter(track => track.id !== 't-del-1')
+  const trackDelete = await a.webdav.syncNow(ca)
+  check('track deletion is pushed', trackDelete.pushed && trackDelete.stats.deletedTracks === 1)
+  check('track deletion removes only that track remotely', trackIds(remoteView(), 'p-del-track'), ['t-del-2'])
+  const trackTombstone = remoteTombstones().find(item => item.kind === 'track' && item.playlistId === 'p-del-track' && item.track?.id === 't-del-1')
+  check('track tombstone keeps its playlist identity and portable track', Boolean(trackTombstone?.track?.title) && /^\d{4}-\d{2}-\d{2}T/.test(trackTombstone?.deletedAt || '') && Boolean(trackTombstone?.deviceId))
+  const trackPull = await b.webdav.syncNow(cb)
+  check('B applies the track deletion and reports it', trackPull.pulled && trackPull.stats.deletedTracks === 1 && trackIds(libraryView(b), 'p-del-track'), ['t-del-2'])
+  check('B exposes the remote track tombstone', trackPull.remoteTombstones.tracks >= 1)
+  const bTrackTombstone = b.webdav.listSyncTombstones(cb).find(item => item.kind === 'track' && item.playlistId === 'p-del-track')
+  const restoredTrack = b.webdav.restoreSyncTombstone(cb, bTrackTombstone.key)
+  check('track tombstone restores into its playlist', trackIds(libraryView(b), 'p-del-track').includes('t-del-1'))
+  const restoredTrackPush = await b.webdav.syncNow(cb)
+  check('restored track is republished', restoredTrackPush.pushed && trackIds(remoteView(), 'p-del-track').includes('t-del-1'))
+  check('restored track clears its remote tombstone', remoteTombstones().some(item => item.kind === 'track' && item.playlistId === 'p-del-track'), false)
+  check('track restore result names the restored item', restoredTrack.name, '删除曲目1')
+
+  await sharePlaylist('p-move-src', '移动源歌单', [makeTrack('t-move', '跨歌单移动曲')])
+  await sharePlaylist('p-move-dst', '移动目标歌单', [])
+  const movedTrack = a.library.playlists.find(item => item.id === 'p-move-src').tracks[0]
+  a.library.playlists.find(item => item.id === 'p-move-src').tracks = []
+  a.library.playlists.find(item => item.id === 'p-move-dst').tracks = [movedTrack]
+  const moveSync = await a.webdav.syncNow(ca)
+  check('moving a track between playlists is not a deletion', moveSync.stats.deletedTracks, 0)
+  check('moved track remains in the destination remotely', trackIds(remoteView(), 'p-move-dst').includes('t-move') && !trackIds(remoteView(), 'p-move-src').includes('t-move'))
+  check('moving a track creates no fake tombstone', remoteTombstones().some(item => item.kind === 'track' && item.track?.id === 't-move'), false)
+  const movePull = await b.webdav.syncNow(cb)
+  check('the other client applies a track move without restoring to the source', trackIds(libraryView(b), 'p-move-src').includes('t-move'), false)
+  check('track move creates no deletion in the receiving result', movePull.stats.deletedTracks === 0 && movePull.stats.bothDeletedTracks === 0)
+
+  await sharePlaylist('p-move2-src', '双端移动源歌单', [makeTrack('t-move2', '双端移动曲')])
+  await sharePlaylist('p-move2-dst', '双端移动目标歌单', [])
+  for (const env of [a, b]) {
+    const source = env.library.playlists.find(item => item.id === 'p-move2-src')
+    const moved = source.tracks[0]
+    source.tracks = []
+    env.library.playlists.find(item => item.id === 'p-move2-dst').tracks = [moved]
+  }
+  await a.webdav.syncNow(ca)
+  const bothMove = await b.webdav.syncNow(cb)
+  check('both clients moving the same track is not reported as both-deleted', bothMove.stats.bothDeletedTracks, 0)
+  check('both-client track move leaves one destination copy and no tombstone', trackIds(libraryView(b), 'p-move2-dst').includes('t-move2') && !remoteTombstones().some(item => item.kind === 'track' && item.track?.id === 't-move2'))
+
+  await sharePlaylist('p-track-edit', '曲目删除撞编辑', [makeTrack('t-edit-1', '编辑冲突曲1'), makeTrack('t-edit-2', '编辑冲突曲2')])
+  a.library.playlists.find(item => item.id === 'p-track-edit').tracks = a.library.playlists.find(item => item.id === 'p-track-edit').tracks.filter(track => track.id !== 't-edit-1')
+  b.library.playlists.find(item => item.id === 'p-track-edit').name = '本地改名保留曲目'
+  await a.webdav.syncNow(ca)
+  const trackEditConflict = await b.webdav.syncNow(cb)
+  const trackConflict = trackEditConflict.deletionConflicts.find(item => item.kind === 'track' && item.playlistId === 'p-track-edit')
+  check('track delete-vs-edit is reported', Boolean(trackConflict) && trackEditConflict.deletionConflicts.length >= 1)
+  check('track delete-vs-edit restores the deleted track', trackIds(libraryView(b), 'p-track-edit').includes('t-edit-1'))
+  check('track delete-vs-edit preserves the edited playlist name', libraryView(b).playlists.find(item => item.id === 'p-track-edit').name, '本地改名保留曲目')
+  check('track delete-vs-edit keeps a conflict copy and reports copy conflict', trackEditConflict.conflicts.length >= 1)
+  check('track delete-vs-edit removes the stale track tombstone', remoteTombstones().some(item => item.kind === 'track' && item.playlistId === 'p-track-edit'), false)
+  await a.webdav.syncNow(ca)
+  check('the deleting client converges on the restored track', trackIds(libraryView(a), 'p-track-edit').includes('t-edit-1'))
+
+  const deletedFavorite = makeTrack('fa-del', 'A删除收藏')
+  a.library.favorites = [deletedFavorite, ...a.library.favorites.filter(track => track.id !== 'fa-del')]
+  await a.webdav.syncNow(ca)
+  await b.webdav.syncNow(cb)
+  a.library.favorites = a.library.favorites.filter(track => track.id !== 'fa-del')
+  const favoriteDelete = await a.webdav.syncNow(ca)
+  check('favorite deletion is pushed', favoriteDelete.pushed && favoriteDelete.stats.deletedFavorites === 1)
+  check('remote keeps a favorite tombstone', remoteTombstones().some(item => item.kind === 'favorite' && item.track?.id === 'fa-del'))
+  const favoritePull = await b.webdav.syncNow(cb)
+  check('B applies favorite deletion', favoritePull.pulled && !favoriteTrackIds(libraryView(b)).includes('fa-del') && favoritePull.stats.deletedFavorites === 1)
+  const favoriteTombstone = b.webdav.listSyncTombstones(cb).find(item => item.kind === 'favorite' && item.track?.id === 'fa-del')
+  const restoredFavorite = b.webdav.restoreSyncTombstone(cb, favoriteTombstone.key)
+  check('favorite tombstone restores the favorite', favoriteTrackIds(libraryView(b)).includes('fa-del'))
+  await b.webdav.syncNow(cb)
+  check('restored favorite is republished and its tombstone cleared', favoriteTrackIds(remoteView()).includes('fa-del') && !remoteTombstones().some(item => item.kind === 'favorite' && item.track?.id === 'fa-del'))
+  check('favorite restore result names the track', restoredFavorite.name, 'A删除收藏')
+
+  await sharePlaylist('p-del-undo', '恢复后同步测试', [makeTrack('t-del-undo', '恢复后同步曲')])
+  a.library.playlists = a.library.playlists.filter(item => item.id !== 'p-del-undo')
+  await a.webdav.syncNow(ca)
+  await b.webdav.syncNow(cb)
+  const staleTombstone = b.webdav.listSyncTombstones(cb).find(item => item.kind === 'playlist' && item.id === 'p-del-undo')
+  const staleRestore = b.webdav.restoreSyncTombstone(cb, staleTombstone.key)
+  await b.webdav.syncNow(cb)
+  let staleUndoRejected = false
+  try { staleRestore.undo() } catch (error) { staleUndoRejected = error?.code === 'STALE' }
+  check('restore undo is rejected after an intervening sync', staleUndoRejected)
+  check('stale undo leaves the restored item published', hasPlaylist(libraryView(b), 'p-del-undo') && hasPlaylist(remoteView(), 'p-del-undo'))
+
+  await c.webdav.syncNow(cc)
+  await sharePlaylist('p-del-c', '第三端删除歌单', [makeTrack('t-del-c', '第三端曲目')])
+  await c.webdav.syncNow(cc)
+  c.library.playlists = c.library.playlists.filter(item => item.id !== 'p-del-c')
+  const cDelete = await c.webdav.syncNow(cc)
+  const cDevice = c.snapshot.exportLibrarySnapshot().deviceId
+  const cTombstone = remoteTombstones().find(item => item.kind === 'playlist' && item.id === 'p-del-c')
+  check('another client deletion is pushed with its device id', cDelete.pushed && cTombstone?.deviceId === cDevice)
+  const aRemoteDelete = await a.webdav.syncNow(ca)
+  check('A applies a deletion made by another client', aRemoteDelete.pulled && !hasPlaylist(libraryView(a), 'p-del-c'))
+  check('another client deletion is visible in A sync result', aRemoteDelete.remoteTombstones.playlists >= 1 && aRemoteDelete.stats.deletedPlaylists === 1)
+  const historyBackup = await a.webdav.createBackup(ca)
+  const historyBackupBody = JSON.parse(remote.get('/dav/' + historyBackup).body)
+  check('manual backup retains the tombstone ledger', historyBackupBody.version === 2 && historyBackupBody.tombstones.length >= 1)
+  check('manual backup history contains the other-client deletion', historyBackupBody.tombstones.some(item => item.kind === 'playlist' && item.id === 'p-del-c'))
+
+  const legacyV1 = {
+    schema: 'ceru.library.sync', version: 1, createdAt: '2026-01-02T03:04:05.000Z',
+    favorites: [{ id: 'legacy-fav', title: '旧收藏', artist: '', album: '', durationMs: 1000, artwork: '/default-cover.png', qualities: ['128k'], source: { manifestId: 'fixture', providerId: 'kw', kind: 'track', id: 'legacy-fav', requiresRebind: false } }],
+    playlists: [{ id: 'legacy-p', name: '旧歌单', description: '', cover: '', createdAt: 1, tracks: [{ id: 'legacy-t', title: '旧曲目', artist: '', album: '', durationMs: 1000, artwork: '/default-cover.png', qualities: ['128k'], source: { manifestId: 'fixture', providerId: 'kw', kind: 'track', id: 'legacy-t', requiresRebind: false } }] }]
+  }
+  const legacyParser = a.snapshot.parseLibrarySnapshot(JSON.stringify(legacyV1))
+  check('legacy v1 snapshot is accepted and reported as v2', legacyParser.version, 2)
+  check('legacy v1 migration keeps playlists, tracks and favorites', legacyParser.playlists[0]?.tracks[0]?.id === 'legacy-t' && legacyParser.favorites[0]?.id === 'legacy-fav')
+  check('legacy v1 migration starts with an empty tombstone ledger', legacyParser.tombstones.length, 0)
 
   b.library.playlists = [makePlaylist('p-undo', '可撤销拉取', [makeTrack('t-undo', '撤销曲')]), ...b.library.playlists]
   await b.webdav.syncNow(cb)
@@ -269,6 +439,8 @@ try {
   const recreate = await a.webdav.syncNow(ca)
   check('missing remote snapshot is recreated from local', recreate.pushed && Boolean(remoteItem()))
   check('recreated remote has the local playlist', remoteView().playlists.some(item => item.id === 'p6'))
+  check('missing remote does not manufacture conflict copies', recreate.conflicts.length, 0)
+  check('recreated remote preserves the deletion ledger', (remoteView().tombstones || []).length > 0)
 
   const goodBody = remoteItem().body
   b.library.playlists = [makePlaylist('p-atomic', '存储失败拉取', [makeTrack('t-atomic', '存储失败曲')]), ...b.library.playlists]
@@ -318,13 +490,15 @@ try {
   mode = 'normal'
   check('redirect blocks sync without local mutation', libraryText(a), beforeRedirect)
 
-  setLibrary(c, [makeTrack('fc', 'C收藏')], [makePlaylist('pc', 'C歌单', [makeTrack('tc', 'C曲')])])
-  const beforeUnsigned = libraryText(c)
+  const u = environment()
+  const cu = await u.webdav.saveConnection({ name: 'U', address, username: 'twoway', password: PASSWORD, confirmed: true, allowInsecureHttp: true })
+  setLibrary(u, [makeTrack('fc', 'C收藏')], [makePlaylist('pc', 'C歌单', [makeTrack('tc', 'C曲')])])
+  const beforeUnsigned = libraryText(u)
   mode = 'ignore-conditions'
-  await assert.rejects(c.webdav.syncNow(cc), error => error.code === 'UNVERIFIED')
+  await assert.rejects(u.webdav.syncNow(cu), error => error.code === 'UNVERIFIED')
   mode = 'normal'
-  check('server ignoring conditions cannot enable two-way sync', libraryText(c), beforeUnsigned)
-  check('unverified server has no baseline', c.webdav.getSyncStatus(cc).hasBaseline, false)
+  check('server ignoring conditions cannot enable two-way sync', libraryText(u), beforeUnsigned)
+  check('unverified server has no baseline', u.webdav.getSyncStatus(cu).hasBaseline, false)
 
   setLibrary(t, [], [makePlaylist('pt', '超时歌单', [makeTrack('tt', '超时曲')])])
   const beforeTimeout = libraryText(t)
@@ -332,6 +506,27 @@ try {
   await assert.rejects(t.webdav.syncNow(ct), error => error.code === 'NETWORK')
   mode = 'normal'
   check('timeout blocks sync without local mutation', libraryText(t), beforeTimeout)
+
+  const v = environment(), cv = await v.webdav.saveConnection({ name: 'V', address, username: 'twoway', password: PASSWORD, confirmed: true, allowInsecureHttp: true })
+  setLibrary(v, [], [makePlaylist('p-bad-baseline', '损坏基线歌单', [makeTrack('t-bad-baseline', '损坏基线曲')])])
+  v.storage.set('ceru.sync.webdav.state.v1', JSON.stringify({ version: 1, connections: { [cv.id]: {
+    origin: cv.origin, basePath: cv.basePath, enabled: false, autoSyncMinutes: 3,
+    baseline: { schema: 'ceru.library.sync', version: 2, createdAt: 'bad', favorites: [], playlists: [], tombstones: 'broken' },
+    remoteEtag: '"bad"'
+  } } }))
+  const beforeBadBaseline = libraryText(v)
+  await assert.rejects(v.webdav.syncNow(cv), error => error.code === 'BASELINE')
+  check('corrupt local baseline blocks sync without local mutation', libraryText(v), beforeBadBaseline)
+  const badState = JSON.parse(v.storage.get('ceru.sync.webdav.state.v1')).connections[cv.id]
+  check('corrupt local baseline is not silently cleared', badState.baseline?.tombstones, 'broken')
+
+  await a.webdav.setSyncSettings(ca, { enabled: true })
+  mode = 'delay-get'
+  const settingsRaceSync = a.webdav.syncNow(ca)
+  for (let attempts = 0; mode === 'delay-get' && attempts < 100; attempts++) await new Promise(resolve => setTimeout(resolve, 5))
+  await a.webdav.setSyncSettings(ca, { enabled: false })
+  await settingsRaceSync
+  check('sync does not overwrite settings changed during the network wait', a.webdav.getSyncStatus(ca).enabled, false)
 
   const stateA = JSON.parse(a.storage.get('ceru.sync.webdav.state.v1'))
   const stateB = JSON.parse(b.storage.get('ceru.sync.webdav.state.v1'))
@@ -350,8 +545,8 @@ try {
   await b.webdav.setSyncSettings(cb, { enabled: false })
   check('auto sync can be disabled', b.webdav.getSyncStatus(cb).enabled, false)
 
-  const allStorage = [a, b, c, t].flatMap(env => [...env.storage.values()]).join('\n')
-  check('credentials never logged or persisted in plaintext', allStorage.includes(PASSWORD) || [a, b, c, t].some(env => env.logs.join('\n').includes(PASSWORD)), false)
+  const allStorage = [a, b, c, t, u, v].flatMap(env => [...env.storage.values()]).join('\n')
+  check('credentials never logged or persisted in plaintext', allStorage.includes(PASSWORD) || [a, b, c, t, u, v].some(env => env.logs.join('\n').includes(PASSWORD)), false)
 
   const beforeOffline = libraryText(a)
   for (const socket of sockets) socket.destroy()

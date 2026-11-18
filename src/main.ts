@@ -21,6 +21,7 @@ import * as updater from './core/updater'
 import * as lyrics from './core/lyrics/cloud'
 import { installLogCapture } from './core/logs'
 import { applyVerboseLogs, restoreSettings } from './core/settings'
+import { startAutoSyncScheduler } from './core/sync/autoSync'
 
 restoreSettings()
 installLogCapture()
@@ -43,3 +44,4 @@ app.use(createPinia())
 app.use(IonicVue, { mode: 'md' })
 app.use(router)
 app.mount('#app')
+startAutoSyncScheduler()

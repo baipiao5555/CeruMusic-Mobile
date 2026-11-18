@@ -117,8 +117,11 @@ public class PlatformLoginPlugin extends Plugin {
     private static String[] cookieNames(String id) {
         if ("tx".equals(id)) return new String[]{"uin", "qqmusic_uin", "qqmusic_key", "qm_keyst", "wxuin", "wxmusic_key", "psrf_login_type"};
         if ("wy".equals(id)) return new String[]{"MUSIC_U", "__csrf"};
-        if ("kg".equals(id)) return new String[]{"KuGoo"};
-        if ("kw".equals(id)) return new String[]{"userid", "sid", "websid", "username", "uname3", "logintype", "t3", "t3kwid"};
+        // kg_mid is issued by the official mobile site and is used by its playlist JSON pages.
+        if ("kg".equals(id)) return new String[]{"KuGoo", "kg_mid"};
+        // Hm_Iuvt... is the current kuwo.cn /api/www signing cookie; Secret is derived from it.
+        if ("kw".equals(id)) return new String[]{"userid", "sid", "websid", "username", "uname3", "logintype", "t3", "t3kwid",
+                "Hm_Iuvt_cdb524f42f23cer9b268564v7y735ewrq2324"};
         // Official Migu music SDK uses pacmtoken on .migu.cn with sourceid 220029.
         if ("mg".equals(id)) return new String[]{"pacmtoken"};
         throw new IllegalArgumentException("不支持此平台登录");

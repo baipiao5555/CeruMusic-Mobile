@@ -122,6 +122,17 @@ try {
   const coreSync = await a.webdav.syncNow(ca)
   check('syncNow establishes a per-connection baseline', a.webdav.getSyncStatus(ca).hasBaseline)
   check('syncNow returns a real sync state', ['up-to-date', 'pushed', 'pulled', 'merged'].includes(coreSync.status))
+  const legacy = environment(), legacyConnection = await legacy.webdav.saveConnection(input)
+  const legacyBody = { schema: 'ceru.library.sync', version: 1, createdAt: '2026-01-02T03:04:05.000Z',
+    favorites: [{ id: 'legacy-fav', title: '旧收藏', artist: '', album: '', durationMs: 1000, artwork: '/default-cover.png', qualities: ['128k'], source: { manifestId: 'fixture', providerId: 'kw', kind: 'track', id: 'legacy-fav', requiresRebind: false } }],
+    playlists: [{ id: 'legacy-playlist', name: '旧版歌单', description: '', cover: '', createdAt: 1, tracks: [{ id: 'legacy-track', title: '旧版曲目', artist: '', album: '', durationMs: 1000, artwork: '/default-cover.png', qualities: ['128k'], source: { manifestId: 'fixture', providerId: 'kw', kind: 'track', id: 'legacy-track', requiresRebind: false } }] }] }
+  remote.set(canonicalPath, { body: JSON.stringify(legacyBody), etag: '"legacy-v1"' })
+  const legacySync = await legacy.webdav.syncNow(legacyConnection)
+  check('v1 remote snapshot migrates instead of failing', legacySync.pulled && legacy.library.playlists[0]?.id, 'legacy-playlist')
+  const migratedRemote = JSON.parse(remote.get(canonicalPath).body)
+  check('v1 remote snapshot is rewritten as v2 without data loss', migratedRemote.version === 2 && migratedRemote.playlists[0]?.tracks[0]?.id === 'legacy-track' && migratedRemote.favorites[0]?.id === 'legacy-fav')
+  check('v1 migration starts with an empty tombstone ledger', migratedRemote.tombstones, [])
+  check('legacy migration establishes a baseline without tombstones', legacy.webdav.getSyncStatus(legacyConnection).tombstones, 0)
   await a.webdav.setSyncSettings(ca, { enabled: true })
   const syncState = JSON.parse(a.storage.get('ceru.sync.webdav.state.v1'))
   check('sync settings persist per connection', syncState.connections[ca.id].enabled === true && syncState.connections[ca.id].autoSyncMinutes === 3)

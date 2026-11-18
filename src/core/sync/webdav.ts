@@ -2,8 +2,8 @@ import { Capacitor, registerPlugin } from '@capacitor/core'
 import { secureStore } from '../native/secureStore'
 import { mainFrameCapability } from '../native/mainFrameCapability'
 import { randomUUID } from '../../shims/crypto'
-import { exportLibrarySnapshot, parseLibrarySnapshot, commitLibrarySnapshot, applyLibrarySnapshot, snapshotCounts, type LibrarySnapshot } from '../librarySnapshot'
-import { mergeSnapshots, snapshotsEqual, type MergeConflict, type MergeStats } from './merge'
+import { exportLibrarySnapshot, parseLibrarySnapshot, commitLibrarySnapshot, applyLibrarySnapshot, snapshotCounts, snapshotTrackKey, type LibrarySnapshot, type SyncTombstone } from '../librarySnapshot'
+import { mergeSnapshots, snapshotsEqual, snapshotDocumentsEqual, type DeletionConflict, type MergeConflict, type MergeStats, type TombstoneCounts } from './merge'
 
 const CONFIG_KEY = 'ceru.sync.webdav.v1'
 const SYNC_STATE_KEY = 'ceru.sync.webdav.state.v1'
@@ -35,16 +35,31 @@ export interface WebDavSyncStatus {
   remoteTracks?: number
   remoteFavorites?: number
   conflicts: number
+  tombstones: number
+  tombstonePlaylists: number
+  tombstoneTracks: number
+  tombstoneFavorites: number
+  deletionConflicts: number
+  remoteTombstones: number
 }
 export interface SyncResult {
   status: 'up-to-date' | 'pushed' | 'pulled' | 'merged'
   pushed: boolean
   pulled: boolean
   conflicts: MergeConflict[]
+  deletionConflicts: DeletionConflict[]
   stats: MergeStats
+  tombstones: TombstoneCounts
+  remoteTombstones: TombstoneCounts
   remoteEtag: string
   summary: string
   undo?: () => void
+}
+export interface SyncTombstoneView extends SyncTombstone {
+  key: string
+  playlistName?: string
+  restorable: boolean
+  restoreHint?: string
 }
 interface StoredSyncEntry {
   origin: string
@@ -63,9 +78,11 @@ interface StoredSyncEntry {
   remoteTracks?: number
   remoteFavorites?: number
   conflicts?: number
+  deletionConflicts?: number
+  remoteTombstones?: number
 }
 interface StoredSyncState { version: 1; connections: Record<string, StoredSyncEntry> }
-interface RemoteState { missing: boolean; snapshot?: LibrarySnapshot; etag?: string }
+interface RemoteState { missing: boolean; snapshot?: LibrarySnapshot; etag?: string; legacy?: boolean }
 interface Response { status: number; headers: Record<string, string>; body: string }
 interface NativeSyncHttp {
   initialize(): Promise<void>
@@ -116,6 +133,20 @@ function saveSyncState(state: StoredSyncState): void {
   try { localStorage.setItem(SYNC_STATE_KEY, JSON.stringify(state)) }
   catch { fail('STORAGE', '同步状态保存失败（可能本地存储空间不足）；本次本地状态未提交') }
 }
+/** Persist sync progress without overwriting settings changed during the network wait. */
+function saveSyncEntry(connection: WebDavConnection, entry: StoredSyncEntry): boolean {
+  const latest = loadSyncState()
+  const current = storedEntry(latest, connection)
+  if (!current) {
+    if (!configuredConnection(connection)) return false
+  } else {
+    entry.enabled = current.enabled
+    entry.autoSyncMinutes = current.autoSyncMinutes
+  }
+  latest.connections[connection.id] = entry
+  saveSyncState(latest)
+  return true
+}
 function storedEntry(state: StoredSyncState, connection: WebDavConnection): StoredSyncEntry | undefined {
   const entry = state.connections[connection.id]
   return entry && entry.origin === connection.origin && entry.basePath === connection.basePath ? entry : undefined
@@ -127,12 +158,27 @@ function entryFor(state: StoredSyncState, connection: WebDavConnection): StoredS
   state.connections[connection.id] = entry
   return entry
 }
-function baselineCounts(entry?: StoredSyncEntry): { playlists: number; tracks: number; favorites: number } | undefined {
-  const baseline = entry?.baseline
-  if (!baseline || baseline.schema !== 'ceru.library.sync' || !Array.isArray(baseline.favorites) || !Array.isArray(baseline.playlists)) return
-  let tracks = 0
-  for (const playlist of baseline.playlists) { if (!playlist || !Array.isArray(playlist.tracks)) return; tracks += playlist.tracks.length }
-  return { playlists: baseline.playlists.length, tracks, favorites: baseline.favorites.length }
+function storedBaseline(entry?: StoredSyncEntry): LibrarySnapshot | undefined {
+  if (!entry?.baseline) return
+  try {
+    const baseline = parseLibrarySnapshot(JSON.stringify(entry.baseline))
+    return baseline
+  } catch { return }
+}
+function baselineCounts(entry?: StoredSyncEntry): ReturnType<typeof snapshotCounts> | undefined {
+  const baseline = storedBaseline(entry)
+  return baseline ? snapshotCounts(baseline) : undefined
+}
+function tombstoneCounts(tombstones: SyncTombstone[]): TombstoneCounts {
+  return {
+    total: tombstones.length,
+    playlists: tombstones.filter(item => item.kind === 'playlist').length,
+    tracks: tombstones.filter(item => item.kind === 'track').length,
+    favorites: tombstones.filter(item => item.kind === 'favorite').length
+  }
+}
+function tombstoneKey(item: SyncTombstone): string {
+  return `${item.kind}\u0000${item.playlistId || ''}\u0000${item.id}`
 }
 function autoMinutes(entry?: StoredSyncEntry): number {
   const value = Number(entry?.autoSyncMinutes)
@@ -141,11 +187,14 @@ function autoMinutes(entry?: StoredSyncEntry): number {
 export function getSyncStatus(connection: WebDavConnection): WebDavSyncStatus {
   const valid = publicConnection(connection)
   const empty: WebDavSyncStatus = { connectionId: valid?.id || '', enabled: false, autoSyncMinutes: DEFAULT_AUTO_SYNC_MINUTES, hasBaseline: false,
-    baselinePlaylists: 0, baselineTracks: 0, baselineFavorites: 0, conflicts: 0 }
+    baselinePlaylists: 0, baselineTracks: 0, baselineFavorites: 0, conflicts: 0,
+    tombstones: 0, tombstonePlaylists: 0, tombstoneTracks: 0, tombstoneFavorites: 0, deletionConflicts: 0, remoteTombstones: 0 }
   if (!valid) return empty
   const state = loadSyncState()
   const entry = storedEntry(state, valid)
   const counts = baselineCounts(entry)
+  const baseline = storedBaseline(entry)
+  const deleted = tombstoneCounts(baseline?.tombstones || [])
   return { connectionId: valid.id, enabled: entry?.enabled === true, autoSyncMinutes: autoMinutes(entry),
     hasBaseline: Boolean(counts), baselinePlaylists: counts?.playlists || 0, baselineTracks: counts?.tracks || 0, baselineFavorites: counts?.favorites || 0,
     ...(entry?.lastSyncedAt ? { lastSyncedAt: entry.lastSyncedAt } : {}), ...(entry?.lastAttemptAt ? { lastAttemptAt: entry.lastAttemptAt } : {}),
@@ -155,7 +204,103 @@ export function getSyncStatus(connection: WebDavConnection): WebDavSyncStatus {
     ...(entry?.remotePlaylists !== undefined ? { remotePlaylists: entry.remotePlaylists } : {}),
     ...(entry?.remoteTracks !== undefined ? { remoteTracks: entry.remoteTracks } : {}),
     ...(entry?.remoteFavorites !== undefined ? { remoteFavorites: entry.remoteFavorites } : {}),
-    conflicts: entry?.conflicts || 0 }
+    conflicts: entry?.conflicts || 0,
+    tombstones: deleted.total, tombstonePlaylists: deleted.playlists, tombstoneTracks: deleted.tracks, tombstoneFavorites: deleted.favorites,
+    deletionConflicts: entry?.deletionConflicts || 0, remoteTombstones: entry?.remoteTombstones || 0 }
+}
+export function listSyncTombstones(connection: WebDavConnection): SyncTombstoneView[] {
+  const valid = publicConnection(connection)
+  if (!valid) return []
+  const entry = storedEntry(loadSyncState(), valid)
+  const baseline = storedBaseline(entry)
+  if (!baseline) return []
+  const local = exportLibrarySnapshot()
+  const playlists = new Map(local.playlists.map(playlist => [playlist.id, playlist]))
+  const favorites = new Set(local.favorites.map(track => snapshotTrackKey(track)))
+  return (baseline.tombstones || []).map((item): SyncTombstoneView => {
+    if (item.kind === 'playlist') {
+      const restorable = !playlists.has(item.id)
+      return { ...JSON.parse(JSON.stringify(item)), key: tombstoneKey(item), restorable,
+        ...(!restorable ? { restoreHint: '本地已存在同 ID 歌单' } : {}) }
+    }
+    if (item.kind === 'track') {
+      const playlist = item.playlistId ? playlists.get(item.playlistId) : undefined
+      const exists = Boolean(playlist && item.track && playlist.tracks.some(track => snapshotTrackKey(track) === snapshotTrackKey(item.track!)))
+      const restorable = Boolean(playlist && !exists)
+      return { ...JSON.parse(JSON.stringify(item)), key: tombstoneKey(item), restorable,
+        ...(playlist ? { playlistName: playlist.name } : {}),
+        ...(!playlist ? { restoreHint: '所属歌单已不存在，请先恢复歌单' } : exists ? { restoreHint: '本地已存在此曲目' } : {}) }
+    }
+    const exists = Boolean(item.track && favorites.has(snapshotTrackKey(item.track)))
+    return { ...JSON.parse(JSON.stringify(item)), key: tombstoneKey(item), restorable: !exists,
+      ...(exists ? { restoreHint: '本地已收藏此曲目' } : {}) }
+  }).sort((left, right) => right.deletedAt.localeCompare(left.deletedAt) || left.name.localeCompare(right.name))
+}
+/**
+ * Restore one reviewed tombstone into the local library and remove it from the
+ * saved baseline. The remote ledger is cleared on the next successful sync,
+ * when the restored item is written conditionally.
+ */
+export function restoreSyncTombstone(connection: WebDavConnection, key: string): { kind: SyncTombstone['kind']; name: string; undo(): void } {
+  const valid = publicConnection(connection)
+  if (!valid) fail('SCOPE', '同步连接未授权或已失效')
+  if (syncLocks.size > 0) fail('BUSY', '同步任务正在进行，请稍后再恢复删除记录')
+  const state = loadSyncState()
+  const entry = storedEntry(state, valid)
+  const baseline = storedBaseline(entry)
+  if (!entry || !baseline) fail('NO_BASELINE', '尚无同步基线，不能恢复删除记录')
+  const item = (baseline.tombstones || []).find(candidate => tombstoneKey(candidate) === key)
+  if (!item) fail('NOT_FOUND', '删除记录不存在或已恢复，请刷新列表')
+  const bundle = exportLibrarySnapshot()
+  if (item.kind === 'playlist') {
+    if (!item.playlist) fail('CORRUPT', '删除记录缺少歌单内容')
+    if (bundle.playlists.some(playlist => playlist.id === item.id)) fail('EXISTS', '本地已存在同 ID 歌单，未覆盖')
+    bundle.playlists.push(JSON.parse(JSON.stringify(item.playlist)))
+  } else if (item.kind === 'track') {
+    if (!item.track || !item.playlistId) fail('CORRUPT', '删除记录缺少曲目内容')
+    const playlist = bundle.playlists.find(candidate => candidate.id === item.playlistId)
+    if (!playlist) fail('NO_PLAYLIST', '所属歌单已不存在，请先恢复歌单')
+    const identity = snapshotTrackKey(item.track)
+    if (playlist.tracks.some(track => snapshotTrackKey(track) === identity)) fail('EXISTS', '本地已存在此曲目，未重复恢复')
+    playlist.tracks.push(JSON.parse(JSON.stringify(item.track)))
+  } else {
+    if (!item.track) fail('CORRUPT', '删除记录缺少收藏内容')
+    const identity = snapshotTrackKey(item.track)
+    if (bundle.favorites.some(track => snapshotTrackKey(track) === identity)) fail('EXISTS', '本地已收藏此曲目，未重复恢复')
+    bundle.favorites.push(JSON.parse(JSON.stringify(item.track)))
+  }
+  const previousBaseline = JSON.parse(JSON.stringify(entry.baseline)) as LibrarySnapshot
+  const previousSummary = entry.lastSummary, previousConflicts = entry.deletionConflicts
+  const committed = applyLibrarySnapshot(bundle)
+  const nextBaseline = JSON.parse(JSON.stringify(baseline)) as LibrarySnapshot
+  nextBaseline.tombstones = (nextBaseline.tombstones || []).filter(candidate => tombstoneKey(candidate) !== key)
+  try {
+    const latest = loadSyncState()
+    const current = entryFor(latest, valid)
+    current.baseline = nextBaseline
+    current.lastSummary = `已恢复${item.kind === 'playlist' ? '歌单' : item.kind === 'track' ? '歌单曲目' : '收藏'}「${item.name}」；下次同步将重新发布。`
+    saveSyncState(latest)
+  } catch (error) {
+    try { committed.undo() } catch {}
+    throw error
+  }
+  const savedBaselineText = JSON.stringify(nextBaseline)
+  return {
+    kind: item.kind,
+    name: item.name,
+    undo: () => {
+      if (syncLocks.size > 0) fail('BUSY', '同步任务正在进行，请稍后再撤销恢复')
+      const latest = loadSyncState()
+      const current = storedEntry(latest, valid)
+      if (!current) fail('REMOVED', '同步连接已移除，不能撤销删除记录恢复')
+      if (JSON.stringify(current.baseline) !== savedBaselineText) fail('STALE', '恢复后已发生同步，不能撤销；请重新检查删除记录')
+      committed.undo()
+      current.baseline = previousBaseline
+      current.deletionConflicts = previousConflicts
+      current.lastSummary = previousSummary
+      saveSyncState(latest)
+    }
+  }
 }
 export async function setSyncSettings(connection: WebDavConnection, patch: { enabled?: boolean; autoSyncMinutes?: number }): Promise<WebDavSyncStatus> {
   const valid = publicConnection(connection)
@@ -178,6 +323,9 @@ export async function setSyncSettings(connection: WebDavConnection, patch: { ena
 export function listConnections(): WebDavConnection[] {
   try { const raw = JSON.parse(localStorage.getItem(CONFIG_KEY) || '[]'); return Array.isArray(raw) ? raw.slice(0, 20).map(publicConnection).filter(Boolean) as WebDavConnection[] : [] }
   catch { return [] }
+}
+function configuredConnection(connection: WebDavConnection): boolean {
+  return listConnections().some(item => item.id === connection.id && item.origin === connection.origin && item.basePath === connection.basePath)
 }
 function persist(list: WebDavConnection[]): void {
   try { localStorage.setItem(CONFIG_KEY, JSON.stringify(list.map(publicConnection).filter(Boolean))) }
@@ -292,7 +440,12 @@ function snapshotTextOf(snapshot: LibrarySnapshot): string {
   const raw = JSON.stringify(parseLibrarySnapshot(JSON.stringify(snapshot))); if (new TextEncoder().encode(raw).length > SYNC_MAX_BYTES) fail('LIMIT', '本地可移植快照超过 5 MiB 限制')
   return raw
 }
-function snapshotText(): string { return snapshotTextOf(exportLibrarySnapshot()) }
+function snapshotText(connection: WebDavConnection): string {
+  const local = exportLibrarySnapshot(), state = loadSyncState(), entry = storedEntry(state, connection)
+  const baseline = storedBaseline(entry)
+  const withHistory = { ...local, version: 2 as const, tombstones: baseline?.tombstones || [] }
+  return snapshotTextOf(withHistory)
+}
 async function readRemote(connection: WebDavConnection): Promise<RemoteState> {
   const response = await webDavRequest(connection, 'GET', CURRENT_FILE)
   if (response.status === 404) return { missing: true }
@@ -301,7 +454,9 @@ async function readRemote(connection: WebDavConnection): Promise<RemoteState> {
   let snapshot: LibrarySnapshot
   try { snapshot = parseLibrarySnapshot(response.body) }
   catch { return fail('CORRUPT', '远端同步快照损坏或不是受支持的澜音快照；本地库未修改') }
-  return { missing: false, snapshot, etag: response.headers.etag }
+  let legacy = false
+  try { legacy = JSON.parse(response.body)?.version === 1 } catch {}
+  return { missing: false, snapshot, etag: response.headers.etag, legacy }
 }
 async function writeRemote(connection: WebDavConnection, snapshot: LibrarySnapshot, expectedEtag?: string): Promise<{ conflict: boolean; etag?: string }> {
   const headers: Record<string, string> = expectedEtag
@@ -330,9 +485,15 @@ function syncSummary(merged: ReturnType<typeof mergeSnapshots>, pushed: boolean,
   if (pushed) parts.push('已条件写入远端')
   if (pulled) parts.push('已应用远端到本地')
   if (merged.conflicts.length) parts.push(`保留 ${merged.conflicts.length} 个冲突副本`)
-  if (merged.stats.resurrectedTracks) parts.push(`首版不传播删除，保留 ${merged.stats.resurrectedTracks} 首歌单曲目`)
-  if (merged.stats.resurrectedPlaylists) parts.push(`首版不传播删除，保留 ${merged.stats.resurrectedPlaylists} 个歌单`)
-  if (merged.stats.favoriteResurrections) parts.push(`保留 ${merged.stats.favoriteResurrections} 首被删除收藏`)
+  const deleted = merged.stats.deletedPlaylists + merged.stats.deletedTracks + merged.stats.deletedFavorites
+  if (deleted) parts.push(`已传播删除 ${merged.stats.deletedPlaylists} 个歌单 / ${merged.stats.deletedTracks} 首歌单曲目 / ${merged.stats.deletedFavorites} 首收藏`)
+  const both = merged.stats.bothDeletedPlaylists + merged.stats.bothDeletedTracks + merged.stats.bothDeletedFavorites
+  if (both) parts.push(`双方均已删除 ${both} 项`)
+  if (merged.deletionConflicts.length) parts.push(`删除与编辑冲突 ${merged.deletionConflicts.length} 项，已保留内容`)
+  if (merged.stats.restoredTombstones) parts.push(`恢复 ${merged.stats.restoredTombstones} 条删除记录`)
+  if (merged.stats.resurrectedPlaylists) parts.push(`保留 ${merged.stats.resurrectedPlaylists} 个未带删除记录的歌单`)
+  if (merged.stats.favoriteResurrections) parts.push(`保留 ${merged.stats.favoriteResurrections} 首未带删除记录的收藏`)
+  if (merged.stats.remoteTombstones.total) parts.push(`远端有 ${merged.stats.remoteTombstones.total} 条删除记录`)
   if (!parts.length) parts.push('本地与远端一致')
   return parts.join('；') + '。'
 }
@@ -346,32 +507,32 @@ export async function syncNow(connection: WebDavConnection): Promise<SyncResult>
   if (syncLocks.size > 0) fail('BUSY', '已有同步任务正在进行，请稍后再试')
   syncLocks.add(valid.id)
   const startedAt = new Date(), attemptAt = startedAt.getTime()
-  const state = loadSyncState()
-  const entry = entryFor(state, valid)
-  const previousRemoteEtag = entry.remoteEtag, previousSyncedAt = entry.lastSyncedAt, previousSummary = entry.lastSummary, previousConflicts = entry.conflicts
+  const entry = entryFor(loadSyncState(), valid)
+  const previousRemoteEtag = entry.remoteEtag, previousSyncedAt = entry.lastSyncedAt, previousSummary = entry.lastSummary
+  const previousConflicts = entry.conflicts, previousDeletionConflicts = entry.deletionConflicts
   try {
     await ensureEtagProof(valid)
     const local = exportLibrarySnapshot()
     let baseline: LibrarySnapshot | undefined
     if (entry.baseline) {
       try { baseline = parseLibrarySnapshot(JSON.stringify(entry.baseline)) }
-      catch { entry.baseline = undefined; entry.remoteEtag = undefined }
+      catch { fail('BASELINE', '本地同步基线损坏，已停止同步；本地库未修改。请移除此连接后重新建立基线') }
     }
     let remote = await readRemote(valid)
     entry.remoteAt = Date.now()
     entry.remoteExists = !remote.missing
-    let merged = mergeSnapshots(local, baseline, local, { now: startedAt })
+    let merged = mergeSnapshots(local, baseline, baseline || local, { now: startedAt })
     let pushed = false, writeAttempts = 0
     for (;;) {
       if (remote.missing) {
-        merged = mergeSnapshots(local, undefined, local, { now: startedAt })
+        merged = mergeSnapshots(local, baseline, baseline || local, { now: startedAt })
         assertLocalSnapshot(local)
-        const write = await writeRemote(valid, local)
+        const write = await writeRemote(valid, merged.snapshot)
         if (!write.conflict) { entry.remoteEtag = write.etag; pushed = true; break }
       } else {
         if (!remote.snapshot || !remote.etag) fail('UNVERIFIED', '远端快照或 ETag 缺失；已停止同步，本地库未修改')
         merged = mergeSnapshots(local, baseline, remote.snapshot, { now: startedAt })
-        if (snapshotsEqual(merged.snapshot, remote.snapshot)) { entry.remoteEtag = remote.etag; break }
+        if (!remote.legacy && snapshotDocumentsEqual(merged.snapshot, remote.snapshot)) { entry.remoteEtag = remote.etag; break }
         assertLocalSnapshot(local)
         const write = await writeRemote(valid, merged.snapshot, remote.etag)
         if (!write.conflict) { entry.remoteEtag = write.etag; pushed = true; break }
@@ -399,40 +560,54 @@ export async function syncNow(connection: WebDavConnection): Promise<SyncResult>
     entry.lastAttemptAt = attemptAt
     entry.lastError = undefined
     entry.conflicts = merged.conflicts.length
+    entry.deletionConflicts = merged.deletionConflicts.length
+    entry.remoteTombstones = merged.stats.remoteTombstones.total
     const summary = syncSummary(merged, pushed, localChanged)
     entry.lastSummary = summary
-    try { saveSyncState(state) }
+    let saved = false
+    try { saved = saveSyncEntry(valid, entry) }
     catch (error) {
       if (committed) { try { committed.undo() } catch {} }
       throw error
     }
+    if (!saved) {
+      if (committed) { try { committed.undo() } catch {} }
+      fail('REMOVED', '同步期间连接已被移除；本次本地应用已撤销')
+    }
     const undo = localChanged && !pushed && committed ? () => {
       committed!.undo()
       const latest = loadSyncState()
-      const current = entryFor(latest, valid)
+      const current = storedEntry(latest, valid)
+      if (!current) return
       current.baseline = previousBaseline
       current.remoteEtag = previousRemoteEtag
       current.lastSyncedAt = previousSyncedAt
       current.lastSummary = previousSummary
       current.conflicts = previousConflicts
+      current.deletionConflicts = previousDeletionConflicts
       saveSyncState(latest)
     } : undefined
     return { status: pushed && localChanged ? 'merged' : pushed ? 'pushed' : localChanged ? 'pulled' : 'up-to-date',
-      pushed, pulled: localChanged, conflicts: merged.conflicts, stats: merged.stats, remoteEtag, summary, ...(undo ? { undo } : {}) }
+      pushed, pulled: localChanged, conflicts: merged.conflicts, deletionConflicts: merged.deletionConflicts,
+      stats: merged.stats, tombstones: merged.stats.tombstones, remoteTombstones: merged.stats.remoteTombstones,
+      remoteEtag, summary, ...(undo ? { undo } : {}) }
   } catch (error) {
     try {
       const latest = loadSyncState()
-      const failed = entryFor(latest, valid)
-      failed.lastAttemptAt = attemptAt
-      failed.lastError = error instanceof Error ? error.message.slice(0, 500) : '同步失败，本地库未修改'
-      saveSyncState(latest)
+      let failed = storedEntry(latest, valid)
+      if (!failed && configuredConnection(valid)) failed = entryFor(latest, valid)
+      if (failed) {
+        failed.lastAttemptAt = attemptAt
+        failed.lastError = error instanceof Error ? error.message.slice(0, 500) : '同步失败，本地库未修改'
+        saveSyncState(latest)
+      }
     } catch {}
     throw error
   } finally { syncLocks.delete(valid.id) }
 }
 export async function createBackup(connection: WebDavConnection): Promise<string> {
   const file = `.ceru-backup-${Date.now()}-${randomUUID()}.json`
-  status(await webDavRequest(connection, 'PUT', file, snapshotText(), { 'If-None-Match': '*', 'Content-Type': 'application/json; charset=utf-8' }), [200, 201, 204])
+  status(await webDavRequest(connection, 'PUT', file, snapshotText(connection), { 'If-None-Match': '*', 'Content-Type': 'application/json; charset=utf-8' }), [200, 201, 204])
   return file
 }
 export interface RemotePreview { file: string; snapshot: ReturnType<typeof parseLibrarySnapshot>; etag?: string }
@@ -450,7 +625,7 @@ export async function publishCurrentBackup(connection: WebDavConnection): Promis
     const existing = await webDavRequest(connection, 'HEAD', CURRENT_FILE)
     if (existing.status !== 404) { status(existing, [200, 204]); fail('REMOTE_EXISTS', '远端当前备份已存在，请先读取预览以确认版本，或保存独立新备份') }
   }
-  const response = await webDavRequest(connection, 'PUT', CURRENT_FILE, snapshotText(), etag ? { 'If-Match': etag, 'Content-Type': 'application/json; charset=utf-8' } : { 'If-None-Match': '*', 'Content-Type': 'application/json; charset=utf-8' })
+  const response = await webDavRequest(connection, 'PUT', CURRENT_FILE, snapshotText(connection), etag ? { 'If-Match': etag, 'Content-Type': 'application/json; charset=utf-8' } : { 'If-None-Match': '*', 'Content-Type': 'application/json; charset=utf-8' })
   status(response, [200, 201, 204]); if (strongETag(response.headers.etag)) observed.set(`${connection.id}:${CURRENT_FILE}`, response.headers.etag); else observed.delete(`${connection.id}:${CURRENT_FILE}`)
 }
 export function commitRestore(preview: RemotePreview, mode: 'merge' | 'replace'): ReturnType<typeof commitLibrarySnapshot> {

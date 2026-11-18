@@ -493,16 +493,14 @@ onUnmounted(() => {
 
         <button v-if="settingsState.showLyrics" class="p-lyric" aria-label="打开完整歌词" @click="openLyrics">
           <span v-if="playerState.lyrics.length" class="p-lyric-body">
-            <transition name="ly-swap" mode="out-in">
-              <span class="p-lyric-stack" :key="playerState.activeLyric">
-                <span v-for="item in lyricPreview" :key="item.offset" class="p-lyric-line" :class="{ 'focus-slot': item.offset === 0, cur: item.offset === 0 && !!item.line, past: item.offset < 0 }" :data-offset="item.offset">
-                  <span v-if="item.offset === 0" class="p-lyric-cur" :class="{ dim: !item.line }">
-                    <span v-for="(ch, index) in lyricChars(item.line?.text || '♪')" :key="index" class="pl-char" :class="{ on: index < activeLineCharCount }">{{ ch }}</span>
-                  </span>
-                  <span v-else class="p-lyric-context">{{ item.line?.text || '' }}</span>
+            <span class="p-lyric-stack">
+              <span v-for="item in lyricPreview" :key="item.offset" class="p-lyric-line" :class="{ 'focus-slot': item.offset === 0, cur: item.offset === 0 && !!item.line, past: item.offset < 0 }" :data-offset="item.offset">
+                <span v-if="item.offset === 0" class="p-lyric-cur" :class="{ dim: !item.line }">
+                  <span v-for="(ch, index) in lyricChars(item.line?.text || '♪')" :key="index" class="pl-char" :class="{ on: index < activeLineCharCount }">{{ ch }}</span>
                 </span>
+                <span v-else class="p-lyric-context">{{ item.line?.text || '' }}</span>
               </span>
-            </transition>
+            </span>
           </span>
           <span v-else class="p-lyric-empty">{{ playerState.lyricsLoading ? '正在加载歌词…' : '暂无歌词 · 点击匹配' }}</span>
         </button>
@@ -897,9 +895,6 @@ onUnmounted(() => {
 .p-lyric-empty { font-size: 13px; line-height: 24px; color: #b7c8df; }
 .pl-char { color: #c4d0e0; transition: color .16s linear; }
 .pl-char.on { color: #fff; }
-.ly-swap-enter-active, .ly-swap-leave-active { transition: opacity .16s ease, transform .16s ease; }
-.ly-swap-enter-from { opacity: 0; transform: translateY(5px); }
-.ly-swap-leave-to { opacity: 0; transform: translateY(-4px); }
 .p-tools { grid-row: 6; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .p-tool { display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 44px; min-height: 44px; font-size: 12px; color: #ccdaed; }
 .p-quality-button { justify-content: flex-start; max-width: 46%; }
@@ -932,9 +927,9 @@ onUnmounted(() => {
 .ly-top .p-head-s { max-width: 100%; }
 .ly-box { position: relative; z-index: 2; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 12vh 28px 34vh; scrollbar-width: none; -webkit-mask-image: linear-gradient(180deg, transparent, #000 8%, #000 91%, transparent); mask-image: linear-gradient(180deg, transparent, #000 8%, #000 91%, transparent); }
 .ly-box::-webkit-scrollbar { display: none; }
-.ly-line { position: relative; margin: 0; padding: 12px 0; font-family: var(--lyric-font, var(--sans)); font-size: calc(23px * var(--ly-scale, 1)); font-weight: 650; line-height: 1.55; color: #a4b8d5; overflow-wrap: anywhere; cursor: pointer; transition: color .25s ease; }
-.ly-line.cur { color: #fff; }
-.ly-line.passed { color: #b6c6dc; }
+.ly-line { position: relative; margin: 0; padding: 12px 0; font-family: var(--lyric-font, var(--sans)); font-size: calc(23px * var(--ly-scale, 1)); font-weight: 650; line-height: 1.55; color: #a4b8d5; overflow-wrap: anywhere; cursor: pointer; opacity: .28; filter: blur(2.2px); transition: color .25s ease, opacity .25s ease, filter .25s ease; }
+.ly-line.cur { color: #fff; opacity: 1; filter: none; }
+.ly-line.passed { color: #b6c6dc; opacity: .18; }
 .ly-char { color: #bfd0e8; transition: color .16s linear; }
 .ly-char.on { color: #fff; text-shadow: 0 0 12px #ffffff20; }
 .ly-tr { display: block; margin-top: 5px; font-family: var(--sans); font-weight: 400; font-size: calc(13px * var(--ly-scale, 1)); line-height: 1.55; color: #b9cce6; }

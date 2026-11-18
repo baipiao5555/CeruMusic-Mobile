@@ -626,6 +626,17 @@ export async function fetchPluginCode(url: string): Promise<string> {
 }
 
 export function inspectPlugin(code: string): any {
+  const text = String(code ?? '')
+  if (
+    /"lines"\s*:\s*\[/.test(text) &&
+    /"searchApi"\s*:/.test(text) &&
+    /"detailApi"\s*:/.test(text) &&
+    !/\bexports\s*\.\s*manifest\b/.test(text)
+  ) {
+    throw new Error(
+      '这个地址返回的是第三方音源配置（如青听音源），不是澜音 v2 插件或洛雪 LX 脚本，不能直接导入。请找该音源提供的 .js 插件，或使用支持该配置格式的客户端。'
+    )
+  }
   try {
     return readPluginArtifact(code).header.manifest
   } catch (error) {

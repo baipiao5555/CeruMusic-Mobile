@@ -231,8 +231,44 @@ export function restorePlayer(): void {
 }
 
 let clockRaf: number | null = null
-let clockMedia = -1
-let clockAt = 0
+let clockBaseMedia = 0
+let clockBaseAt = 0
+
+function clockRate(): number {
+  const rate = Number(audio?.playbackRate)
+  return Number.isFinite(rate) && rate > 0 ? rate : 1
+}
+
+function clampMediaTime(value: number): number {
+  const duration = playerState.duration
+  return Math.max(0, duration > 0 ? Math.min(value, duration) : value)
+}
+
+/**
+ * 用本地单调时钟推进播放位置，只在真实漂移/拖动时回到 audio.currentTime。
+ * 不能用 timeupdate 直接覆盖 currentTime：WebView 的该事件约 250ms 一次，
+ * 每次都回写会让歌词出现“跳一下、停一下”的锯齿，倍速时更明显。
+ */
+function smoothMediaTime(media: number, now: number): number {
+  if (!clockBaseAt) {
+    clockBaseMedia = media
+    clockBaseAt = now
+    return media
+  }
+  const predicted = clockBaseMedia + ((now - clockBaseAt) / 1000) * clockRate()
+  const drift = media - predicted
+  // 4Hz 的 currentTime 步进本身约 250ms；只修正真正的 seek/卡顿。
+  if (drift > 0.12 || drift < -0.45) {
+    clockBaseMedia = media
+    clockBaseAt = now
+    return media
+  }
+  return predicted
+}
+
+function applyMediaClock(media: number): void {
+  playerState.currentTime = clampMediaTime(smoothMediaTime(media, performance.now()))
+}
 
 /**
  * 逐帧推进歌词时钟。
@@ -250,17 +286,9 @@ function tickClock(): void {
     updateActiveLyric()
     clockRaf = requestAnimationFrame(tickClock)
     return
-  }  const media = Number.isFinite(audio.currentTime) ? audio.currentTime : playerState.currentTime
-  if (media !== clockMedia) {
-    clockMedia = media
-    clockAt = now
-    playerState.currentTime = media
-  } else if (clockAt) {
-    const elapsed = Math.min(400, Math.max(0, now - clockAt)) / 1000
-    const extrapolated = media + elapsed * (audio.playbackRate || 1)
-    const duration = playerState.duration
-    playerState.currentTime = Math.max(0, duration > 0 ? Math.min(extrapolated, duration) : extrapolated)
   }
+  const media = Number.isFinite(audio.currentTime) ? audio.currentTime : clockBaseMedia
+  playerState.currentTime = clampMediaTime(smoothMediaTime(media, now))
   updateActiveLyric()
   clockRaf = requestAnimationFrame(tickClock)
 }
@@ -278,8 +306,8 @@ function stopClock(): void {
 }
 
 function resetClock(): void {
-  clockMedia = -1
-  clockAt = 0
+  clockBaseMedia = Number.isFinite(audio?.currentTime) ? audio!.currentTime : playerState.currentTime
+  clockBaseAt = performance.now()
 }
 
 export function initPlayer(): void {
@@ -300,6 +328,7 @@ export function initPlayer(): void {
   })
   audio.addEventListener('pause', () => {
     playerState.playing = false
+    if (Number.isFinite(audio!.currentTime)) playerState.currentTime = audio!.currentTime
     stopClock()
     persist()
     void syncWakeLock()
@@ -312,7 +341,8 @@ export function initPlayer(): void {
   audio.addEventListener('timeupdate', () => {
     // Ignore progress from the previous track while a new source is loading.
     if (!audio || startPending || awaitingLoad || !audio.getAttribute('src')) return
-    playerState.currentTime = audio.currentTime
+    if (playerState.playing) applyMediaClock(audio.currentTime)
+    else playerState.currentTime = audio.currentTime
     // 暂停/后台时 rAF 时钟不跑，这里补一次高亮，保证 seek 后歌词立刻跟上。
     updateActiveLyric()
     updatePositionState()
@@ -560,6 +590,8 @@ async function startPlayback(
     releaseBlob()
     if (url.startsWith('blob:')) blobUrl = url
     audio!.src = url
+    // Some WebViews reset playbackRate when a new source is attached.
+    applyPlaybackRate()
     // 新音源的 metadata 一到就解除时间轴锁定；要续播的位置也在这里落下去。
     audio!.addEventListener(
       'loadedmetadata',

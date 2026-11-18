@@ -23,7 +23,9 @@
     "test:search-motion": "node scripts/test-search-entry-motion.mjs",
     "test:sheet-motion": "node scripts/test-sheet-motion.mjs",
     "test:list-window": "node scripts/test-list-window.mjs",
-    "test:player-morph": "node scripts/test-player-morph.mjs"
+    "test:player-morph": "node scripts/test-player-morph.mjs",
+    "test:lyric-clock": "node scripts/test-lyric-clock.mjs",
+    "test:plugin-import": "node scripts/test-plugin-import.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

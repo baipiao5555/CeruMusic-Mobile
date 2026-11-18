@@ -230,12 +230,13 @@ const SMILEY_STACK =
 const MONO_STACK =
   "'JetBrains Mono', 'SF Mono', ui-monospace, 'Cascadia Mono', Consolas, 'Noto Sans Mono CJK SC', monospace"
 
-const FONT_STACKS: Record<AppFont, { sans: string; serif: string }> = {
-  system: { sans: SANS_STACK, serif: SYSTEM_SERIF_STACK },
-  wenkai: { sans: KAI_STACK, serif: KAI_STACK },
-  smiley: { sans: SMILEY_STACK, serif: SMILEY_STACK },
-  serif: { sans: SERIF_STACK, serif: SERIF_STACK },
-  mono: { sans: MONO_STACK, serif: MONO_STACK }
+const FONT_STACKS: Record<AppFont, { sans: string; serif: string; lyric: string }> = {
+  // 跟随系统时歌词也用系统 UI 字体；--serif 仍只负责标题/衬线装饰。
+  system: { sans: SANS_STACK, serif: SYSTEM_SERIF_STACK, lyric: SANS_STACK },
+  wenkai: { sans: KAI_STACK, serif: KAI_STACK, lyric: KAI_STACK },
+  smiley: { sans: SMILEY_STACK, serif: SMILEY_STACK, lyric: SMILEY_STACK },
+  serif: { sans: SERIF_STACK, serif: SERIF_STACK, lyric: SERIF_STACK },
+  mono: { sans: MONO_STACK, serif: MONO_STACK, lyric: MONO_STACK }
 }
 
 function applyFontFamily(): void {
@@ -243,8 +244,8 @@ function applyFontFamily(): void {
   const root = document.documentElement
   root.style.setProperty('--sans', stack.sans)
   root.style.setProperty('--serif', stack.serif)
-  // 歌词跟着同一个字体走，除非将来单独开放歌词字体
-  root.style.setProperty('--lyric-font', stack.serif)
+  // 歌词跟着同一个字体走；跟随系统时必须使用 sans，而不是衬线标题字体。
+  root.style.setProperty('--lyric-font', stack.lyric)
 }
 
 /** Android reports night mode through the SystemBars plugin; WebView media queries lag. */

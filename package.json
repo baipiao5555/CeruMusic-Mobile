@@ -25,7 +25,8 @@
     "test:list-window": "node scripts/test-list-window.mjs",
     "test:player-morph": "node scripts/test-player-morph.mjs",
     "test:lyric-clock": "node scripts/test-lyric-clock.mjs",
-    "test:plugin-import": "node scripts/test-plugin-import.mjs"
+    "test:plugin-import": "node scripts/test-plugin-import.mjs",
+    "test:source-groups": "node scripts/test-source-groups.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

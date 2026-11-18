@@ -194,15 +194,19 @@ try {
   const lyricStyle = await page.evaluate(() => {
     const current = document.querySelector('.ly-line.cur')
     const other = [...document.querySelectorAll('.ly-line')].find((line) => line !== current)
+    const rootStyle = getComputedStyle(document.documentElement)
     return {
       currentFilter: current ? getComputedStyle(current).filter : '',
       otherFilter: other ? getComputedStyle(other).filter : '',
-      otherOpacity: other ? Number(getComputedStyle(other).opacity) : 1
+      otherOpacity: other ? Number(getComputedStyle(other).opacity) : 1,
+      lyricFont: rootStyle.getPropertyValue('--lyric-font').trim(),
+      sansFont: rootStyle.getPropertyValue('--sans').trim()
     }
   })
   assert.equal(lyricStyle.currentFilter, 'none')
   assert.match(lyricStyle.otherFilter, /blur\(/)
   assert.ok(lyricStyle.otherOpacity < 0.5)
+  assert.equal(lyricStyle.lyricFont, lyricStyle.sansFont, 'system font should also drive player lyrics')
   assert.equal(errors.length, 0, `unexpected page errors: ${errors.join(' | ')}`)
   console.log(`PASS lyric clock: rate=${observedRate.toFixed(2)}x, lines advance, preview stable, immersive blur`)
 } finally {

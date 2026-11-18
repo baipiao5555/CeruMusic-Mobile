@@ -31,21 +31,31 @@ const pending = ref<{ code: string; manifest: any; sourceUrl?: string } | null>(
 const editing = ref<PluginDescriptor | null>(null)
 const configValues = ref<Record<string, any>>({})
 const expanded = ref('')
+const sourceExpanded = ref('')
 
 const installed = computed(() => pluginState.plugins)
 const activeSource = computed(() =>
   allProviders().find((item) => item.providerId === pluginState.selectedProvider)
 )
 
-/** 已安装插件提供的在线音源（每个 provider 一张 monogram 卡）。 */
-const sources = computed(() =>
-  installed.value.flatMap((plugin) => plugin.providers.map((provider) => ({ plugin, provider })))
+/** 在线音源按插件归组：默认只露出插件名，展开后才显示各平台 provider。 */
+const onlineGroups = computed(() =>
+  installed.value
+    .filter((plugin) => plugin.providers.length)
+    .map((plugin) => ({
+      plugin,
+      providers: plugin.providers.map((provider) => ({ plugin, provider }))
+    }))
 )
 const runningCount = computed(() => installed.value.filter((item) => item.running).length)
 const failedCount = computed(() => installed.value.filter((item) => item.loadError).length)
 
 function toggleDetails(pluginId: string): void {
   expanded.value = expanded.value === pluginId ? '' : pluginId
+}
+
+function toggleSourceGroup(pluginId: string): void {
+  sourceExpanded.value = sourceExpanded.value === pluginId ? '' : pluginId
 }
 
 function useSource(providerId: string, pluginId: string): void {
@@ -344,28 +354,48 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
           <h2>在线音源</h2>
           <span class="idx">ONLINE</span>
         </div>
-        <span class="meta num">{{ sources.length }} 个</span>
+        <span class="meta num">{{ onlineGroups.length }} 个音源</span>
       </div>
 
-      <div v-if="sources.length" class="hscroll tiles">
-        <button
-          v-for="item in sources"
-          :key="item.plugin.pluginId + ':' + item.provider.id"
-          class="tile"
-          :class="{ cur: activeSource?.providerId === item.provider.id && activeSource?.pluginId === item.plugin.pluginId }"
-          :disabled="!item.plugin.running"
-          @click="useSource(item.provider.id, item.plugin.pluginId)"
+      <div v-if="onlineGroups.length" class="source-groups">
+        <section
+          v-for="group in onlineGroups"
+          :key="group.plugin.pluginId"
+          class="source-group"
+          :class="{ open: sourceExpanded === group.plugin.pluginId }"
         >
-          <span class="mono">{{ item.provider.name.slice(0, 1) }}</span>
-          <span class="tname truncate">{{ item.provider.name }}</span>
-          <span class="tv num">v{{ item.plugin.version }} · {{ item.provider.methods.length }} 接口</span>
-          <span class="ta">
-            <template v-if="activeSource?.providerId === item.provider.id && activeSource?.pluginId === item.plugin.pluginId">
-              <Icon name="check" :size="11" /> 使用中
-            </template>
-            <template v-else>+ 设为当前</template>
-          </span>
-        </button>
+          <button class="source-summary" @click="toggleSourceGroup(group.plugin.pluginId)">
+            <span class="pmark" :class="{ off: !group.plugin.running }">{{ group.plugin.name.slice(0, 1) }}</span>
+            <span class="source-main">
+              <strong class="truncate">{{ group.plugin.name }}</strong>
+              <small>v{{ group.plugin.version }} · {{ group.providers.length }} 个平台</small>
+            </span>
+            <span class="source-state">
+              {{ !group.plugin.running ? '已停用' : sourceExpanded === group.plugin.pluginId ? '收起' : '展开' }}
+            </span>
+            <Icon name="chevron-down" :size="15" class="source-chevron" />
+          </button>
+          <div v-if="sourceExpanded === group.plugin.pluginId" class="hscroll tiles source-tiles">
+            <button
+              v-for="item in group.providers"
+              :key="item.plugin.pluginId + ':' + item.provider.id"
+              class="tile"
+              :class="{ cur: activeSource?.providerId === item.provider.id && activeSource?.pluginId === item.plugin.pluginId }"
+              :disabled="!item.plugin.running"
+              @click="useSource(item.provider.id, item.plugin.pluginId)"
+            >
+              <span class="mono">{{ item.provider.name.slice(0, 1) }}</span>
+              <span class="tname truncate">{{ item.provider.name }}</span>
+              <span class="tv num">v{{ item.plugin.version }} · {{ item.provider.methods.length }} 接口</span>
+              <span class="ta">
+                <template v-if="activeSource?.providerId === item.provider.id && activeSource?.pluginId === item.plugin.pluginId">
+                  <Icon name="check" :size="11" /> 使用中
+                </template>
+                <template v-else>+ 设为当前</template>
+              </span>
+            </button>
+          </div>
+        </section>
       </div>
       <p v-else class="pad meta">还没有可用的音源，先用上面的订阅卡装一个插件。</p>
 
@@ -794,6 +824,71 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
 }
 .tile.cur .ta {
   color: var(--tint);
+}
+
+/* ---- 在线音源：默认只显示插件名，展开后显示平台 ---- */
+.source-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 var(--pad);
+}
+.source-group {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.source-summary {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-height: 70px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.source-summary:active {
+  background: var(--tint-softer);
+}
+.source-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+.source-main strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.source-main small {
+  display: block;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.source-state {
+  flex: none;
+  font-size: 10px;
+  color: var(--tint);
+}
+.source-chevron {
+  flex: none;
+  color: var(--ink-3);
+  transition: transform 0.18s var(--e-out);
+}
+.source-group.open .source-chevron {
+  transform: rotate(180deg);
+}
+.source-tiles {
+  padding: 0 12px 12px;
+}
+.source-tiles .tile {
+  width: 104px;
 }
 
 /* ---- 已安装行 ---- */

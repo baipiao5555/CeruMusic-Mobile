@@ -501,8 +501,9 @@ async function findFallbackTrack(track: Track): Promise<Track | null> {
   if (!title) return null
   const providers = allProviders().filter(
     (provider) =>
-      provider.providerId !== track.providerId &&
-      provider.methods.includes('tracks.search')
+      !(provider.pluginId === track.pluginId && provider.providerId === track.providerId) &&
+      provider.methods.includes('tracks.search') &&
+      provider.methods.includes('tracks.resolve')
   )
   for (const provider of providers) {
     try {

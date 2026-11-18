@@ -22,7 +22,8 @@
 ## 发布产物
 
 - APK：`D:\LX\CeruMusic-Mobile-v2.6.31.apk`
-- 大小：`<!-- SIZE -->` 字节
-- SHA256：`<!-- SHA256 -->`
+- 大小：`7569084` 字节
+- SHA256：`003c53d366fd9f89761f96bf54e71a0514556e8f3cb10fd377f72a922c551c6e`
 
 versionName 2.6.31，versionCode 24049；继续保留原签名。
+

@@ -60,7 +60,13 @@ async function check(name, run) {
   }
 }
 const choose = id => page.evaluate(id => window.__ceruDebug.selectProvider(id), id)
-const titles = selector => page.locator(selector).allTextContents()
+const sectionTitles = title => page.evaluate(title => {
+  const head = [...document.querySelectorAll('.section-head')]
+    .find(element => element.querySelector('h2')?.textContent?.trim() === title)
+  let row = head?.nextElementSibling
+  while (row && !(row instanceof HTMLElement && row.classList.contains('home-covers'))) row = row.nextElementSibling
+  return row ? [...row.querySelectorAll('.ct')].map(element => element.textContent?.trim()) : []
+}, title)
 
 try {
   await page.goto(base, { waitUntil: 'networkidle' })
@@ -73,8 +79,8 @@ try {
   await choose('fast')
   await page.waitForTimeout(1400)
   await check('latest provider owns discovery content', async () => {
-    assert.deepEqual(await titles('.rankcard .rt'), ['fast-chart'])
-    assert.deepEqual(await titles('.mediacard .ct'), ['fast-initial'])
+    assert.deepEqual(await sectionTitles('排行榜'), ['fast-chart'])
+    assert.deepEqual(await sectionTitles('听点喜欢的'), ['fast-initial'])
   })
 
   await choose('browse')
@@ -82,14 +88,14 @@ try {
   await choose('fast')
   await page.waitForTimeout(200)
   await check('provider cache remains isolated', async () => {
-    assert.deepEqual(await titles('.rankcard .rt'), ['fast-chart'])
+    assert.deepEqual(await sectionTitles('排行榜'), ['fast-chart'])
   })
   await page.getByRole('button', { name: 'fast-delayed', exact: true }).click()
   await page.waitForTimeout(80)
   await page.getByRole('button', { name: 'fast-latest', exact: true }).click()
   await page.waitForTimeout(1000)
   await check('latest category owns playlist results', async () => {
-    assert.deepEqual(await titles('.mediacard .ct'), ['fast-latest'])
+    assert.deepEqual(await sectionTitles('听点喜欢的'), ['fast-latest'])
   })
 
   await page.locator('.search-launch').click()

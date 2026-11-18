@@ -49,6 +49,13 @@ const browser = await chromium.launch({
 const failures = []
 const pageErrors = []
 const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true })
+await page.addInitScript(() => {
+  try {
+    localStorage.setItem('ceru.update.v1', JSON.stringify({ autoCheck: false }))
+  } catch {
+    // Sandboxed plugin frames do not have same-origin storage.
+  }
+})
 page.on('pageerror', error => pageErrors.push(error.message))
 async function check(name, run) {
   try {

@@ -18,6 +18,13 @@ await context.route('**/*', (route) => {
 })
 
 const page = await context.newPage()
+await page.addInitScript(() => {
+  try {
+    localStorage.setItem('ceru.update.v1', JSON.stringify({ autoCheck: false }))
+  } catch {
+    // Sandboxed plugin frames do not have same-origin storage.
+  }
+})
 const errors = []
 page.on('pageerror', (error) => errors.push(error.message))
 page.on('console', (message) => {

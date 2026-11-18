@@ -32,6 +32,7 @@ await context.route('**/*', (route) => {
 })
 await context.addInitScript((playerTrack) => {
   try {
+    localStorage.setItem('ceru.update.v1', JSON.stringify({ autoCheck: false }))
     localStorage.setItem('ceru.player.v1', JSON.stringify({
       queue: [playerTrack],
       index: 0,
@@ -102,6 +103,7 @@ try {
   })
   await reduced.addInitScript((playerTrack) => {
     try {
+      localStorage.setItem('ceru.update.v1', JSON.stringify({ autoCheck: false }))
       localStorage.setItem('ceru.player.v1', JSON.stringify({
         queue: [playerTrack],
         index: 0,

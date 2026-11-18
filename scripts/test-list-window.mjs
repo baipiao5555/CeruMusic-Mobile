@@ -38,6 +38,7 @@ await context.route('**/*', (route) => {
 })
 await context.addInitScript((data) => {
   try {
+    localStorage.setItem('ceru.update.v1', JSON.stringify({ autoCheck: false }))
     localStorage.setItem('ceru.library.v1', JSON.stringify({ favorites: data.favorites, playlists: [data.playlist] }))
   } catch {
     // Sandboxed plugin frames do not have same-origin storage.

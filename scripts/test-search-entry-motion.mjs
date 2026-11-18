@@ -30,6 +30,11 @@ page.on('console', (message) => {
 
 async function installProbe() {
   await page.addInitScript(() => {
+    try {
+      localStorage.setItem('ceru.update.v1', JSON.stringify({ autoCheck: false }))
+    } catch {
+      // Sandboxed plugin frames do not have same-origin storage.
+    }
     window.__motionLog = []
     document.addEventListener(
       'focusin',

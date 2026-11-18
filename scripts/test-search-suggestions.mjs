@@ -82,6 +82,7 @@ async function check(name, run) {
 try {
   await page.addInitScript(({ pluginId }) => {
     if (window.parent !== window) return
+    localStorage.setItem('ceru.update.v1', JSON.stringify({ autoCheck: false }))
     localStorage.setItem('ceru.search.mode.v1', 'name')
     localStorage.setItem('ceru.library.v1', JSON.stringify({
       favorites: [{

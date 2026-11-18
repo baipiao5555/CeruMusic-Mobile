@@ -12,7 +12,7 @@ const router = createRouter({
     { path: '/player', name: 'player', component: () => import('@/views/Player.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/views/Settings.vue') },
     { path: '/theme-background', name: 'theme-background', component: () => import('@/views/ThemeBackground.vue') },
-    { path: '/accounts', redirect: { path: '/library', query: { login: '1' } } },
+    { path: '/accounts', redirect: '/cloud' },
     { path: '/sync-services', name: 'sync-services', component: () => import('@/views/SyncServices.vue') },
     { path: '/webdav-music', name: 'webdav-music', component: () => import('@/views/WebDavMusic.vue') },
     { path: '/plugins', name: 'plugins', component: () => import('@/views/Plugins.vue') },

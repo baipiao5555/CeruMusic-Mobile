@@ -15,7 +15,6 @@ import { allImporters, pluginState } from '@/core/plugin/manager'
 import { logState } from '@/core/logs'
 import { downloadState } from '@/core/downloads'
 import { authState, displayName } from '@/core/auth'
-import { platformLoginVisible } from '@/core/platformAccounts'
 import { confirmAction } from '@/core/confirm'
 import { openSearch } from '@/core/searchEntry'
 
@@ -52,7 +51,7 @@ const cloudCount = computed(() => playlists.value.filter((playlist) => playlist.
 const profileSub = computed(() =>
   authState.authenticated
     ? `已登录澜音 · ${cloudCount.value} 个云端导入歌单`
-    : '点击登录 · 澜音与音乐平台'
+    : '点击登录澜音 · 读取云端歌单'
 )
 
 const allTracks = computed(() => {
@@ -126,8 +125,6 @@ watch(
   },
   { immediate: true }
 )
-watch(() => route.query.login, value => { if (value === '1') platformLoginVisible.value = true }, { immediate: true })
-
 function openPlaylist(playlist: LocalPlaylist): void {
   router.push('/playlist/' + playlist.id)
 }
@@ -168,7 +165,7 @@ function openImport(): void {
       </header>
 
       <section class="profile">
-        <button class="profile-main" aria-label="登录与管理音乐平台" @click="platformLoginVisible = true">
+        <button class="profile-main" aria-label="登录澜音账号与云端歌单" @click="router.push('/cloud')">
           <img class="avatar" :src="profileAvatar" alt="" @error="($event.target as HTMLImageElement).src = '/logo.png'" />
           <span class="profile-copy">
             <strong>{{ profileName }}</strong>

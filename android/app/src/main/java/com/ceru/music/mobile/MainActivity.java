@@ -37,7 +37,6 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SecretStorePlugin.class);
         registerPlugin(SyncHttpPlugin.class);
         registerPlugin(SyncKeepAlivePlugin.class);
-        registerPlugin(PlatformLoginPlugin.class);
         super.onCreate(savedInstanceState);
 
         // 本机缓存代理走 http://127.0.0.1，允许页面（https://localhost）加载它

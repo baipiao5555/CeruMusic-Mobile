@@ -10,9 +10,7 @@ import BottomNav from '@/components/BottomNav.vue'
 import ConfirmSheet from '@/components/ConfirmSheet.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import ThemeBackground from '@/components/ThemeBackground.vue'
-import PlatformLoginSheet from '@/components/PlatformLoginSheet.vue'
 import PluginAccountSurface from '@/components/PluginAccountSurface.vue'
-import { platformLoginVisible } from '@/core/platformAccounts'
 import { getPluginAccountSurface, invalidatePluginAccountCache } from '@/core/plugin/manager'
 import type { AccountSurfaceSpec } from '@/core/plugin/accountSurface'
 import { backgroundAppliesToRoute, themeBackgroundScene, themeBackgroundState } from '@/core/themeBackground'
@@ -378,7 +376,7 @@ watch(navigationRequest, (request) => {
     const page = request.request?.page
     if (page === 'search') router.push({ path: '/search', query: { q: request.request?.query ?? '' } })
     else if (page === 'settings') router.push('/settings')
-    else if (page === 'account') platformLoginVisible.value = true
+    else if (page === 'account') router.push('/cloud')
   } else if (request.type === 'open-view') {
     const owner = pluginState.plugins.find(p => p.pluginId === request.pluginId && p.enabled && p.running)
     const item = owner?.accountItems.find(a => a.view === request.surfaceId)
@@ -448,7 +446,6 @@ watch(navigationRequest, (request) => {
       </div>
     </transition>
 
-    <PlatformLoginSheet v-if="platformLoginVisible" @close="platformLoginVisible = false" />
     <transition name="sheet-pop">
       <PluginAccountSurface v-if="accountSurface" :spec="accountSurface" @close="closeAccountSurface" />
     </transition>

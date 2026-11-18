@@ -7,6 +7,7 @@ import { allProviders, invokeProvider, pluginState, selectProvider, type Provide
 import { playTracks, toTrack, type Track } from '@/core/playback/player'
 import { rememberTracks } from '@/core/search'
 import { resourceContext } from '@/core/resourceNavigation'
+import { openSearch } from '@/core/searchEntry'
 
 const route = useRoute()
 const router = useRouter()
@@ -196,7 +197,7 @@ onBeforeUnmount(() => { requestSeq += 1; categorySeq += 1 })
 <template>
   <div class="screen browse-page">
     <div class="scroll safe-t">
-      <header class="browse-top"><button class="iconbtn quiet" aria-label="返回" @click="goBack"><Icon name="back" :size="21" /></button><h1>{{ catalogMode ? '音乐馆' : kindLabel }}</h1><button class="iconbtn quiet" aria-label="搜索" @click="router.push('/search')"><Icon name="search" :size="21" /></button></header>
+      <header class="browse-top"><button class="iconbtn quiet" aria-label="返回" @click="goBack"><Icon name="back" :size="21" /></button><h1>{{ catalogMode ? '音乐馆' : kindLabel }}</h1><button class="iconbtn quiet" aria-label="搜索" @click="openSearch(router)"><Icon name="search" :size="21" /></button></header>
       <template v-if="catalogMode">
         <div class="catalog-tabs pad" aria-label="音乐馆分类"><button :class="{ on: catalogTab === 'playlists' }" @click="catalogTab = 'playlists'">歌单精选</button><button :class="{ on: catalogTab === 'charts' }" @click="catalogTab = 'charts'">排行榜</button></div>
         <div v-if="providers.length" class="chip-row pad catalog-sources"><button v-for="owner in providers" :key="owner.pluginId + ':' + owner.providerId" class="chip" :class="{ active: owner.pluginId === provider?.pluginId && owner.providerId === provider?.providerId }" @click="choose(owner)">{{ owner.name }}</button></div>
@@ -206,7 +207,7 @@ onBeforeUnmount(() => { requestSeq += 1; categorySeq += 1 })
         <template v-else>
           <div v-if="error" class="catalog-notice pad"><p>{{ error }}</p><button @click="loadCatalog()"><Icon name="refresh" :size="14" />重试</button></div>
           <div v-if="catalogItems.length" class="catalog-grid pad mt20"><button v-for="item in catalogItems" :key="item.ref.id" class="mediacard" @click="openItem(item)"><div class="cover"><img :src="artworkOf(item)" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span class="catalog-play"><Icon name="play" :size="14" /></span></div><div class="ct clamp-2">{{ item.title }}</div><div class="cs truncate">{{ subtitleOf(item) }}</div></button></div>
-          <div v-else-if="!error" class="empty"><div class="glyph"><Icon name="playlist" :size="32" /></div><h3>{{ (catalogTab === 'charts' ? canCharts : canPlaylists) ? '这个分类暂时没有内容' : '该音源不支持' + (catalogTab === 'charts' ? '排行榜' : '歌单浏览') }}</h3><p>可切换分类或音源，搜索和本地音乐仍可使用。</p><button class="btn btn-tonal mt8" @click="router.push('/search')">去搜索</button></div>
+          <div v-else-if="!error" class="empty"><div class="glyph"><Icon name="playlist" :size="32" /></div><h3>{{ (catalogTab === 'charts' ? canCharts : canPlaylists) ? '这个分类暂时没有内容' : '该音源不支持' + (catalogTab === 'charts' ? '排行榜' : '歌单浏览') }}</h3><p>可切换分类或音源，搜索和本地音乐仍可使用。</p><button class="btn btn-tonal mt8" @click="openSearch(router)">去搜索</button></div>
           <p v-if="catalogItems.length" class="catalog-foot">{{ providerName }} · {{ catalogItems.length }} 个{{ catalogTab === 'charts' ? '榜单' : '歌单' }}</p>
         </template>
       </template>

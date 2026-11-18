@@ -15,6 +15,7 @@ import { playTrack, playTracks } from '@/core/playback/player'
 import { notify } from '@/core/plugin/manager'
 import { qualityLabel } from '@/core/quality'
 import { confirmAction } from '@/core/confirm'
+import { openSearch } from '@/core/searchEntry'
 
 const router = useRouter()
 const summary = computed(() => downloadSummary())
@@ -280,7 +281,7 @@ function completedMeta(task: DownloadTask): string {
         <div class="glyph"><Icon name="download" :size="30" /></div>
         <h3>还没有下载</h3>
         <p>下载的歌会存到这台设备上，离线也能播放。</p>
-        <button class="btn btn-primary" @click="router.push('/search')">去搜索</button>
+        <button class="btn btn-primary" @click="openSearch(router)">去搜索</button>
       </div>
     </div>
   </div>

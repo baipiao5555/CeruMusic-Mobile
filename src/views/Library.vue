@@ -17,6 +17,7 @@ import { downloadState } from '@/core/downloads'
 import { authState, displayName } from '@/core/auth'
 import { platformLoginVisible } from '@/core/platformAccounts'
 import { confirmAction } from '@/core/confirm'
+import { openSearch } from '@/core/searchEntry'
 
 const router = useRouter()
 const route = useRoute()
@@ -229,7 +230,7 @@ function openImport(): void {
           <div v-else-if="songTab === 'favorites'" class="empty">
             <div class="glyph"><Icon name="heart" :size="32" /></div>
             <h3>还没有喜欢的歌曲</h3><p>在歌曲的更多菜单中收藏，就会出现在这里。</p>
-            <button class="btn btn-ghost btn-sm" @click="router.push('/search')">去搜索音乐</button>
+            <button class="btn btn-ghost btn-sm" @click="openSearch(router)">去搜索音乐</button>
           </div>
           <div v-else-if="history.length" class="song-list">
             <SongRow v-for="(track, index) in history" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="history" @play="playHistory(index)" />

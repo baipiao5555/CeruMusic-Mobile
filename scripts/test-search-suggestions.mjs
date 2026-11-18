@@ -102,7 +102,7 @@ try {
     enable: true, grantDeclared: true
   }), plugin)
   await choose('one')
-  await page.locator('.tabbar button').nth(1).click()
+  await page.locator('.search-launch').click()
   await input.waitFor()
 
   await check('single-character typing fetches at most ten distinct matching song names', async () => {
@@ -215,7 +215,7 @@ try {
     const before = calls.length
     await page.locator('.tabbar button').nth(0).click()
     await page.locator('.search-page').waitFor({ state: 'hidden' })
-    await page.locator('.tabbar button').nth(1).click()
+    await page.locator('.search-launch').click()
     await input.waitFor()
     await page.waitForTimeout(400)
     assert.equal(calls.length, before)
@@ -229,7 +229,7 @@ try {
     await choose('two')
     await page.waitForTimeout(400)
     assert.equal(calls.length, before)
-    await page.locator('.tabbar button').nth(1).click()
+    await page.locator('.search-launch').click()
     await page.waitForFunction(() =>
       document.querySelector('.search-page .songrow .t')?.textContent.trim() === 'committed-two')
     assert.equal(calls.length, before + 1)
@@ -244,7 +244,7 @@ try {
     await page.locator('.tabbar button').nth(0).click()
     await page.locator('.search-page').waitFor({ state: 'hidden' })
     await page.waitForTimeout(1100)
-    await page.locator('.tabbar button').nth(1).click()
+    await page.locator('.search-launch').click()
     await page.waitForFunction(() =>
       document.querySelector('.search-page .songrow .t')?.textContent.trim() === 'slow-two')
     assert.equal(calls.filter(call => call.id === 'two' && call.query === 'slow').length, before + 2)
@@ -259,7 +259,7 @@ try {
     await choose('one')
     await page.waitForTimeout(1100)
     assert.equal(calls.length, before)
-    await page.locator('.tabbar button').nth(1).click()
+    await page.locator('.search-launch').click()
     await input.waitFor()
     assert.equal(await page.locator('.suggest').count(), 0)
     assert(!(await history()).includes('leave'))

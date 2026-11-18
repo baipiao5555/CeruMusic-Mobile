@@ -19,7 +19,9 @@
     "cap:open": "cap open android",
     "android:apk": "cd android && gradlew.bat assembleRelease",
     "check:upstream": "node scripts/check-upstream.mjs",
-    "release": "node scripts/release.mjs"
+    "release": "node scripts/release.mjs",
+    "test:search-motion": "node scripts/test-search-entry-motion.mjs",
+    "test:sheet-motion": "node scripts/test-sheet-motion.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

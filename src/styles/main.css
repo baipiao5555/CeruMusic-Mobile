@@ -81,6 +81,10 @@
   --e-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --e-inout: cubic-bezier(0.4, 0, 0.2, 1);
   --e-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
+  --motion-press: 0.16s;
+  --motion-tab: 0.18s;
+  --motion-page: 0.26s;
+  --motion-sheet: 0.28s;
 
   --pad: 20px;
   --tab-h: 56px;
@@ -1507,6 +1511,28 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   position: relative;
   width: min(100%, 620px);
 }
+.sheet-pop-enter-active,
+.sheet-pop-leave-active {
+  animation: none;
+  transition: opacity 0.2s linear;
+}
+.sheet-pop-enter-active .sheet,
+.sheet-pop-leave-active .sheet {
+  animation: none;
+  will-change: transform;
+  transition: transform var(--motion-sheet) var(--e-out);
+}
+.sheet-pop-enter-from,
+.sheet-pop-leave-to {
+  opacity: 0;
+}
+.sheet-pop-enter-from .sheet,
+.sheet-pop-leave-to .sheet {
+  transform: translate3d(0, 24px, 0);
+}
+.sheet-pop-leave-active {
+  pointer-events: none;
+}
 @keyframes fade-in {
   from { opacity: 0; }
 }
@@ -1654,7 +1680,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 }
 .tab-fade-enter-active {
   z-index: 2;
-  transition: opacity 0.24s ease;
+  transition: opacity var(--motion-tab) ease;
 }
 .tab-fade-leave-active {
   z-index: 1;
@@ -1671,55 +1697,103 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   inset: 0;
   background: var(--porcelain);
   backface-visibility: hidden;
-  will-change: transform, opacity, filter;
 }
 .page-forward-enter-active,
-.page-back-leave-active {
+.page-back-enter-active {
   z-index: 2;
-  overflow: hidden;
-  border-radius: 24px 0 0 24px;
-  transition: transform 0.46s var(--e-out);
+  will-change: transform, opacity;
+  transition:
+    transform var(--motion-page) var(--e-out),
+    opacity var(--motion-page) var(--e-out);
 }
 .page-forward-leave-active,
-.page-back-enter-active {
+.page-back-leave-active {
   z-index: 1;
-  transition:
-    transform 0.46s var(--e-out),
-    opacity 0.46s var(--e-out),
-    filter 0.46s var(--e-out);
+  transition: opacity 0.16s linear;
+  pointer-events: none;
 }
 .page-forward-enter-from {
-  transform: translate3d(100%, 0, 0);
+  transform: translate3d(28px, 0, 0);
+  opacity: 0.86;
 }
 .page-forward-leave-to {
-  transform: translate3d(-22%, 0, 0);
-  opacity: 0.9;
-  filter: brightness(0.72);
+  opacity: 0.92;
 }
 .page-back-enter-from {
-  transform: translate3d(-22%, 0, 0);
-  opacity: 0.9;
-  filter: brightness(0.72);
+  transform: translate3d(-28px, 0, 0);
+  opacity: 0.86;
 }
 .page-back-leave-to {
-  transform: translate3d(100%, 0, 0);
+  opacity: 0.92;
+}
+
+/* 搜索是二级页：旧页保持原位，新页只做短距离上移和淡入。 */
+.search-enter-enter-active,
+.search-enter-leave-active {
+  position: absolute;
+  inset: 0;
+  background: var(--porcelain);
+  backface-visibility: hidden;
+}
+.search-enter-enter-active {
+  z-index: 2;
+  will-change: transform, opacity;
+  transition:
+    transform var(--motion-page) var(--e-out),
+    opacity var(--motion-page) var(--e-out);
+}
+.search-enter-leave-active {
+  z-index: 1;
+  transition: opacity 0.16s linear;
+  pointer-events: none;
+}
+.search-enter-enter-from {
+  transform: translate3d(0, 18px, 0);
+  opacity: 0.86;
+}
+.search-enter-leave-to {
+  opacity: 0.92;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .btn,
+  .iconbtn,
+  .chip,
+  .switch,
+  .switch::after,
+  .tab,
+  .search-launch,
+  .lyric-launch {
+    transition: none;
+  }
+  .btn:active,
+  .iconbtn:active,
+  .search-launch:active,
+  .lyric-launch:active {
+    transform: none;
+  }
+  .sheet-pop-enter-active,
+  .sheet-pop-leave-active,
+  .sheet-pop-enter-active .sheet,
+  .sheet-pop-leave-active .sheet,
+  .search-enter-enter-active,
+  .search-enter-leave-active,
   .page-forward-enter-active,
   .page-forward-leave-active,
   .page-back-enter-active,
   .page-back-leave-active {
-    border-radius: 0;
     transition: opacity 0.12s ease;
   }
+  .search-enter-enter-from,
+  .search-enter-leave-to,
+  .sheet-pop-enter-from .sheet,
+  .sheet-pop-leave-to .sheet,
   .page-forward-enter-from,
   .page-forward-leave-to,
   .page-back-enter-from,
   .page-back-leave-to {
     transform: none;
-    filter: none;
-    opacity: 0;
+    opacity: 0.92;
   }
 }
 

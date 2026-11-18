@@ -41,6 +41,7 @@ import {
   settingsState
 } from '@/core/settings'
 import { logEvent } from '@/core/logs'
+import { cancelSearchEntryFocus, completeSearchEntryTransition } from '@/core/searchEntry'
 import { routeDirection } from '@/router/transition'
 
 const router = useRouter()
@@ -52,6 +53,12 @@ const customBackgroundActive = computed(() => Boolean(themeBackgroundState.url) 
 const backgroundForeground = ref(document.visibilityState !== 'hidden')
 const showNav = computed(() => route.path !== '/player')
 const hasTrack = computed(() => Boolean(currentTrack()))
+const pageTransitionName = computed(() => {
+  if (routeDirection.value === 'tab') return 'tab-fade'
+  if (routeDirection.value === 'back') return 'page-back'
+  if (route.path === '/search') return 'search-enter'
+  return 'page-forward'
+})
 const dockStyle = computed(() => ({
   '--dock-h': showNav.value
     ? `calc(var(--tab-h) + ${hasTrack.value ? 'var(--mini-h) + ' : ''}var(--safe-bottom) + var(--dock-gap, 0px) + 1px)`
@@ -342,8 +349,15 @@ watch(
 
 watch(
   () => route.path,
-  () => void syncStatusBar()
+  (path) => {
+    if (path !== '/search') cancelSearchEntryFocus()
+    void syncStatusBar()
+  }
 )
+
+function onPageAfterEnter(): void {
+  if (route.path === '/search') completeSearchEntryTransition()
+}
 
 onUnmounted(() => {
   appDisposed = true
@@ -377,13 +391,8 @@ watch(navigationRequest, (request) => {
     <ThemeBackground :page-path="route.path" :scene="backgroundScene" :foreground="backgroundForeground" />
     <router-view v-slot="{ Component }">
       <transition
-        :name="
-          routeDirection === 'tab'
-            ? 'tab-fade'
-            : routeDirection === 'back'
-              ? 'page-back'
-              : 'page-forward'
-        "
+        :name="pageTransitionName"
+        @after-enter="onPageAfterEnter"
       >
         <keep-alive :include="tabViewNames">
           <component :is="Component" />

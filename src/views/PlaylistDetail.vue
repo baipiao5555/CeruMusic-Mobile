@@ -8,6 +8,7 @@ import { addToQueue, playTracks, setMode } from '@/core/playback/player'
 import { downloadTracks } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
 import { confirmAction } from '@/core/confirm'
+import { openSearch } from '@/core/searchEntry'
 
 const route = useRoute()
 const router = useRouter()
@@ -208,7 +209,7 @@ onMounted(() => {
         <div v-if="playlist.tracks.length" class="pad rows">
           <SongRow v-for="(track, index) in playlist.tracks" :key="`${track.providerId}:${track.id}:${index}`" :track="track" :index="index" :queue="playlist.tracks" :playlist-id="playlist.id" :selectable="selectionMode" :selected="selectedIndexes.has(index)" :show-cover="false" show-index @play="play(index)" @toggle-select="toggleSelect(index)" />
         </div>
-        <div v-else class="empty"><div class="glyph"><Icon name="library" :size="34" /></div><h3>歌单还是空的</h3><p>在歌曲更多菜单中，将喜欢的歌曲加入这个歌单。</p><button class="btn btn-ghost btn-sm" @click="router.push('/search')"><Icon name="search" :size="16" /> 去搜索音乐</button></div>
+        <div v-else class="empty"><div class="glyph"><Icon name="library" :size="34" /></div><h3>歌单还是空的</h3><p>在歌曲更多菜单中，将喜欢的歌曲加入这个歌单。</p><button class="btn btn-ghost btn-sm" @click="openSearch(router)"><Icon name="search" :size="16" /> 去搜索音乐</button></div>
       </template>
       <div v-else class="empty"><div class="glyph"><Icon name="folder" :size="34" /></div><h3>歌单不存在</h3><p>它可能已经被删除了。</p><button class="btn btn-ghost btn-sm" @click="router.replace('/playlists')">返回歌单</button></div>
     </div>

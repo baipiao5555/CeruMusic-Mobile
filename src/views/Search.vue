@@ -28,6 +28,7 @@ import {
   type LyricCandidate
 } from '@/core/search'
 import { matchCloudLyrics } from '@/core/lyrics/cloud'
+import { searchEntryFocusEpoch } from '@/core/searchEntry'
 
 /** 一次搜索最多取多少条。 */
 const RESULT_LIMIT = 30
@@ -85,6 +86,7 @@ const composing = ref(false)
 const remoteSuggestions = ref<Track[]>([])
 let suggestSeq = 0
 let suggestTimer: ReturnType<typeof setTimeout> | undefined
+let suppressSuggestionOnFocus = 0
 
 /** 输入太慢/太快都可能有旧请求后到，用序号丢弃过期响应。 */
 let requestSeq = 0
@@ -290,7 +292,7 @@ function onCompositionEnd(): void {
 function onFocus(): void {
   focused.value = true
   suggestOpen.value = true
-  scheduleSuggestions()
+  if (performance.now() >= suppressSuggestionOnFocus) scheduleSuggestions()
 }
 
 function onBlur(event: FocusEvent): void {
@@ -657,7 +659,19 @@ watch(() => route.query.target, (value, previous) => {
 
 onMounted(() => {
   if (inputQuery.value.trim()) void runSearch()
-  else nextTick(() => inputRef.value?.focus())
+})
+
+watch(searchEntryFocusEpoch, () => {
+  if (route.path !== '/search') return
+  void nextTick(() => {
+    if (route.path !== '/search') return
+    const input = inputRef.value
+    if (!input || document.activeElement === input) return
+    suppressSuggestionOnFocus = performance.now() + 100
+    input.focus({ preventScroll: true })
+    const end = input.value.length
+    input.setSelectionRange(end, end)
+  })
 })
 
 function stopPendingSearch(): void {
@@ -666,6 +680,7 @@ function stopPendingSearch(): void {
   loading.value = false
   lyricProgress.value = { done: 0, total: 0 }
   composing.value = false
+  inputRef.value?.blur()
   focused.value = false
   suggestOpen.value = false
 }

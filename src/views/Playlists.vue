@@ -12,6 +12,7 @@ import {
   type LocalPlaylist
 } from '@/core/library'
 import { confirmAction } from '@/core/confirm'
+import { openSearch } from '@/core/searchEntry'
 
 const router = useRouter()
 const showCreate = ref(false)
@@ -80,7 +81,7 @@ function playFavorite(index: number): void {
       <header class="page-head playlists-head">
         <h1>歌单</h1>
         <div class="page-actions">
-          <button class="iconbtn quiet" aria-label="搜索音乐" @click="router.push('/search')"><Icon name="search" :size="22" /></button>
+          <button class="iconbtn quiet" aria-label="搜索音乐" @click="openSearch(router)"><Icon name="search" :size="22" /></button>
           <button class="iconbtn quiet" aria-label="新建歌单" @click="showCreate = true"><Icon name="plus" :size="24" /></button>
         </div>
       </header>
@@ -113,7 +114,7 @@ function playFavorite(index: number): void {
           <div v-if="favorites.length" class="favorites-list">
             <SongRow v-for="(track, index) in favorites" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="favorites" @play="playFavorite(index)" />
           </div>
-          <div v-else class="empty"><div class="glyph"><Icon name="heart" :size="32" /></div><h3>还没有喜欢的歌曲</h3><p>在歌曲更多菜单中收藏，就会出现在这里。</p><button class="btn btn-ghost btn-sm" @click="router.push('/search')">去搜索音乐</button></div>
+          <div v-else class="empty"><div class="glyph"><Icon name="heart" :size="32" /></div><h3>还没有喜欢的歌曲</h3><p>在歌曲更多菜单中收藏，就会出现在这里。</p><button class="btn btn-ghost btn-sm" @click="openSearch(router)">去搜索音乐</button></div>
         </template>
 
         <div v-else-if="visible.length" class="p-grid">

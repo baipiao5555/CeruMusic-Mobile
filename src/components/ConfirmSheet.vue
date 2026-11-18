@@ -5,9 +5,9 @@ import { confirmState, settleConfirm } from '../core/confirm'
 
 <template>
   <Teleport to="body">
-    <div v-if="confirmState.open" class="sheet-mask cf-mask" @click.self="settleConfirm(false)">
-      <div class="scrim" @click="settleConfirm(false)" />
-      <div class="sheet cf-sheet" role="alertdialog" :aria-label="confirmState.title">
+    <transition name="sheet-pop">
+      <div v-if="confirmState.open" class="sheet-mask cf-mask" @click.self="settleConfirm(false)">
+        <div class="sheet cf-sheet" role="alertdialog" :aria-label="confirmState.title">
         <div class="grab" />
         <div class="cf-body">
           <div class="cf-ico" :class="{ danger: confirmState.danger }">
@@ -30,8 +30,9 @@ import { confirmState, settleConfirm } from '../core/confirm'
             {{ confirmState.confirmText }}
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </transition>
   </Teleport>
 </template>
 

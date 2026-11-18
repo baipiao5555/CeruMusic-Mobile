@@ -15,6 +15,7 @@ import {
   playTracks
 } from '@/core/playback/player'
 import { libraryState } from '@/core/library'
+import { openSearch } from '@/core/searchEntry'
 
 const router = useRouter()
 const dailyDate = ref(new Date())
@@ -300,8 +301,8 @@ watch(providerKey, () => void load())
       </header>
 
       <div class="home-search">
-        <button class="search-launch" @click="router.push('/search')"><Icon name="search" :size="18" /><span>搜索歌曲、歌手或一句歌词</span></button>
-        <button class="lyric-launch" @click="router.push({ path: '/search', query: { mode: 'lyric' } })">歌词找歌</button>
+        <button class="search-launch" @click="openSearch(router)"><Icon name="search" :size="18" /><span>搜索歌曲、歌手或一句歌词</span></button>
+        <button class="lyric-launch" @click="openSearch(router, { path: '/search', query: { mode: 'lyric' } })">歌词找歌</button>
       </div>
 
       <div class="home-shortcuts">
@@ -369,7 +370,7 @@ watch(providerKey, () => void load())
           <div class="glyph"><Icon name="wifi-off" :size="30" /></div><h3>{{ error }}</h3><p>检查网络后重试，或切换音源。</p><button class="btn btn-ghost btn-sm mt8" @click="load(true)"><Icon name="refresh" :size="16" />重新加载</button>
         </div>
         <div v-else-if="!playlists.length && !charts.length" class="home-note pad">
-          <Icon name="info" :size="18" /><div><strong>这个音源暂未提供首页内容</strong><p>可以直接搜索歌曲，也可以从本地音乐开始听。</p><button @click="router.push('/search')">去搜索<Icon name="chevron" :size="13" /></button></div>
+          <Icon name="info" :size="18" /><div><strong>这个音源暂未提供首页内容</strong><p>可以直接搜索歌曲，也可以从本地音乐开始听。</p><button @click="openSearch(router)">去搜索<Icon name="chevron" :size="13" /></button></div>
         </div>
       </template>
 
@@ -397,9 +398,10 @@ watch(providerKey, () => void load())
 .home-actions { display:flex; flex:none; }
 .home-actions .iconbtn { width:40px; height:44px; }
 .home-search { display:flex; align-items:center; height:44px; margin:12px var(--pad) 18px; border-radius:24px; background:var(--porcelain-2); }
-.search-launch { display:flex; flex:1; min-width:0; gap:8px; align-items:center; height:44px; padding:0 12px; color:var(--ink-3); }
+.search-launch { display:flex; flex:1; min-width:0; gap:8px; align-items:center; height:44px; padding:0 12px; color:var(--ink-3); transition: opacity var(--motion-press) var(--e-out), transform var(--motion-press) var(--e-out); }
 .search-launch span { font-size:12px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-.lyric-launch { height:44px; flex:none; padding:0 13px 0 9px; font-size:11px; color:var(--ink-3); position:relative; }
+.search-launch:active, .lyric-launch:active { opacity:.62; transform:scale(.985); }
+.lyric-launch { height:44px; flex:none; padding:0 13px 0 9px; font-size:11px; color:var(--ink-3); position:relative; transition: opacity var(--motion-press) var(--e-out), transform var(--motion-press) var(--e-out); }
 .lyric-launch::before { content:''; position:absolute; left:0; top:15px; height:14px; width:1px; background:var(--line-2); }
 .home-shortcuts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding:0 var(--pad); gap:6px; margin-bottom:22px; }
 .home-shortcuts button { display:flex; flex-direction:column; align-items:center; gap:8px; min-height:66px; font-size:12px; }

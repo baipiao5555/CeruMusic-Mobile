@@ -135,12 +135,14 @@ function formatDuration(ms: number): string {
   </div>
 
   <Teleport to="body">
-    <SongActionsSheet
-      v-if="showActions"
-      :track="track"
-      :playlist-id="playlistId"
-      @close="showActions = false"
-    />
+    <transition name="sheet-pop">
+      <SongActionsSheet
+        v-if="showActions"
+        :track="track"
+        :playlist-id="playlistId"
+        @close="showActions = false"
+      />
+    </transition>
   </Teleport>
 </template>
 

@@ -92,7 +92,7 @@ try {
     assert.deepEqual(await titles('.mediacard .ct'), ['fast-latest'])
   })
 
-  await page.locator('.tabbar button').nth(1).click()
+  await page.locator('.search-launch').click()
   const input = page.locator('.searchfield input')
   await input.waitFor()
   await input.fill('pending')

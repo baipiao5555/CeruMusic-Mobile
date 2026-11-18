@@ -33,9 +33,9 @@ function choose(option: Option): void {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="sheet-mask" @click.self="emit('close')">
-      <div class="scrim" @click="emit('close')" />
-      <div class="sheet opt-sheet" role="dialog" :aria-label="title">
+    <transition name="sheet-pop">
+      <div v-if="open" class="sheet-mask" @click.self="emit('close')">
+        <div class="sheet opt-sheet" role="dialog" :aria-label="title">
         <div class="grab" />
         <div class="sh-head">
           <div class="hdtext">
@@ -77,8 +77,9 @@ function choose(option: Option): void {
             </span>
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </transition>
   </Teleport>
 </template>
 

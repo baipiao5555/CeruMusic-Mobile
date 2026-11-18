@@ -30,6 +30,6 @@
 
 versionName 2.6.27，versionCode 24045；保留原签名。没有 Android 真机、真实澜音账号或真实 NAS 验证；澜音登录回调、Keystore 旧会话清理、后台保活和 WebDAV 媒体播放仍需实机确认。
 
-APK SHA-256：529278528b5f3233370c903d88e1b538e2079492fc48dfa748487d1940cc6d6a
+APK SHA-256：9009f8d473562cb31bc4e7dddf42b6f2ea9502d07fdd026f4704ee5833ed160a
 
-APK 大小：7566174 字节
+APK 大小：7568293 字节

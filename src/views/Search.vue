@@ -1249,8 +1249,13 @@ onBeforeUnmount(stopPendingSearch)
 .searchfield.focus { border-color:transparent; box-shadow:none; }
 .searchfield input { font-size:14px; }
 .searchfield input:focus-visible { outline:none; }
-@media (hover: hover) and (pointer: fine) {
+/* 旧 WebView 不支持 :has() 时，至少保留 focus-within 焦点提示。 */
+.searchfield:focus-within { outline:2px solid GrayText; outline-offset:2px; }
+@supports selector(:has(*)) {
+  .searchfield:focus-within { outline:none; }
   .searchfield:has(input:focus-visible) { outline:2px solid GrayText; outline-offset:2px; }
+}
+@media (hover: hover) and (pointer: fine) {
 }
 .clearbtn { height:42px; width:30px; background:none; }
 .findgo { padding:0 7px; color:var(--ink-2); font-weight:500; }

@@ -9,10 +9,18 @@ import { downloadTracks } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
 import { confirmAction } from '@/core/confirm'
 import { openSearch } from '@/core/searchEntry'
+import { useListWindow } from '@/core/ui/listWindow'
 
 const route = useRoute()
 const router = useRouter()
 const playlist = computed(() => getPlaylist(String(route.params.id)))
+const playlistTracks = computed(() => playlist.value?.tracks ?? [])
+const {
+  items: visibleTracks,
+  hasMore,
+  remaining,
+  showMore
+} = useListWindow(playlistTracks)
 const showRename = ref(false)
 const renameValue = ref('')
 const selectionMode = ref(false)
@@ -207,7 +215,10 @@ onMounted(() => {
         </div>
         <div v-if="selectionMode" class="selection-head"><span>已选择 {{ selectedTracks.length }} 首</span><button @click="toggleSelectAll()">{{ allSelected ? '取消全选' : '全选' }}</button></div>
         <div v-if="playlist.tracks.length" class="pad rows">
-          <SongRow v-for="(track, index) in playlist.tracks" :key="`${track.providerId}:${track.id}:${index}`" :track="track" :index="index" :queue="playlist.tracks" :playlist-id="playlist.id" :selectable="selectionMode" :selected="selectedIndexes.has(index)" :show-cover="false" show-index @play="play(index)" @toggle-select="toggleSelect(index)" />
+          <SongRow v-for="(track, index) in visibleTracks" :key="`${track.providerId}:${track.id}:${index}`" :track="track" :index="index" :queue="playlist.tracks" :playlist-id="playlist.id" :selectable="selectionMode" :selected="selectedIndexes.has(index)" :show-cover="false" show-index @play="play(index)" @toggle-select="toggleSelect(index)" />
+          <button v-if="hasMore" class="btn btn-ghost btn-block list-more" @click="showMore">
+            显示更多（剩余 {{ remaining }} 首）
+          </button>
         </div>
         <div v-else class="empty"><div class="glyph"><Icon name="library" :size="34" /></div><h3>歌单还是空的</h3><p>在歌曲更多菜单中，将喜欢的歌曲加入这个歌单。</p><button class="btn btn-ghost btn-sm" @click="openSearch(router)"><Icon name="search" :size="16" /> 去搜索音乐</button></div>
       </template>
@@ -316,6 +327,7 @@ onMounted(() => {
 .selection-head button { min-height: 44px; padding: 0 6px; color: var(--ink); }
 .rows { padding-bottom: 8px; }
 .rows :deep(.songrow) { padding-left: 0; padding-right: 0; }
+.list-more { margin: 14px 0 4px; }
 .playlist-page.selection-active { padding-bottom: calc(var(--dock-h) + 102px); }
 .selbar { position: fixed; left: 50%; bottom: calc(var(--dock-h) + 8px); z-index: 40; display: flex; align-items: center; gap: 6px; width: min(calc(100% - 24px), 600px); padding: 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); box-shadow: var(--sh-2); transform: translateX(-50%); }
 .selcancel { height: 44px; padding: 0 8px; font-size: 13px; color: var(--ink-2); }

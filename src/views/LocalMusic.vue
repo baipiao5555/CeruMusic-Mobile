@@ -12,6 +12,7 @@ import {
   scanLocalMusic,
   type LocalEntry
 } from '@/core/local/media'
+import { useListWindow } from '@/core/ui/listWindow'
 
 const router = useRouter()
 
@@ -31,6 +32,12 @@ const filtered = computed(() => {
       track.title.toLowerCase().includes(needle) || track.artist.toLowerCase().includes(needle)
   )
 })
+const {
+  items: visibleTracks,
+  hasMore,
+  remaining,
+  showMore
+} = useListWindow(filtered)
 
 const totalLabel = computed(() => {
   if (scanning.value) return '正在扫描…'
@@ -152,13 +159,16 @@ onMounted(() => {
 
       <div v-else class="song-list">
         <SongRow
-          v-for="(track, index) in filtered"
+          v-for="(track, index) in visibleTracks"
           :key="track.id"
           :track="track"
           :index="index"
           :queue="filtered"
           @play="playIndex(index)"
         />
+        <button v-if="hasMore" class="btn btn-ghost btn-block list-more" @click="showMore">
+          显示更多（剩余 {{ remaining }} 首）
+        </button>
       </div>
     </div>
   </div>
@@ -172,6 +182,9 @@ onMounted(() => {
 }
 .phead {
   align-items: flex-end;
+}
+.list-more {
+  margin: 14px 0 4px;
 }
 .sub {
   margin-top: 4px;

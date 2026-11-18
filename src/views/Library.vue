@@ -17,6 +17,7 @@ import { downloadState } from '@/core/downloads'
 import { authState, displayName } from '@/core/auth'
 import { confirmAction } from '@/core/confirm'
 import { openSearch } from '@/core/searchEntry'
+import { useListWindow } from '@/core/ui/listWindow'
 
 const router = useRouter()
 const route = useRoute()
@@ -32,6 +33,18 @@ const showQuick = ref(false)
 const favorites = computed(() => libraryState.favorites)
 const playlists = computed(() => libraryState.playlists)
 const history = computed(() => getHistory())
+const {
+  items: favoriteItems,
+  hasMore: favoritesHaveMore,
+  remaining: favoritesRemaining,
+  showMore: showMoreFavorites
+} = useListWindow(favorites)
+const {
+  items: historyItems,
+  hasMore: historyHasMore,
+  remaining: historyRemaining,
+  showMore: showMoreHistory
+} = useListWindow(history)
 const runningPlugins = computed(() => pluginState.plugins.filter((plugin) => plugin.running).length)
 const importers = computed(() => allImporters())
 const logErrors = computed(() => logState.entries.filter((entry) => entry.level === 'error').length)
@@ -222,7 +235,10 @@ function openImport(): void {
             <button :class="{ on: songTab === 'recent' }" :aria-pressed="songTab === 'recent'" @click="songTab = 'recent'">最近播放 {{ history.length }}</button>
           </div>
           <div v-if="songTab === 'favorites' && favorites.length" class="song-list">
-            <SongRow v-for="(track, index) in favorites" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="favorites" @play="playFavorites(index)" />
+            <SongRow v-for="(track, index) in favoriteItems" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="favorites" @play="playFavorites(index)" />
+            <button v-if="favoritesHaveMore" class="btn btn-ghost btn-block list-more" @click="showMoreFavorites">
+              显示更多（剩余 {{ favoritesRemaining }} 首）
+            </button>
           </div>
           <div v-else-if="songTab === 'favorites'" class="empty">
             <div class="glyph"><Icon name="heart" :size="32" /></div>
@@ -230,7 +246,10 @@ function openImport(): void {
             <button class="btn btn-ghost btn-sm" @click="openSearch(router)">去搜索音乐</button>
           </div>
           <div v-else-if="history.length" class="song-list">
-            <SongRow v-for="(track, index) in history" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="history" @play="playHistory(index)" />
+            <SongRow v-for="(track, index) in historyItems" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="history" @play="playHistory(index)" />
+            <button v-if="historyHasMore" class="btn btn-ghost btn-block list-more" @click="showMoreHistory">
+              显示更多（剩余 {{ historyRemaining }} 首）
+            </button>
           </div>
           <div v-else class="empty"><div class="glyph"><Icon name="history" :size="32" /></div><h3>还没有播放记录</h3><p>播放过的歌曲会出现在这里。</p></div>
         </template>
@@ -404,6 +423,7 @@ function openImport(): void {
 .song-filters button { min-height: 44px; padding: 0 12px; color: var(--ink-3); font-size: 12px; border-radius: 8px; }
 .song-filters button.on { color: var(--tint-deep, var(--ink)); background: var(--tint-softer); }
 .song-list { padding: 0 8px; }
+.list-more { margin: 14px 8px 4px; }
 .asset-list { padding: 0 var(--pad); }
 .asset-row, .favorite-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 78px; text-align: left; }
 .asset-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 78px; text-align: left; }

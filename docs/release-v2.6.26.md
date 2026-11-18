@@ -45,7 +45,7 @@
 - `node scripts/test-sync-webdav.mjs`：47/47 通过；`node scripts/test-library-snapshot.mjs`：23/23 通过。
 - `node scripts/test-webdav-media.mjs`：64/64 通过，包含真实本机 HTTP WebDAV PROPFIND/GET、Depth 1–5、越界拒绝、导入顺序、播放 Authorization 和缺失凭据。
 - `node scripts/test-auto-sync.mjs`：13/13 通过；`node scripts/test-sync-ui.mjs`：24/24 通过；`node scripts/test-platform-accounts.mjs`：16/16 通过。
-- `node scripts/test-tablet-layout.mjs`：287/287 通过；`npx vue-tsc --noEmit`、`npm run build` 通过。
+- 搜索入口 / Sheet 动效、搜索联想和 UI 竞态测试通过；`node scripts/test-tablet-layout.mjs`：287/287 通过；`npx vue-tsc --noEmit`、`npm run build` 通过。
 
 versionName 2.6.26，versionCode 24044；保留原签名。没有 Android 真机、真实网易云/QQ/酷我/咪咕账号或真实 NAS 验证；验证码、风控、短信、CapacitorHttp Cookie 投递、会员播放权限和 Android 后台限制仍需实机确认。
 
@@ -56,6 +56,6 @@ versionName 2.6.26，versionCode 24044；保留原签名。没有 Android 真机
 - 自动同步在应用进程存活时按间隔运行；系统冻结 WebView、强制停止应用或移除任务后不保证继续同步。
 - tombstone 无自动清理；长期大量删除会占用快照空间，受同步大小限制。
 
-APK SHA-256：<!-- SHA256 -->
+APK SHA-256：f8f100d81cff470c9f70ac9c3563be592f25d665ce1b4d68ac6cc37c6a302d4c
 
-APK 大小：<!-- SIZE --> 字节
+APK 大小：7595945 字节

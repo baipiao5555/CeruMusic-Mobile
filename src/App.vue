@@ -41,6 +41,11 @@ import {
 import { logEvent } from '@/core/logs'
 import { cancelSearchEntryFocus, completeSearchEntryTransition } from '@/core/searchEntry'
 import { installSheetFocusRestore } from '@/core/ui/sheetFocus'
+import {
+  cancelPlayerMorph,
+  isCollapseMorphPending,
+  playerMorphActive
+} from '@/core/ui/playerMorph'
 import { routeDirection } from '@/router/transition'
 
 const router = useRouter()
@@ -54,6 +59,7 @@ const showNav = computed(() => route.path !== '/player')
 const hasTrack = computed(() => Boolean(currentTrack()))
 const pageTransitionName = computed(() => {
   if (routeDirection.value === 'tab') return 'tab-fade'
+  if (playerMorphActive.value) return 'player-morph'
   if (routeDirection.value === 'back') return 'page-back'
   if (route.path === '/search') return 'search-enter'
   return 'page-forward'
@@ -352,6 +358,7 @@ watch(
   () => route.path,
   (path) => {
     if (path !== '/search') cancelSearchEntryFocus()
+    if (path !== '/player' && !isCollapseMorphPending()) cancelPlayerMorph()
     void syncStatusBar()
   }
 )

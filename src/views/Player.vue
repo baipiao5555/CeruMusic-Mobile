@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { themeBackgroundScene } from '@/core/themeBackground'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
@@ -30,10 +30,17 @@ import { qualityLabel } from '@/core/quality'
 import { downloadTrack, isDownloaded } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
 import { setBackGuard } from '@/core/native/backGuard'
+import {
+  cancelPlayerMorph,
+  isCollapseMorphPending,
+  playPlayerMorph,
+  startPlayerMorph
+} from '@/core/ui/playerMorph'
 
 const router = useRouter()
 const route = useRoute()
 const track = computed(() => currentTrack())
+const playerArt = ref<HTMLElement>()
 const lyricsBox = ref<HTMLElement>()
 const lyricFollowing = ref(true)
 const showQueue = ref(false)
@@ -223,6 +230,13 @@ function onSeekChange(event: Event): void {
 }
 
 function close(): void {
+  if (playerArt.value) {
+    startPlayerMorph(
+      playerArt.value.getBoundingClientRect(),
+      track.value?.artwork || '/default-cover.png',
+      'collapse'
+    )
+  }
   if (window.history.length > 1) router.back()
   else router.replace('/')
 }
@@ -381,16 +395,25 @@ watch(() => route.query.panel, (panel) => {
 
 onMounted(() => {
   if (!track.value) {
+    cancelPlayerMorph()
     router.replace('/')
     return
   }
   setTimeout(scrollActiveLyric, 300)
   // 返回键先收歌词浮层，再交给 App.vue 处理路由/退出。
   setBackGuard(() => {
-    if (!showLyrics.value) return false
-    closeLyrics()
+    if (showLyrics.value) {
+      closeLyrics()
+      return true
+    }
+    close()
     return true
   })
+  if (playerArt.value) void playPlayerMorph(playerArt.value)
+})
+
+onBeforeUnmount(() => {
+  if (!isCollapseMorphPending()) cancelPlayerMorph()
 })
 
 onUnmounted(() => {
@@ -441,7 +464,7 @@ onUnmounted(() => {
 
     <div class="p-main">
       <div class="p-core">
-        <button class="p-art" type="button" aria-label="点击封面打开完整歌词" @click="openLyrics">
+        <button ref="playerArt" class="p-art" type="button" aria-label="点击封面打开完整歌词" @click="openLyrics">
           <span class="p-record" :class="{ playing: playerState.playing && !playerState.loading }">
           <img
             :src="track.artwork || '/default-cover.png'"

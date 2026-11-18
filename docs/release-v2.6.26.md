@@ -56,6 +56,6 @@ versionName 2.6.26，versionCode 24044；保留原签名。没有 Android 真机
 - 自动同步在应用进程存活时按间隔运行；系统冻结 WebView、强制停止应用或移除任务后不保证继续同步。
 - tombstone 无自动清理；长期大量删除会占用快照空间，受同步大小限制。
 
-APK SHA-256：f8f100d81cff470c9f70ac9c3563be592f25d665ce1b4d68ac6cc37c6a302d4c
+APK SHA-256：d9fe25d377e57567b9f0641ddb1977522e367be17125e1956fdb48acd253e70b
 
-APK 大小：7595945 字节
+APK 大小：7596667 字节

@@ -5,6 +5,7 @@ import Icon from './Icon.vue'
 
 const route = useRoute()
 const router = useRouter()
+let lastTabNavigation = 0
 
 const items = [
   { path: '/', label: '音乐', icon: 'music' },
@@ -31,7 +32,12 @@ const activeIndex = computed(() => {
 })
 
 function go(path: string): void {
-  if (route.path !== path) router.push(path)
+  if (route.path === path) return
+  const now = performance.now()
+  // 连续点一排 Tab 时不要叠加多个整页淡入，否则旧页会和新页互相透出。
+  if (now - lastTabNavigation < 160) return
+  lastTabNavigation = now
+  router.push(path)
 }
 </script>
 

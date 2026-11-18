@@ -82,9 +82,9 @@
   --e-inout: cubic-bezier(0.4, 0, 0.2, 1);
   --e-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
   --motion-press: 0.16s;
-  --motion-tab: 0.18s;
-  --motion-page: 0.26s;
-  --motion-sheet: 0.28s;
+  --motion-tab: 0.12s;
+  --motion-page: 0.18s;
+  --motion-sheet: 0.24s;
 
   --pad: 20px;
   --tab-h: 56px;
@@ -1677,16 +1677,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   position: absolute;
   inset: 0;
   background: var(--porcelain);
+  backface-visibility: hidden;
 }
 .tab-fade-enter-active {
   z-index: 2;
-  transition: opacity var(--motion-tab) ease;
+  will-change: opacity;
+  transition: opacity var(--motion-tab) linear;
 }
 .tab-fade-leave-active {
   z-index: 1;
+  pointer-events: none;
+  transition: opacity var(--motion-tab) linear;
 }
 .tab-fade-enter-from {
   opacity: 0;
+}
+.tab-fade-leave-to {
+  opacity: 0.98;
 }
 
 .page-forward-enter-active,
@@ -1701,10 +1708,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 .page-forward-enter-active,
 .page-back-enter-active {
   z-index: 2;
-  will-change: transform, opacity;
-  transition:
-    transform var(--motion-page) var(--e-out),
-    opacity var(--motion-page) var(--e-out);
+  will-change: opacity;
+  transition: opacity var(--motion-page) linear;
 }
 .page-forward-leave-active,
 .page-back-leave-active {
@@ -1713,15 +1718,13 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   pointer-events: none;
 }
 .page-forward-enter-from {
-  transform: translate3d(28px, 0, 0);
-  opacity: 0.86;
+  opacity: 0;
 }
 .page-forward-leave-to {
   opacity: 0.92;
 }
 .page-back-enter-from {
-  transform: translate3d(-28px, 0, 0);
-  opacity: 0.86;
+  opacity: 0;
 }
 .page-back-leave-to {
   opacity: 0.92;
@@ -1737,10 +1740,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 }
 .search-enter-enter-active {
   z-index: 2;
-  will-change: transform, opacity;
-  transition:
-    transform var(--motion-page) var(--e-out),
-    opacity var(--motion-page) var(--e-out);
+  will-change: opacity;
+  transition: opacity var(--motion-page) linear;
 }
 .search-enter-leave-active {
   z-index: 1;
@@ -1748,8 +1749,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   pointer-events: none;
 }
 .search-enter-enter-from {
-  transform: translate3d(0, 18px, 0);
-  opacity: 0.86;
+  opacity: 0;
 }
 .search-enter-leave-to {
   opacity: 0.92;

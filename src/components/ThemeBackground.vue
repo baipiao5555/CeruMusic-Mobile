@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.theme-background-layer { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--porcelain); }
-.theme-background-media { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+.theme-background-layer { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--porcelain); contain: paint; isolation: isolate; }
+.theme-background-media { position: absolute; inset: 0; display: block; width: 100%; height: 100%; backface-visibility: hidden; will-change: transform; }
 .theme-background-mask { position: absolute; inset: 0; }
 </style>

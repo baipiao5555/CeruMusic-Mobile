@@ -91,7 +91,8 @@ function formatDuration(ms: number): string {
       <img
         :src="track.artwork"
         alt=""
-       
+        loading="lazy"
+        decoding="async"
         @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
       />
     </div>

@@ -337,7 +337,7 @@ watch(providerKey, () => void load())
           </div>
           <div class="hscroll home-covers">
             <button v-for="playlist in playlists.slice(0, 8)" :key="playlist.ref.id" class="mediacard" @click="openChart(playlist)">
-              <div class="cover"><img :src="artworkOf(playlist)" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span class="cover-play"><Icon name="play" :size="12" /></span></div>
+              <div class="cover"><img :src="artworkOf(playlist)" alt="" loading="lazy" decoding="async" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span class="cover-play"><Icon name="play" :size="12" /></span></div>
               <div class="ct clamp-2">{{ playlist.title }}</div><div class="cs truncate">{{ playlist.playlist?.author || countOf(playlist) }}</div>
             </button>
           </div>
@@ -352,7 +352,7 @@ watch(providerKey, () => void load())
           <div class="section-head mt24"><div class="st"><h2>排行榜</h2></div><button class="more" @click="openCatalog('charts')">全部榜单<Icon name="chevron" :size="14" /></button></div>
           <div class="hscroll home-covers">
             <button v-for="chart in charts.slice(0, 8)" :key="chart.ref.id" class="mediacard" @click="openChart(chart)">
-              <div class="cover"><img :src="artworkOf(chart)" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span class="cover-play"><Icon name="play" :size="12" /></span></div>
+              <div class="cover"><img :src="artworkOf(chart)" alt="" loading="lazy" decoding="async" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span class="cover-play"><Icon name="play" :size="12" /></span></div>
               <div class="ct clamp-2">{{ chart.title }}</div><div class="cs truncate">{{ chart.chart?.updateFrequency || chart.subtitle || providerName }}</div>
             </button>
           </div>

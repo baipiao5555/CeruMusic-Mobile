@@ -193,7 +193,7 @@ try {
   await page.locator('.ly-line.cur').waitFor({ state: 'visible' })
   const lyricStyle = await page.evaluate(() => {
     const current = document.querySelector('.ly-line.cur')
-    const other = [...document.querySelectorAll('.ly-line')].find((line) => line !== current)
+    const other = [...document.querySelectorAll('.ly-line.near:not(.cur)')][0]
     const rootStyle = getComputedStyle(document.documentElement)
     return {
       currentFilter: current ? getComputedStyle(current).filter : '',

@@ -210,7 +210,7 @@ function openImport(): void {
         </div>
         <div class="recent-strip">
           <button v-for="(track, index) in history.slice(0, 6)" :key="track.providerId + ':' + track.id" class="recent-card" @click="playHistory(index)">
-            <span class="recent-art"><img :src="track.artwork || '/default-cover.png'" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span><Icon name="play" :size="13" /></span></span>
+            <span class="recent-art"><img :src="track.artwork || '/default-cover.png'" alt="" loading="lazy" decoding="async" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" /><span><Icon name="play" :size="13" /></span></span>
             <strong>{{ track.title }}</strong>
             <small>{{ track.artist || '未知歌手' }}</small>
           </button>
@@ -257,7 +257,7 @@ function openImport(): void {
         <template v-else-if="tab === 'albums' || tab === 'artists'">
           <div v-if="(tab === 'albums' ? albumGroups : artistGroups).length" class="asset-list">
             <button v-for="group in (tab === 'albums' ? albumGroups : artistGroups)" :key="group.key" class="asset-row" @click="playGroup(group)">
-              <img class="asset-cover" :class="{ round: tab === 'artists' }" :src="group.cover || '/default-cover.png'" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
+              <img class="asset-cover" :class="{ round: tab === 'artists' }" :src="group.cover || '/default-cover.png'" alt="" loading="lazy" decoding="async" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
               <span class="asset-copy"><strong>{{ group.name }}</strong><small>{{ tab === 'albums' ? group.sub + ' · ' : '' }}{{ group.tracks.length }} 首</small></span>
               <Icon name="play" :size="19" />
             </button>
@@ -274,7 +274,7 @@ function openImport(): void {
           <div v-if="playlists.length" class="asset-list">
             <div v-for="playlist in playlists" :key="playlist.id" class="asset-row playlist-row">
               <button class="asset-open" @click="openPlaylist(playlist)">
-                <img class="asset-cover" :src="coverOf(playlist) || '/default-cover.png'" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
+                <img class="asset-cover" :src="coverOf(playlist) || '/default-cover.png'" alt="" loading="lazy" decoding="async" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
                 <span class="asset-copy"><strong>{{ playlist.name }}</strong><small>{{ playlist.tracks.length }} 首 · {{ playlist.cloudId ? '云端导入副本' : '本地歌单' }}</small></span>
               </button>
               <button class="iconbtn quiet" :aria-label="'删除歌单' + playlist.name" @click="removePlaylist(playlist)"><Icon name="trash" :size="18" /></button>

@@ -121,7 +121,7 @@ function playFavorite(index: number): void {
           <article v-for="playlist in visible" :key="playlist.id" class="pl">
             <button class="pl-open" :aria-label="'打开歌单' + playlist.name" @click="openPlaylist(playlist)">
               <span class="playlist-cover">
-                <img :src="coverOf(playlist) || '/default-cover.png'" alt="" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
+                <img :src="coverOf(playlist) || '/default-cover.png'" alt="" loading="lazy" decoding="async" @error="($event.target as HTMLImageElement).src = '/default-cover.png'" />
                 <span class="track-count"><Icon name="music" :size="12" /> {{ playlist.tracks.length }} 首</span>
               </span>
               <strong class="n">{{ playlist.name }}</strong>

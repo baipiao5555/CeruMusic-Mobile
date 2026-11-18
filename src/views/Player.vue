@@ -599,7 +599,11 @@ onUnmounted(() => {
             v-for="(line, index) in playerState.lyrics"
             :key="index"
             class="ly-line"
-            :class="{ cur: index === playerState.activeLyric, passed: index < playerState.activeLyric }"
+            :class="{
+              cur: index === playerState.activeLyric,
+              near: Math.abs(index - playerState.activeLyric) <= 3,
+              passed: index < playerState.activeLyric
+            }"
             @click.stop="onLyricLineTap(line)"
           >
             <template v-if="index === playerState.activeLyric">
@@ -927,9 +931,11 @@ onUnmounted(() => {
 .ly-top .p-head-s { max-width: 100%; }
 .ly-box { position: relative; z-index: 2; flex: 1; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 12vh 28px 34vh; scrollbar-width: none; -webkit-mask-image: linear-gradient(180deg, transparent, #000 8%, #000 91%, transparent); mask-image: linear-gradient(180deg, transparent, #000 8%, #000 91%, transparent); }
 .ly-box::-webkit-scrollbar { display: none; }
-.ly-line { position: relative; margin: 0; padding: 12px 0; font-family: var(--lyric-font, var(--sans)); font-size: calc(23px * var(--ly-scale, 1)); font-weight: 650; line-height: 1.55; color: #a4b8d5; overflow-wrap: anywhere; cursor: pointer; opacity: .28; filter: blur(2.2px); transition: color .25s ease, opacity .25s ease, filter .25s ease; }
+.ly-line { position: relative; margin: 0; padding: 12px 0; font-family: var(--lyric-font, var(--sans)); font-size: calc(23px * var(--ly-scale, 1)); font-weight: 650; line-height: 1.55; color: #a4b8d5; overflow-wrap: anywhere; cursor: pointer; opacity: 0; filter: none; transition: color .25s ease, opacity .25s ease, filter .25s ease; }
+.ly-line.near { opacity: .28; filter: blur(2.2px); }
+.ly-line.near.passed { opacity: .18; }
 .ly-line.cur { color: #fff; opacity: 1; filter: none; }
-.ly-line.passed { color: #b6c6dc; opacity: .18; }
+.ly-line.passed { color: #b6c6dc; }
 .ly-char { color: #bfd0e8; transition: color .16s linear; }
 .ly-char.on { color: #fff; text-shadow: 0 0 12px #ffffff20; }
 .ly-tr { display: block; margin-top: 5px; font-family: var(--sans); font-weight: 400; font-size: calc(13px * var(--ly-scale, 1)); line-height: 1.55; color: #b9cce6; }

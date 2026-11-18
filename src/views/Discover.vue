@@ -378,12 +378,14 @@ watch(providerKey, () => void load())
     </div>
 
     <Teleport to="body">
-      <div v-if="sourcePickerOpen" class="sheet-mask" @click.self="sourcePickerOpen = false">
-        <section class="sheet home-source-sheet" role="dialog" aria-modal="true" aria-label="选择音源">
-          <div class="grab" /><div class="sh-head"><span class="sh-title">选择音源</span><button class="iconbtn quiet" aria-label="关闭" @click="sourcePickerOpen = false"><Icon name="close" :size="20" /></button></div>
-          <div class="pad"><button v-for="provider in providers" :key="provider.pluginId + ':' + provider.providerId" class="source-option" @click="choose(provider)"><span><strong>{{ provider.name }}</strong><small>{{ provider.pluginName }}</small></span><Icon v-if="selected?.pluginId === provider.pluginId && selected?.providerId === provider.providerId" name="check" :size="20" /></button><p v-if="!providers.length" class="meta">还没有已启用的音源。</p><button class="btn btn-tonal btn-block mt16" @click="sourcePickerOpen = false; router.push('/plugins')"><Icon name="plugin" :size="17" />音源管理</button></div>
-        </section>
-      </div>
+      <transition name="sheet-pop">
+        <div v-if="sourcePickerOpen" class="sheet-mask" @click.self="sourcePickerOpen = false">
+          <section class="sheet home-source-sheet" role="dialog" aria-modal="true" aria-label="选择音源">
+            <div class="grab" /><div class="sh-head"><span class="sh-title">选择音源</span><button class="iconbtn quiet" aria-label="关闭" @click="sourcePickerOpen = false"><Icon name="close" :size="20" /></button></div>
+            <div class="pad"><button v-for="provider in providers" :key="provider.pluginId + ':' + provider.providerId" class="source-option" @click="choose(provider)"><span><strong>{{ provider.name }}</strong><small>{{ provider.pluginName }}</small></span><Icon v-if="selected?.pluginId === provider.pluginId && selected?.providerId === provider.providerId" name="check" :size="20" /></button><p v-if="!providers.length" class="meta">还没有已启用的音源。</p><button class="btn btn-tonal btn-block mt16" @click="sourcePickerOpen = false; router.push('/plugins')"><Icon name="plugin" :size="17" />音源管理</button></div>
+          </section>
+        </div>
+      </transition>
     </Teleport>
   </div>
 </template>

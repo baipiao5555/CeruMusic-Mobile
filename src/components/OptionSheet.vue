@@ -35,7 +35,7 @@ function choose(option: Option): void {
   <Teleport to="body">
     <transition name="sheet-pop">
       <div v-if="open" class="sheet-mask" @click.self="emit('close')">
-        <div class="sheet opt-sheet" role="dialog" :aria-label="title">
+        <div class="sheet opt-sheet" role="dialog" aria-modal="true" :aria-label="title">
         <div class="grab" />
         <div class="sh-head">
           <div class="hdtext">

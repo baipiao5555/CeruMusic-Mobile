@@ -30,8 +30,15 @@ try {
   await page.goto(`${base}/#/settings`, { waitUntil: 'networkidle' })
   const row = page.locator('.pickrow').first()
   await row.waitFor({ state: 'visible' })
+  await row.focus()
   await row.click()
   await page.locator('.sheet-mask .sheet').waitFor({ state: 'visible' })
+  await page.keyboard.press('Tab')
+  assert.equal(
+    await page.evaluate(() => Boolean(document.activeElement?.closest('.sheet-mask'))),
+    true,
+    'Tab should enter the open sheet'
+  )
 
   await page.locator('.sheet-mask .sh-head .iconbtn').click()
   await page.waitForTimeout(40)
@@ -44,8 +51,31 @@ try {
   assert.equal(leaving.leaving, true, 'the sheet should keep its leave-active class during the exit')
 
   await page.waitForFunction(() => !document.querySelector('.sheet-mask'))
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.classList.contains('pickrow')),
+    true,
+    'closing the sheet should restore focus to its trigger'
+  )
+
+  await row.click()
+  await page.locator('.sheet-mask .sheet').waitFor({ state: 'visible' })
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => !document.querySelector('.sheet-mask'))
+
+  await page.goto(`${base}/#/`, { waitUntil: 'networkidle' })
+  const sourceButton = page.getByRole('button', { name: '切换音源' })
+  await sourceButton.waitFor({ state: 'visible' })
+  await sourceButton.click()
+  await page.locator('.home-source-sheet').waitFor({ state: 'visible' })
+  await page.locator('.home-source-sheet .sh-head .iconbtn').click()
+  await page.waitForFunction(() => !document.querySelector('.sheet-mask'))
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.getAttribute('aria-label')),
+    '切换音源',
+    'inline source picker should restore focus too'
+  )
   assert.equal(errors.length, 0, `unexpected page errors: ${errors.join(' | ')}`)
-  console.log('PASS sheet motion: open and animated close')
+  console.log('PASS sheet motion: open, animated close, Escape, focus restore, inline picker')
 } finally {
   await browser.close()
 }

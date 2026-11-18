@@ -516,9 +516,10 @@ onUnmounted(() => {
     </div>
 
     <!-- 音质不再展开挤走主播放控制；仍使用原有 setQuality 与实际可选档位。 -->
-    <div v-if="showQuality" class="sheet-mask" @click.self="showQuality = false">
-      <div class="scrim" @click="showQuality = false" />
-      <section class="sheet p-quality-sheet" role="dialog" aria-modal="true" aria-label="选择音质" @keydown.esc="showQuality = false">
+    <transition name="sheet-pop">
+      <div v-if="showQuality" class="sheet-mask" @click.self="showQuality = false">
+        <div class="scrim" @click="showQuality = false" />
+        <section class="sheet p-quality-sheet" role="dialog" aria-modal="true" aria-label="选择音质" @keydown.esc="showQuality = false">
         <div class="grab" />
         <div class="sh-head"><div class="sh-title">音质</div><button class="iconbtn quiet" aria-label="关闭音质" @click="showQuality = false"><Icon name="close" :size="20" /></button></div>
         <div class="p-quality">
@@ -526,8 +527,9 @@ onUnmounted(() => {
           <button v-for="quality in track.qualities" :key="quality" class="chip" :class="{ active: playerState.quality === quality }" @click="setQuality(quality)">{{ qualityLabel(quality) }}</button>
         </div>
         <p class="p-quality-note">{{ playerState.resolvedQuality ? '当前解析：' + qualityLabel(playerState.resolvedQuality) : '播放时按当前音源提供的音质解析' }}</p>
-      </section>
-    </div>
+        </section>
+      </div>
+    </transition>
 
     <!-- 全屏歌词 -->
     <div
@@ -655,9 +657,10 @@ onUnmounted(() => {
     </div>
 
     <!-- 播放队列 -->
-    <div v-if="showQueue" class="sheet-mask q-mask" @click.self="showQueue = false">
-      <div class="scrim" @click="showQueue = false" />
-      <div class="sheet q-sheet" role="dialog" aria-modal="true" aria-label="播放队列" @keydown.esc="showQueue = false">
+    <transition name="sheet-pop">
+      <div v-if="showQueue" class="sheet-mask q-mask" @click.self="showQueue = false">
+        <div class="scrim" @click="showQueue = false" />
+        <div class="sheet q-sheet" role="dialog" aria-modal="true" aria-label="播放队列" @keydown.esc="showQueue = false">
         <div class="grab" />
         <div class="sh-head">
           <div>
@@ -719,13 +722,15 @@ onUnmounted(() => {
             <p>{{ queueFilter === 'next' ? '队列里没有下一首了' : '这一栏还是空的' }}</p>
           </div>
         </div>
+        </div>
       </div>
-    </div>
+    </transition>
 
     <!-- 播放设置 -->
-    <div v-if="showSettings" class="sheet-mask" @click.self="closeSettings">
-      <div class="scrim" @click="closeSettings" />
-      <div class="sheet ps" role="dialog" aria-modal="true" aria-label="播放设置" @keydown.esc="closeSettings">
+    <transition name="sheet-pop">
+      <div v-if="showSettings" class="sheet-mask" @click.self="closeSettings">
+        <div class="scrim" @click="closeSettings" />
+        <div class="sheet ps" role="dialog" aria-modal="true" aria-label="播放设置" @keydown.esc="closeSettings">
         <div class="grab" />
         <div class="sh-head">
           <div>
@@ -824,8 +829,9 @@ onUnmounted(() => {
             <Icon name="download" :size="17" /> 下载当前歌曲
           </button>
         </div>
+        </div>
       </div>
-    </div>
+    </transition>
   </div>
 </template>
 

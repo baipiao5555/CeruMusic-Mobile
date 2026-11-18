@@ -86,7 +86,7 @@ function createAndAdd(): void {
 <template>
   <div class="sheet-mask" @click.self="emit('close')">
     <div class="scrim" @click="emit('close')" />
-    <div class="sheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-label="歌曲操作">
       <div class="grab" />
 
       <template v-if="view === 'menu'">

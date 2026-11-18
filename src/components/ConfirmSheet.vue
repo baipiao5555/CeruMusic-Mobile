@@ -7,7 +7,7 @@ import { confirmState, settleConfirm } from '../core/confirm'
   <Teleport to="body">
     <transition name="sheet-pop">
       <div v-if="confirmState.open" class="sheet-mask cf-mask" @click.self="settleConfirm(false)">
-        <div class="sheet cf-sheet" role="alertdialog" :aria-label="confirmState.title">
+        <div class="sheet cf-sheet" role="alertdialog" aria-modal="true" :aria-label="confirmState.title">
         <div class="grab" />
         <div class="cf-body">
           <div class="cf-ico" :class="{ danger: confirmState.danger }">

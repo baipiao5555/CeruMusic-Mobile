@@ -1756,6 +1756,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .loading-dots i {
+    animation: none;
+  }
   .btn,
   .iconbtn,
   .chip,

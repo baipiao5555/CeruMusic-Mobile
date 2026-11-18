@@ -42,6 +42,7 @@ import {
 } from '@/core/settings'
 import { logEvent } from '@/core/logs'
 import { cancelSearchEntryFocus, completeSearchEntryTransition } from '@/core/searchEntry'
+import { installSheetFocusRestore } from '@/core/ui/sheetFocus'
 import { routeDirection } from '@/router/transition'
 
 const router = useRouter()
@@ -71,6 +72,7 @@ let appActive = true
 let appDisposed = false
 let autoUpdateRunning = false
 let autoUpdateAwaitingDisplay = false
+let disposeSheetFocus: (() => void) | undefined
 
 function isAppForeground(): boolean {
   return !appDisposed && appActive && document.visibilityState !== 'hidden'
@@ -270,6 +272,7 @@ async function handleDeepLink(url: string): Promise<void> {
 
 onMounted(async () => {
   logEvent('info', 'APP', '应用启动', `${__APP_VERSION__} · ${Capacitor.getPlatform()}`)
+  disposeSheetFocus = installSheetFocusRestore()
   restoreSettings()
   initSystemInsets()
   initNativeTheme()
@@ -361,6 +364,8 @@ function onPageAfterEnter(): void {
 
 onUnmounted(() => {
   appDisposed = true
+  disposeSheetFocus?.()
+  disposeSheetFocus = undefined
   document.removeEventListener('visibilitychange', onAppVisibilityChange)
   window.removeEventListener('touchstart', onTabTouchStart)
   window.removeEventListener('touchend', onTabTouchEnd)
@@ -424,25 +429,29 @@ watch(navigationRequest, (request) => {
       </div>
     </div>
 
-    <div v-if="permissionRequest" class="sheet-mask" @click.self="answerPermission(false)">
-      <div class="sheet">
-        <div class="grab" />
-        <div class="sh-head">
-          <span class="sh-title">权限请求</span>
-        </div>
-        <p class="meta pad" style="margin: -4px 0 14px">
-          {{ permissionRequest.pluginName }} 请求「{{ permissionRequest.name }}」权限。
-          {{ permissionRequest.reason }}
-        </p>
-        <div class="row g10 pad">
-          <button class="btn btn-ghost f1" @click="answerPermission(false)">拒绝</button>
-          <button class="btn btn-primary f1" @click="answerPermission(true)">允许</button>
+    <transition name="sheet-pop">
+      <div v-if="permissionRequest" class="sheet-mask" @click.self="answerPermission(false)">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="权限请求">
+          <div class="grab" />
+          <div class="sh-head">
+            <span class="sh-title">权限请求</span>
+          </div>
+          <p class="meta pad" style="margin: -4px 0 14px">
+            {{ permissionRequest.pluginName }} 请求「{{ permissionRequest.name }}」权限。
+            {{ permissionRequest.reason }}
+          </p>
+          <div class="row g10 pad">
+            <button class="btn btn-ghost f1" @click="answerPermission(false)">拒绝</button>
+            <button class="btn btn-primary f1" @click="answerPermission(true)">允许</button>
+          </div>
         </div>
       </div>
-    </div>
+    </transition>
 
     <PlatformLoginSheet v-if="platformLoginVisible" @close="platformLoginVisible = false" />
-    <PluginAccountSurface v-if="accountSurface" :spec="accountSurface" @close="closeAccountSurface" />
+    <transition name="sheet-pop">
+      <PluginAccountSurface v-if="accountSurface" :spec="accountSurface" @close="closeAccountSurface" />
+    </transition>
     <ConfirmSheet />
     </div>
   </ion-app>

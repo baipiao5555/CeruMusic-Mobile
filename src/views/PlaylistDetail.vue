@@ -236,50 +236,54 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="menuOpen && playlist" class="sheet-mask" @click.self="menuOpen = false">
-      <div class="sheet">
-        <div class="grab" />
-        <div class="sh-head">
-          <span class="sh-title">{{ playlist.name }}</span>
-          <button class="iconbtn quiet" aria-label="关闭更多操作" @click="menuOpen = false"><Icon name="close" :size="20" /></button>
-        </div>
-        <button class="sh-item" @click="menuOpen = false; openRename()">
-          <Icon name="edit" :size="20" /> 重命名歌单
-        </button>
-        <button class="sh-item" @click="menuOpen = false; downloadAll()">
-          <Icon name="download" :size="20" /> 下载全部
-        </button>
-        <button class="sh-item danger" @click="menuOpen = false; remove()">
-          <Icon name="trash" :size="20" /> 删除歌单
-        </button>
-      </div>
-    </div>
-
-    <div v-if="showRename" class="sheet-mask" @click.self="showRename = false">
-      <div class="sheet">
-        <div class="grab" />
-        <div class="sh-head">
-          <span class="sh-title">重命名歌单</span>
-          <button class="iconbtn quiet" aria-label="关闭重命名" @click="showRename = false"><Icon name="close" :size="20" /></button>
-        </div>
-        <div class="pad mt8">
-          <p class="meta">修改后会立即保存到本地。</p>
-          <input
-            v-model="renameValue"
-            class="nanofield mt12"
-            maxlength="40"
-            placeholder="歌单名称"
-            @keyup.enter="saveRename"
-          />
-        </div>
-        <div class="sheetbtns">
-          <button class="btn btn-ghost" @click="showRename = false">取消</button>
-          <button class="btn btn-primary" :disabled="!renameValue.trim()" @click="saveRename">
-            保存
+    <transition name="sheet-pop">
+      <div v-if="menuOpen && playlist" class="sheet-mask" @click.self="menuOpen = false">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="歌单操作">
+          <div class="grab" />
+          <div class="sh-head">
+            <span class="sh-title">{{ playlist.name }}</span>
+            <button class="iconbtn quiet" aria-label="关闭更多操作" @click="menuOpen = false"><Icon name="close" :size="20" /></button>
+          </div>
+          <button class="sh-item" @click="menuOpen = false; openRename()">
+            <Icon name="edit" :size="20" /> 重命名歌单
+          </button>
+          <button class="sh-item" @click="menuOpen = false; downloadAll()">
+            <Icon name="download" :size="20" /> 下载全部
+          </button>
+          <button class="sh-item danger" @click="menuOpen = false; remove()">
+            <Icon name="trash" :size="20" /> 删除歌单
           </button>
         </div>
       </div>
-    </div>
+    </transition>
+
+    <transition name="sheet-pop">
+      <div v-if="showRename" class="sheet-mask" @click.self="showRename = false">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="重命名歌单">
+          <div class="grab" />
+          <div class="sh-head">
+            <span class="sh-title">重命名歌单</span>
+            <button class="iconbtn quiet" aria-label="关闭重命名" @click="showRename = false"><Icon name="close" :size="20" /></button>
+          </div>
+          <div class="pad mt8">
+            <p class="meta">修改后会立即保存到本地。</p>
+            <input
+              v-model="renameValue"
+              class="nanofield mt12"
+              maxlength="40"
+              placeholder="歌单名称"
+              @keyup.enter="saveRename"
+            />
+          </div>
+          <div class="sheetbtns">
+            <button class="btn btn-ghost" @click="showRename = false">取消</button>
+            <button class="btn btn-primary" :disabled="!renameValue.trim()" @click="saveRename">
+              保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 

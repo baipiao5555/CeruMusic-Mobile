@@ -149,40 +149,44 @@ function playFavorite(index: number): void {
       <div class="collection-footer"><span>{{ playlists.length }} 张歌单 · {{ totalTracks }} 首 · {{ cloudCount }} 张云端副本</span><button aria-label="设置" @click="router.push('/settings')"><Icon name="settings" :size="18" /></button></div>
     </div>
 
-    <div v-if="menuPlaylist" class="sheet-mask" @click.self="menuPlaylist = undefined">
-      <div class="sheet">
-        <div class="grab" />
-        <div class="sh-head"><div class="sh-title">{{ menuPlaylist.name }}</div><button class="iconbtn quiet" aria-label="关闭" @click="menuPlaylist = undefined"><Icon name="close" :size="20" /></button></div>
-        <button class="sh-item" @click="openPlaylist(menuPlaylist); menuPlaylist = undefined"><Icon name="playlist" :size="20" /> 查看歌单 / 重命名</button>
-        <button class="sh-item danger" @click="removePlaylist(menuPlaylist)"><Icon name="trash" :size="20" /> 删除歌单</button>
-      </div>
-    </div>
-
-    <div v-if="showCreate" class="sheet-mask" @click.self="showCreate = false">
-      <div class="sheet">
-        <div class="grab" />
-        <div class="sh-head">
-          <div class="sh-title">新建歌单</div>
-          <button class="iconbtn quiet" aria-label="关闭" @click="showCreate = false">
-            <Icon name="close" :size="18" />
-          </button>
+    <transition name="sheet-pop">
+      <div v-if="menuPlaylist" class="sheet-mask" @click.self="menuPlaylist = undefined">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="歌单操作">
+          <div class="grab" />
+          <div class="sh-head"><div class="sh-title">{{ menuPlaylist.name }}</div><button class="iconbtn quiet" aria-label="关闭" @click="menuPlaylist = undefined"><Icon name="close" :size="20" /></button></div>
+          <button class="sh-item" @click="openPlaylist(menuPlaylist); menuPlaylist = undefined"><Icon name="playlist" :size="20" /> 查看歌单 / 重命名</button>
+          <button class="sh-item danger" @click="removePlaylist(menuPlaylist)"><Icon name="trash" :size="20" /> 删除歌单</button>
         </div>
-        <div class="sh-form">
-          <p class="sh-sub">给歌单起一个名字。</p>
-          <input
-            v-model="playlistName"
-            class="sh-input"
-            placeholder="例如：夜晚循环"
-            maxlength="40"
-            @keyup.enter="submitCreate"
-          />
-          <div class="sh-actions">
-            <button class="btn btn-ghost f1" @click="showCreate = false">取消</button>
-            <button class="btn btn-primary f1" :disabled="!playlistName.trim()" @click="submitCreate">创建</button>
+      </div>
+    </transition>
+
+    <transition name="sheet-pop">
+      <div v-if="showCreate" class="sheet-mask" @click.self="showCreate = false">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="新建歌单">
+          <div class="grab" />
+          <div class="sh-head">
+            <div class="sh-title">新建歌单</div>
+            <button class="iconbtn quiet" aria-label="关闭" @click="showCreate = false">
+              <Icon name="close" :size="18" />
+            </button>
+          </div>
+          <div class="sh-form">
+            <p class="sh-sub">给歌单起一个名字。</p>
+            <input
+              v-model="playlistName"
+              class="sh-input"
+              placeholder="例如：夜晚循环"
+              maxlength="40"
+              @keyup.enter="submitCreate"
+            />
+            <div class="sh-actions">
+              <button class="btn btn-ghost f1" @click="showCreate = false">取消</button>
+              <button class="btn btn-primary f1" :disabled="!playlistName.trim()" @click="submitCreate">创建</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </transition>
 
     <ImportPlaylistSheet v-if="showImport" @close="showImport = false" />
   </div>

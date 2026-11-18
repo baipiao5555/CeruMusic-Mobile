@@ -288,78 +288,84 @@ function openImport(): void {
       </section>
     </div>
 
-    <div v-if="showCreate" class="sheet-mask" @click.self="showCreate = false">
-      <div class="sheet">
-        <div class="grab" />
-        <div class="sh-head">
-          <div class="sh-title">新建歌单</div>
-          <button class="iconbtn quiet" aria-label="关闭" @click="showCreate = false">
-            <Icon name="close" :size="18" />
-          </button>
-        </div>
-        <div class="sh-form">
-          <p class="sh-sub">给歌单起一个名字。</p>
-          <input
-            v-model="playlistName"
-            class="sh-input"
-            placeholder="例如：夜晚循环"
-            maxlength="40"
-            @keyup.enter="submitCreate"
-          />
-          <div class="sh-actions">
-            <button class="btn btn-ghost f1" @click="showCreate = false">取消</button>
-            <button class="btn btn-primary f1" :disabled="!playlistName.trim()" @click="submitCreate">创建</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="showAbout" class="sheet-mask" @click.self="showAbout = false">
-      <div class="sheet">
-        <div class="grab" />
-        <div class="sh-head">
-          <div class="sh-title">关于澜音</div>
-          <button class="iconbtn quiet" aria-label="关闭" @click="showAbout = false">
-            <Icon name="close" :size="18" />
-          </button>
-        </div>
-        <div class="sh-form">
-          <img class="about-logo" src="/logo.png" alt="" />
-          <div class="about-name">澜音 · CeruMusic 手机版</div>
-          <p class="sh-sub">
-            基于 CeruMusic v2.3.1 移植的 Android 移动端。沿用澜音 v2 插件协议，
-            由插件提供音乐信息与播放地址，可按你的操作缓存或下载音乐。
-          </p>
-          <p class="sh-sub">版本 {{ appVersion }} · 插件协议 2.0</p>
-          <div class="sh-actions">
-            <button class="btn btn-primary btn-block" @click="showAbout = false">知道了</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="showQuick" class="sheet-mask" @click.self="showQuick = false">
-      <div class="sheet">
-        <div class="grab" />
-        <div class="sh-head">
-          <div class="sh-title">添加歌单</div>
-          <button class="iconbtn quiet" aria-label="关闭" @click="showQuick = false">
-            <Icon name="close" :size="18" />
-          </button>
-        </div>
-        <div class="sh-form">
-          <p class="sh-sub">从其他音乐平台导入歌单，或者创建一个新的本地歌单。</p>
-          <div class="sh-actions">
-            <button class="btn btn-ghost f1" @click="showQuick = false; showCreate = true">
-              <Icon name="plus" :size="16" /> 新建歌单
-            </button>
-            <button class="btn btn-primary f1" @click="showQuick = false; showImport = true">
-              <Icon name="folder" :size="16" /> 导入歌单
+    <transition name="sheet-pop">
+      <div v-if="showCreate" class="sheet-mask" @click.self="showCreate = false">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="新建歌单">
+          <div class="grab" />
+          <div class="sh-head">
+            <div class="sh-title">新建歌单</div>
+            <button class="iconbtn quiet" aria-label="关闭" @click="showCreate = false">
+              <Icon name="close" :size="18" />
             </button>
           </div>
+          <div class="sh-form">
+            <p class="sh-sub">给歌单起一个名字。</p>
+            <input
+              v-model="playlistName"
+              class="sh-input"
+              placeholder="例如：夜晚循环"
+              maxlength="40"
+              @keyup.enter="submitCreate"
+            />
+            <div class="sh-actions">
+              <button class="btn btn-ghost f1" @click="showCreate = false">取消</button>
+              <button class="btn btn-primary f1" :disabled="!playlistName.trim()" @click="submitCreate">创建</button>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </transition>
+
+    <transition name="sheet-pop">
+      <div v-if="showAbout" class="sheet-mask" @click.self="showAbout = false">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="关于澜音">
+          <div class="grab" />
+          <div class="sh-head">
+            <div class="sh-title">关于澜音</div>
+            <button class="iconbtn quiet" aria-label="关闭" @click="showAbout = false">
+              <Icon name="close" :size="18" />
+            </button>
+          </div>
+          <div class="sh-form">
+            <img class="about-logo" src="/logo.png" alt="" />
+            <div class="about-name">澜音 · CeruMusic 手机版</div>
+            <p class="sh-sub">
+              基于 CeruMusic v2.3.1 移植的 Android 移动端。沿用澜音 v2 插件协议，
+              由插件提供音乐信息与播放地址，可按你的操作缓存或下载音乐。
+            </p>
+            <p class="sh-sub">版本 {{ appVersion }} · 插件协议 2.0</p>
+            <div class="sh-actions">
+              <button class="btn btn-primary btn-block" @click="showAbout = false">知道了</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <transition name="sheet-pop">
+      <div v-if="showQuick" class="sheet-mask" @click.self="showQuick = false">
+        <div class="sheet" role="dialog" aria-modal="true" aria-label="添加歌单">
+          <div class="grab" />
+          <div class="sh-head">
+            <div class="sh-title">添加歌单</div>
+            <button class="iconbtn quiet" aria-label="关闭" @click="showQuick = false">
+              <Icon name="close" :size="18" />
+            </button>
+          </div>
+          <div class="sh-form">
+            <p class="sh-sub">从其他音乐平台导入歌单，或者创建一个新的本地歌单。</p>
+            <div class="sh-actions">
+              <button class="btn btn-ghost f1" @click="showQuick = false; showCreate = true">
+                <Icon name="plus" :size="16" /> 新建歌单
+              </button>
+              <button class="btn btn-primary f1" @click="showQuick = false; showImport = true">
+                <Icon name="folder" :size="16" /> 导入歌单
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
 
     <ImportPlaylistSheet v-if="showImport" @close="showImport = false" />
   </div>

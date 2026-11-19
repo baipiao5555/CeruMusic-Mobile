@@ -59,14 +59,15 @@ const route = useRoute()
 const backgroundScene = computed(() => route.path === '/player' ? themeBackgroundScene.value : 'main')
 const customBackgroundActive = computed(() => Boolean(themeBackgroundState.url) && backgroundAppliesToRoute(route.path, backgroundScene.value))
 const backgroundForeground = ref(document.visibilityState !== 'hidden')
-const showNav = computed(() => route.path !== '/player')
+const showNav = computed(() => route.path !== '/player' && !route.meta.hideBottomNav)
 const hasTrack = computed(() => Boolean(currentTrack()))
 const pageMotion = ref('')
 let pageMotionTimer: ReturnType<typeof setTimeout> | undefined
 let pageMotionSeq = 0
+const showDock = computed(() => route.path !== '/player' && (showNav.value || hasTrack.value))
 const dockStyle = computed(() => ({
-  '--dock-h': showNav.value
-    ? `calc(var(--tab-h) + ${hasTrack.value ? 'var(--mini-h) + ' : ''}var(--safe-bottom) + var(--dock-gap, 0px) + 1px)`
+  '--dock-h': showDock.value
+    ? `calc(${showNav.value ? 'var(--tab-h) + ' : ''}${hasTrack.value ? 'var(--mini-h) + ' : ''}var(--safe-bottom) + var(--dock-gap, 0px) + 1px)`
     : '0px'
 }))
 /** 高频主页面常驻挂载，切换时只切显示状态，避免首次进入时重新挂载造成掉帧。 */
@@ -542,10 +543,10 @@ watch(navigationRequest, (request) => {
     <router-view v-if="!isPersistentRoute" v-slot="{ Component }">
       <component :is="Component" :class="pageMotion" />
     </router-view>
-    <div v-if="showNav" class="dock">
+    <div v-if="showDock" class="dock">
       <div class="dock-inner">
         <MiniPlayer />
-        <BottomNav />
+        <BottomNav v-if="showNav" />
       </div>
     </div>
 

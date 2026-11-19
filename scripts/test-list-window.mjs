@@ -56,13 +56,13 @@ page.on('console', (message) => {
 
 try {
   await page.goto(`${base}/#/library?section=favorites`, { waitUntil: 'networkidle' })
-  await page.locator('.song-list .songrow').first().waitFor({ state: 'visible' })
-  assert.equal(await page.locator('.song-list .songrow').count(), 120)
-  await page.locator('.list-more').click()
-  await page.waitForFunction(() => document.querySelectorAll('.song-list .songrow').length === 240)
-  await page.locator('.list-more').click()
-  await page.waitForFunction(() => document.querySelectorAll('.song-list .songrow').length === 300)
-  assert.equal(await page.locator('.list-more').count(), 0)
+  await page.locator('.collection-screen .songrow').first().waitFor({ state: 'visible' })
+  assert.equal(await page.locator('.collection-screen .songrow').count(), 120)
+  await page.locator('.collection-rows > button').click()
+  await page.waitForFunction(() => document.querySelectorAll('.collection-screen .songrow').length === 240)
+  await page.locator('.collection-rows > button').click()
+  await page.waitForFunction(() => document.querySelectorAll('.collection-screen .songrow').length === 300)
+  assert.equal(await page.locator('.collection-rows > button').count(), 0)
 
   await page.goto(`${base}/#/playlist/long-playlist`, { waitUntil: 'networkidle' })
   await page.locator('.rows .songrow').first().waitFor({ state: 'visible' })

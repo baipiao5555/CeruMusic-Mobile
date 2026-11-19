@@ -92,7 +92,7 @@ function playFavorite(index: number): void {
         <button :class="{ on: collection === 'cloud' }" :aria-pressed="collection === 'cloud'" @click="collection = 'cloud'">云端导入</button>
       </nav>
 
-      <button v-if="collection !== 'cloud'" class="liked-card" @click="router.push('/library?section=favorites')">
+      <button v-if="collection !== 'cloud'" class="liked-card" @click="router.push('/favorites')">
         <span class="liked-cover"><Icon name="heart" :size="28" /></span>
         <span><strong>我喜欢的音乐</strong><small>{{ favorites.length }} 首 · 把喜欢留在这里</small></span>
         <Icon name="chevron-right" :size="16" />

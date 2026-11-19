@@ -5,6 +5,7 @@ import Icon from '@/components/Icon.vue'
 import OptionSheet from '@/components/OptionSheet.vue'
 import { settingsState, updateSettings } from '@/core/settings'
 import {
+  clearHistory,
   clearQueue,
   playerState,
   refreshBackgroundMetadata,
@@ -475,7 +476,7 @@ async function clearPlaybackData(): Promise<void> {
   if (!ok) return
   clearQueue()
   try {
-    localStorage.removeItem('ceru.history.v1')
+    clearHistory()
   } catch {}
 }
 

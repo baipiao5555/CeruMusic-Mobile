@@ -11,7 +11,7 @@ import {
   type LocalPlaylist
 } from '@/core/library'
 import { getHistory, playTracks } from '@/core/playback/player'
-import { allImporters, pluginState } from '@/core/plugin/manager'
+import { allImporters, notify, pluginState } from '@/core/plugin/manager'
 import { logState } from '@/core/logs'
 import { downloadState } from '@/core/downloads'
 import { authState, displayName } from '@/core/auth'
@@ -23,7 +23,6 @@ const router = useRouter()
 const route = useRoute()
 const appVersion = __APP_VERSION__
 const tab = ref<'songs' | 'albums' | 'artists' | 'playlists'>('playlists')
-const songTab = ref<'favorites' | 'recent'>('favorites')
 const showCreate = ref(false)
 const playlistName = ref('')
 const showAbout = ref(false)
@@ -33,18 +32,6 @@ const showQuick = ref(false)
 const favorites = computed(() => libraryState.favorites)
 const playlists = computed(() => libraryState.playlists)
 const history = computed(() => getHistory())
-const {
-  items: favoriteItems,
-  hasMore: favoritesHaveMore,
-  remaining: favoritesRemaining,
-  showMore: showMoreFavorites
-} = useListWindow(favorites)
-const {
-  items: historyItems,
-  hasMore: historyHasMore,
-  remaining: historyRemaining,
-  showMore: showMoreHistory
-} = useListWindow(history)
 const runningPlugins = computed(() => pluginState.plugins.filter((plugin) => plugin.running).length)
 const importers = computed(() => allImporters())
 const logErrors = computed(() => logState.entries.filter((entry) => entry.level === 'error').length)
@@ -75,6 +62,12 @@ const allTracks = computed(() => {
   }
   return [...map.values()]
 })
+const {
+  items: libraryItems,
+  hasMore: libraryHasMore,
+  remaining: libraryRemaining,
+  showMore: showMoreLibrary
+} = useListWindow(allTracks)
 
 const albumGroups = computed<TrackGroup[]>(() => {
   const map = new Map<string, TrackGroup>()
@@ -113,8 +106,8 @@ function coverOf(playlist: LocalPlaylist): string | undefined {
   return playlist.cover || playlist.tracks[0]?.artwork
 }
 
-function playFavorites(index: number): void {
-  void playTracks(favorites.value, index)
+function playLibrary(index: number): void {
+  void playTracks(allTracks.value, index).catch((error) => notify(error instanceof Error ? error.message : '播放失败', 'error'))
 }
 
 function playHistory(index: number): void {
@@ -126,15 +119,13 @@ function playGroup(group: TrackGroup): void {
 }
 
 function openSongs(kind: 'favorites' | 'recent'): void {
-  tab.value = 'songs'
-  songTab.value = kind
+  void router.push(kind === 'favorites' ? '/favorites' : '/recent')
 }
 
 watch(
   () => route.query.section ?? route.query.view,
   (section) => {
-    if (section === 'favorites' || section === 'recent') openSongs(section)
-    else if (section === 'albums' || section === 'artists' || section === 'playlists') tab.value = section
+    if (section === 'songs' || section === 'albums' || section === 'artists' || section === 'playlists') tab.value = section
   },
   { immediate: true }
 )
@@ -230,28 +221,17 @@ function openImport(): void {
         </nav>
 
         <template v-if="tab === 'songs'">
-          <div class="song-filters">
-            <button :class="{ on: songTab === 'favorites' }" :aria-pressed="songTab === 'favorites'" @click="songTab = 'favorites'">喜欢的歌曲 {{ favorites.length }}</button>
-            <button :class="{ on: songTab === 'recent' }" :aria-pressed="songTab === 'recent'" @click="songTab = 'recent'">最近播放 {{ history.length }}</button>
-          </div>
-          <div v-if="songTab === 'favorites' && favorites.length" class="song-list">
-            <SongRow v-for="(track, index) in favoriteItems" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="favorites" @play="playFavorites(index)" />
-            <button v-if="favoritesHaveMore" class="btn btn-ghost btn-block list-more" @click="showMoreFavorites">
-              显示更多（剩余 {{ favoritesRemaining }} 首）
+          <div v-if="allTracks.length" class="song-list">
+            <SongRow v-for="(track, index) in libraryItems" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="allTracks" @play="playLibrary(index)" />
+            <button v-if="libraryHasMore" class="btn btn-ghost btn-block list-more" @click="showMoreLibrary">
+              显示更多（剩余 {{ libraryRemaining }} 首）
             </button>
           </div>
-          <div v-else-if="songTab === 'favorites'" class="empty">
-            <div class="glyph"><Icon name="heart" :size="32" /></div>
-            <h3>还没有喜欢的歌曲</h3><p>在歌曲的更多菜单中收藏，就会出现在这里。</p>
+          <div v-else class="empty">
+            <div class="glyph"><Icon name="music" :size="32" /></div>
+            <h3>还没有入库歌曲</h3><p>收藏歌曲或导入歌单后，会出现在这里。</p>
             <button class="btn btn-ghost btn-sm" @click="openSearch(router)">去搜索音乐</button>
           </div>
-          <div v-else-if="history.length" class="song-list">
-            <SongRow v-for="(track, index) in historyItems" :key="track.providerId + ':' + track.id" :track="track" :index="index" :queue="history" @play="playHistory(index)" />
-            <button v-if="historyHasMore" class="btn btn-ghost btn-block list-more" @click="showMoreHistory">
-              显示更多（剩余 {{ historyRemaining }} 首）
-            </button>
-          </div>
-          <div v-else class="empty"><div class="glyph"><Icon name="history" :size="32" /></div><h3>还没有播放记录</h3><p>播放过的歌曲会出现在这里。</p></div>
         </template>
 
         <template v-else-if="tab === 'albums' || tab === 'artists'">
@@ -268,7 +248,7 @@ function openImport(): void {
         <template v-else>
           <button class="favorite-row" @click="openSongs('favorites')">
             <span class="favorite-cover"><Icon name="heart" :size="25" /></span>
-            <span class="asset-copy"><strong>我喜欢的音乐</strong><small>{{ favorites.length }} 首 · 本地收藏</small></span>
+            <span class="asset-copy"><strong>我喜欢的音乐</strong><small>{{ favorites.length }} 首 · 本机收藏记录</small></span>
             <Icon name="chevron-right" :size="16" />
           </button>
           <div v-if="playlists.length" class="asset-list">

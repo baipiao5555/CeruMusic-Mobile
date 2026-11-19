@@ -1,4 +1,4 @@
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 import {
   allProviders,
   invokeProvider,
@@ -1232,25 +1232,45 @@ export function updateActiveLyric(): void {
 }
 
 const HISTORY_KEY = 'ceru.history.v1'
+const historyRevision = ref(0)
 
 function addHistory(track: Track): void {
   try {
     const raw = localStorage.getItem(HISTORY_KEY)
     const list: Track[] = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(list)) throw new Error('播放记录格式错误')
     const filtered = list.filter(
       (item) => !(item.id === track.id && item.providerId === track.providerId)
     )
     filtered.unshift(track)
     localStorage.setItem(HISTORY_KEY, JSON.stringify(filtered.slice(0, 100)))
-  } catch {}
+    historyRevision.value++
+  } catch {
+    notify('播放记录保存失败，原记录未修改', 'error')
+  }
 }
 
 export function getHistory(): Track[] {
+  // Consumers such as computed(getHistory) update after every durable write.
+  void historyRevision.value
   try {
     const raw = localStorage.getItem(HISTORY_KEY)
-    return raw ? JSON.parse(raw) : []
+    const list = raw ? JSON.parse(raw) : []
+    return Array.isArray(list) ? list : []
   } catch {
     return []
+  }
+}
+
+/** Clear history only; favorites, playlists, audio and queue are untouched. */
+export function clearHistory(): boolean {
+  try {
+    localStorage.removeItem(HISTORY_KEY)
+    historyRevision.value++
+    return true
+  } catch {
+    notify('清空播放记录失败，原记录已保留', 'error')
+    return false
   }
 }
 

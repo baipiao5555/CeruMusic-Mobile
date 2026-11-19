@@ -298,7 +298,7 @@ watch(providerKey, () => void load())
       </div>
 
       <div class="home-shortcuts">
-        <button @click="router.push({ path: '/library', query: { view: 'recent' } })"><span class="shortcut-tile mint"><Icon name="history" :size="23" /></span><span>最近播放</span></button>
+        <button @click="router.push('/recent')"><span class="shortcut-tile mint"><Icon name="history" :size="23" /></span><span>最近播放</span></button>
         <button @click="openCatalog('charts')"><span class="shortcut-tile orange"><Icon name="sort" :size="23" /></span><span>排行榜</span></button>
         <button @click="openCatalog('playlists')"><span class="shortcut-tile purple"><Icon name="playlist" :size="23" /></span><span>歌单精选</span></button>
         <button @click="router.push('/local')"><span class="shortcut-tile blue"><Icon name="folder" :size="23" /></span><span>本地音乐</span></button>
@@ -336,7 +336,7 @@ watch(providerKey, () => void load())
         </template>
 
         <template v-if="history.length">
-          <div class="section-head mt24"><div class="st"><h2>最近在听</h2></div><button class="more" @click="router.push({ path: '/library', query: { view: 'recent' } })">全部<Icon name="chevron" :size="14" /></button></div>
+          <div class="section-head mt24"><div class="st"><h2>最近在听</h2></div><button class="more" @click="router.push('/recent')">全部<Icon name="chevron" :size="14" /></button></div>
           <div class="pad"><SongRow v-for="(track, index) in history.slice(0, 4)" :key="track.pluginId + ':' + track.providerId + ':' + track.id" :track="track" :index="index" :queue="history" @play="(_, i) => playHistory(i)" /></div>
         </template>
 

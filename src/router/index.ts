@@ -14,6 +14,8 @@ const router = createRouter({
     { path: '/search', name: 'search', component: Search },
     { path: '/playlists', name: 'playlists', component: Playlists },
     { path: '/library', name: 'library', component: Library },
+    { path: '/favorites', name: 'favorites', meta: { hideBottomNav: true }, component: () => import('@/views/CollectionDetail.vue') },
+    { path: '/recent', name: 'recent', meta: { hideBottomNav: true }, component: () => import('@/views/CollectionDetail.vue') },
     { path: '/player', name: 'player', component: () => import('@/views/Player.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/views/Settings.vue') },
     { path: '/theme-background', name: 'theme-background', component: () => import('@/views/ThemeBackground.vue') },
@@ -30,6 +32,15 @@ const router = createRouter({
     { path: '/browse', name: 'browse', component: Browse },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ]
+})
+
+// Old links still reach the collection without rendering an intermediate home.
+router.beforeEach((to) => {
+  if (to.path !== '/library') return
+  const kind = to.query.section ?? to.query.view
+  if (kind !== 'favorites' && kind !== 'recent') return
+  const { section, view, ...query } = to.query
+  return { path: kind === 'favorites' ? '/favorites' : '/recent', query }
 })
 
 // Vue Router's hash history replaces state on every navigation, so

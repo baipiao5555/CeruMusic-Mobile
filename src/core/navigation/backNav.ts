@@ -19,6 +19,9 @@ export const TAB_BACK_PARENT: Record<string, string | undefined> = {
 export const EXIT_ROOT = '/'
 
 export function resolveBackAction(path: string, hasHistoryBack: boolean): BackAction {
+  if ((path === '/favorites' || path === '/recent') && !hasHistoryBack) {
+    return { type: 'parent', path: '/library' }
+  }
   if (path === EXIT_ROOT) return { type: 'exit-confirm' }
   const parent = TAB_BACK_PARENT[path]
   if (parent) return { type: 'parent', path: parent }

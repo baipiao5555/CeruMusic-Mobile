@@ -212,6 +212,13 @@ async function readMetrics() {
     const shell = document.querySelector('.app-shell')
     const dock = document.querySelector('.dock')
     const tabbar = document.querySelector('.tabbar')
+    const activeScreen = document.querySelector('.screen:not(.tab-screen-hidden)')
+    const activeScroll = activeScreen?.querySelector('.scroll')
+    const activeScrollStyle = activeScroll ? getComputedStyle(activeScroll) : null
+    const activeGridColumns = activeScrollStyle?.gridTemplateColumns &&
+      activeScrollStyle.gridTemplateColumns !== 'none'
+      ? activeScrollStyle.gridTemplateColumns.split(' ').filter(Boolean).length
+      : null
     return {
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
@@ -227,17 +234,17 @@ async function readMetrics() {
       navLabel: tabbar?.getAttribute('aria-label') ?? null,
       tabLabels: [...document.querySelectorAll('.tabbar .tab')].map((tab) => tab.textContent?.trim() ?? ''),
       settingsGridColumns: gridColumns('#settings-appearance')
-        ?? (styleOf('.scroll')?.display === 'grid' ? gridColumns('.scroll') : null),
-      settingsScrollDisplay: styleOf('.scroll')?.display ?? null,
-      settingsJumpBottom: rectOf(document.querySelector('.jump'))?.bottom ?? null,
-      settingsFirstSectionTop: rectOf(document.querySelector('.scroll > section'))?.top ?? null,
+        ?? (activeScrollStyle?.display === 'grid' ? activeGridColumns : null),
+      settingsScrollDisplay: activeScrollStyle?.display ?? null,
+      settingsJumpBottom: rectOf(activeScreen?.querySelector('.jump'))?.bottom ?? null,
+      settingsFirstSectionTop: rectOf(activeScreen?.querySelector('.scroll > section'))?.top ?? null,
       playlistGridColumns: gridColumns('.p-grid'),
       catalogGridColumns: gridColumns('.catalog-grid'),
       cloudGridColumns: gridColumns('.p-list'),
       playerColumns: gridColumns('.p-core'),
       searchHeader: rectOf(document.querySelector('.search-header')),
       browseHeroCover: rectOf(document.querySelector('.browse-hero > img')),
-      activeScreen: document.querySelector('.screen')?.className ?? null
+      activeScreen: activeScreen?.className ?? null
     }
   })
 }
@@ -295,7 +302,7 @@ async function openSearchResults() {
   const input = page.locator('.search-header .searchfield input')
   await input.fill('城市')
   await input.press('Enter')
-  await page.waitForSelector('.songrow', { timeout: 15000 })
+  await page.waitForSelector('.search-page:not(.tab-screen-hidden) .songrow', { timeout: 15000 })
   await page.waitForTimeout(400)
 }
 
@@ -315,8 +322,8 @@ async function openPlayer(size) {
       title: '示例热歌榜'
     })
     await page.goto(`${base}/#/browse?${query.toString()}`, { waitUntil: 'networkidle' })
-    await page.waitForSelector('.songrow', { timeout: 15000 })
-    await page.locator('.songrow').first().click()
+    await page.waitForSelector('.browse-page:not(.tab-screen-hidden) .songrow', { timeout: 15000 })
+    await page.locator('.browse-page:not(.tab-screen-hidden) .songrow').first().click()
     await page.waitForTimeout(1200)
     if (await page.locator('.mini').count()) {
       await page.locator('.mini-track').click()
@@ -399,7 +406,8 @@ async function runSize(size) {
   metrics = await readMetrics()
   await screenshot(size, '02-search-results')
   noOverflow(size, metrics, 'search')
-  check(`${size.name} search result rows rendered`, (await page.locator('.songrow').count()) >= 5, await page.locator('.songrow').count())
+  const searchRows = page.locator('.search-page:not(.tab-screen-hidden) .songrow')
+  check(`${size.name} search result rows rendered`, (await searchRows.count()) >= 5, await searchRows.count())
   check(`${size.name} search input and submit button are visible`, await page.locator('.searchfield input').isVisible() && await page.locator('.findgo').isVisible())
   if (size.tablet) {
     check(`${size.name} search header is width-capped`, metrics.searchHeader.width <= 900, metrics.searchHeader)

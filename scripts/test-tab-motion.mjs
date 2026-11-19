@@ -68,32 +68,33 @@ try {
   await page.reload({ waitUntil: 'networkidle' })
   await page.locator('.theme-background-layer').waitFor({ state: 'visible' })
   await page.locator('.tabbar .tab').nth(2).click()
-  await page.waitForFunction(() =>
-    Boolean(document.querySelector('.tab-fade-leave-active') && document.querySelector('.tab-fade-enter-active'))
-  )
+  await page.waitForFunction(() => Boolean(document.querySelector('.screen.route-motion-tab')))
   const during = await page.evaluate(() => {
     const screens = [...document.querySelectorAll('.screen')].map((element) => ({
       className: element.className,
-      opacity: Number(getComputedStyle(element).opacity)
+      visibility: getComputedStyle(element).visibility,
+      ariaHidden: element.getAttribute('aria-hidden')
     }))
     return {
       screens,
-      visible: screens.filter((item) => item.opacity > 0.12).length
+      visible: screens.filter((item) => item.visibility !== 'hidden').length
     }
   })
-  assert.ok(during.visible >= 1, 'a tab switch must never leave only the background visible')
+  assert.equal(during.visible, 1, 'exactly one tab screen may be visible')
   assert.ok(
-    during.screens.some((item) => item.className.includes('tab-fade-leave-active')),
-    'old tab must stay mounted during the crossfade'
+    during.screens.some((item) => item.className.includes('tab-screen-hidden')),
+    'inactive tabs stay mounted but hidden'
   )
   assert.ok(
-    during.screens.some((item) => item.className.includes('tab-fade-enter-active')),
-    'new tab must use the enter transition'
+    during.screens.some((item) => item.className.includes('route-motion-tab') && item.visibility !== 'hidden'),
+    'new tab uses the single-layer motion'
   )
   await page.waitForFunction(() => location.hash === '#/library')
   await page.waitForTimeout(260)
-  assert.equal(await page.locator('.screen').count(), 1)
-  console.log('PASS tab motion: old page retained, no background-only flash')
+  await page.waitForFunction(() => document.querySelectorAll('.screen').length === 5)
+  assert.equal(await page.locator('.screen').count(), 5)
+  assert.equal(await page.locator('.screen:not(.tab-screen-hidden)').count(), 1)
+  console.log('PASS tab motion: pre-mounted tabs, one visible screen, no blank flash')
 } finally {
   await browser.close()
 }

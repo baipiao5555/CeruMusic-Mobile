@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { App as NativeApp } from '@capacitor/app'
@@ -11,6 +11,11 @@ import ConfirmSheet from '@/components/ConfirmSheet.vue'
 import MiniPlayer from '@/components/MiniPlayer.vue'
 import ThemeBackground from '@/components/ThemeBackground.vue'
 import PluginAccountSurface from '@/components/PluginAccountSurface.vue'
+import Discover from '@/views/Discover.vue'
+import Search from '@/views/Search.vue'
+import Playlists from '@/views/Playlists.vue'
+import Library from '@/views/Library.vue'
+import Browse from '@/views/Browse.vue'
 import { getPluginAccountSurface, invalidatePluginAccountCache } from '@/core/plugin/manager'
 import type { AccountSurfaceSpec } from '@/core/plugin/accountSurface'
 import { backgroundAppliesToRoute, themeBackgroundScene, themeBackgroundState } from '@/core/themeBackground'
@@ -43,8 +48,7 @@ import { cancelSearchEntryFocus, completeSearchEntryTransition } from '@/core/se
 import { installSheetFocusRestore } from '@/core/ui/sheetFocus'
 import {
   cancelPlayerMorph,
-  isCollapseMorphPending,
-  playerMorphActive
+  isCollapseMorphPending
 } from '@/core/ui/playerMorph'
 import { routeDirection } from '@/router/transition'
 
@@ -57,20 +61,56 @@ const customBackgroundActive = computed(() => Boolean(themeBackgroundState.url) 
 const backgroundForeground = ref(document.visibilityState !== 'hidden')
 const showNav = computed(() => route.path !== '/player')
 const hasTrack = computed(() => Boolean(currentTrack()))
-const pageTransitionName = computed(() => {
-  if (routeDirection.value === 'tab') return 'tab-fade'
-  if (playerMorphActive.value) return 'player-morph'
-  if (routeDirection.value === 'back') return 'page-back'
-  if (route.path === '/search') return 'search-enter'
-  return 'page-forward'
-})
+const pageMotion = ref('')
+let pageMotionTimer: ReturnType<typeof setTimeout> | undefined
+let pageMotionSeq = 0
 const dockStyle = computed(() => ({
   '--dock-h': showNav.value
     ? `calc(var(--tab-h) + ${hasTrack.value ? 'var(--mini-h) + ' : ''}var(--safe-bottom) + var(--dock-gap, 0px) + 1px)`
     : '0px'
 }))
-/** 三个主 Tab 与搜索保留状态：返回时不重复加载，也保留输入和滚动。 */
-const tabViewNames = ['Discover', 'Search', 'Playlists', 'Library']
+/** 高频主页面常驻挂载，切换时只切显示状态，避免首次进入时重新挂载造成掉帧。 */
+const PERSISTENT_PATHS = ['/', '/search', '/playlists', '/library', '/browse']
+const isPersistentRoute = computed(() => PERSISTENT_PATHS.includes(route.path))
+const warmedPages = ref<Record<string, boolean>>({})
+function pageMounted(path: string): boolean {
+  return route.path === path || warmedPages.value[path] === true
+}
+function warmPage(path: string): void {
+  if (warmedPages.value[path]) return
+  warmedPages.value = { ...warmedPages.value, [path]: true }
+}
+/**
+ * 先把当前页显示出来，再利用空闲时间逐个挂载其余主页面。
+ * 页面只在空闲时排版一次，之后切换 Tab 只改 visibility，不再临时排版整页。
+ */
+function scheduleTabWarm(): void {
+  const queue = PERSISTENT_PATHS.filter((path) => path !== route.path)
+  if (!queue.length) return
+  const step = (): void => {
+    const next = queue.shift()
+    if (!next) return
+    warmPage(next)
+    if (!queue.length) return
+    const later = (): void => {
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(step, { timeout: 2000 })
+      } else {
+        setTimeout(step, 200)
+      }
+    }
+    setTimeout(later, 160)
+  }
+  const start = (): void => {
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(step, { timeout: 2000 })
+    } else {
+      setTimeout(step, 200)
+    }
+  }
+  requestAnimationFrame(() => requestAnimationFrame(start))
+}
+if (PERSISTENT_PATHS.includes(route.path)) warmPage(route.path)
 const nativePlatform = Capacitor.isNativePlatform()
 let appActive = true
 let appDisposed = false
@@ -293,6 +333,7 @@ onMounted(async () => {
     void NativeApp.addListener('backButton', () => handleBackNavigation())
   }
   scheduleStatusBarSync()
+  scheduleTabWarm()
   restoreLibrary()
   initPlayer()
   registerPlayerHostHooks()
@@ -354,21 +395,56 @@ watch(
   () => applyPlaybackRate()
 )
 
+/**
+ * 页面切换只给新页面做一次很短的 transform 入场，旧页面直接隐藏。
+ * 不再让两张全屏页面同时做 opacity 合成，避免中低端安卓 WebView 掉帧。
+ */
+async function playRouteMotion(): Promise<void> {
+  const seq = ++pageMotionSeq
+  if (pageMotionTimer) clearTimeout(pageMotionTimer)
+  if (route.path === '/player') {
+    pageMotion.value = ''
+    return
+  }
+  const kind =
+    route.path === '/search'
+      ? 'search'
+      : routeDirection.value === 'tab'
+        ? 'tab'
+        : routeDirection.value === 'back'
+          ? 'back'
+          : 'forward'
+  await nextTick()
+  if (seq !== pageMotionSeq) return
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    pageMotion.value = ''
+    if (route.path === '/search') completeSearchEntryTransition()
+    return
+  }
+  pageMotion.value = `route-motion-${kind}`
+  pageMotionTimer = setTimeout(() => {
+    if (seq !== pageMotionSeq) return
+    pageMotion.value = ''
+    if (route.path === '/search') completeSearchEntryTransition()
+  }, 190)
+}
+
 watch(
   () => route.path,
   (path) => {
+    if (PERSISTENT_PATHS.includes(path)) warmPage(path)
     if (path !== '/search') cancelSearchEntryFocus()
     if (path !== '/player' && !isCollapseMorphPending()) cancelPlayerMorph()
     void syncStatusBar()
+    void playRouteMotion()
   }
 )
 
-function onPageAfterEnter(): void {
-  if (route.path === '/search') completeSearchEntryTransition()
-}
-
 onUnmounted(() => {
   appDisposed = true
+  pageMotionSeq += 1
+  if (pageMotionTimer) clearTimeout(pageMotionTimer)
+  pageMotionTimer = undefined
   disposeSheetFocus?.()
   disposeSheetFocus = undefined
   document.removeEventListener('visibilitychange', onAppVisibilityChange)
@@ -399,15 +475,33 @@ watch(navigationRequest, (request) => {
   <ion-app>
     <div class="app-shell" :class="{ 'custom-theme-active': customBackgroundActive }" :style="dockStyle">
     <ThemeBackground :page-path="route.path" :scene="backgroundScene" :foreground="backgroundForeground" />
-    <router-view v-slot="{ Component }">
-      <transition
-        :name="pageTransitionName"
-        @after-enter="onPageAfterEnter"
-      >
-        <keep-alive :include="tabViewNames">
-          <component :is="Component" />
-        </keep-alive>
-      </transition>
+    <Discover
+      v-if="pageMounted('/')"
+      :class="[route.path === '/' ? pageMotion : '', { 'tab-screen-hidden': route.path !== '/' }]"
+      :aria-hidden="route.path !== '/'"
+    />
+    <Search
+      v-if="pageMounted('/search')"
+      :class="[route.path === '/search' ? pageMotion : '', { 'tab-screen-hidden': route.path !== '/search' }]"
+      :aria-hidden="route.path !== '/search'"
+    />
+    <Playlists
+      v-if="pageMounted('/playlists')"
+      :class="[route.path === '/playlists' ? pageMotion : '', { 'tab-screen-hidden': route.path !== '/playlists' }]"
+      :aria-hidden="route.path !== '/playlists'"
+    />
+    <Library
+      v-if="pageMounted('/library')"
+      :class="[route.path === '/library' ? pageMotion : '', { 'tab-screen-hidden': route.path !== '/library' }]"
+      :aria-hidden="route.path !== '/library'"
+    />
+    <Browse
+      v-if="pageMounted('/browse')"
+      :class="[route.path === '/browse' ? pageMotion : '', { 'tab-screen-hidden': route.path !== '/browse' }]"
+      :aria-hidden="route.path !== '/browse'"
+    />
+    <router-view v-if="!isPersistentRoute" v-slot="{ Component }">
+      <component :is="Component" :class="pageMotion" />
     </router-view>
     <div v-if="showNav" class="dock">
       <div class="dock-inner">

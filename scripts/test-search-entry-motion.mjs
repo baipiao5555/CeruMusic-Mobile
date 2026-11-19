@@ -46,12 +46,12 @@ async function installProbe() {
       true
     )
     document.addEventListener(
-      'transitionend',
+      'animationend',
       (event) => {
         if (event.target instanceof Element && event.target.classList.contains('search-page')) {
           window.__motionLog.push({
-            type: 'transitionend',
-            property: event.propertyName,
+            type: 'animationend',
+            property: event.animationName,
             at: performance.now()
           })
         }
@@ -80,7 +80,7 @@ async function readProbe() {
     const log = window.__motionLog
     const enterEnd = Math.max(
       -1,
-      ...log.filter((entry) => entry.type === 'transitionend').map((entry) => entry.at)
+      ...log.filter((entry) => entry.type === 'animationend').map((entry) => entry.at)
     )
     const focus = log.find((entry) => entry.type === 'focus')
     return { log, enterEnd, focusAt: focus?.at ?? null }
@@ -95,7 +95,10 @@ try {
 
   await resetProbe()
   await page.locator('.search-launch').tap()
-  await page.waitForSelector('.search-page')
+  await page.waitForFunction(() => {
+    const screen = document.querySelector('.search-page')
+    return screen && getComputedStyle(screen).visibility !== 'hidden'
+  })
   await waitForInputFocus()
   await page.waitForTimeout(500)
   const cold = await readProbe()
@@ -111,7 +114,10 @@ try {
 
   await resetProbe()
   await page.locator('.search-launch').tap()
-  await page.waitForSelector('.search-page')
+  await page.waitForFunction(() => {
+    const screen = document.querySelector('.search-page')
+    return screen && getComputedStyle(screen).visibility !== 'hidden'
+  })
   await waitForInputFocus()
   await page.waitForTimeout(500)
   const warm = await readProbe()
@@ -129,7 +135,8 @@ try {
     window.__earlyBack = { clicked: false }
     const timer = setInterval(() => {
       const back = document.querySelector('.search-back')
-      if (back) {
+      const screen = document.querySelector('.search-page')
+      if (back && screen && getComputedStyle(screen).visibility !== 'hidden') {
         back.click()
         window.__earlyBack.clicked = true
         clearInterval(timer)
@@ -162,7 +169,10 @@ try {
   await reducedPage.locator('.search-launch').waitFor({ state: 'visible' })
   await reducedPage.waitForTimeout(300)
   await reducedPage.locator('.search-launch').tap()
-  await reducedPage.waitForSelector('.search-page')
+  await reducedPage.waitForFunction(() => {
+    const screen = document.querySelector('.search-page')
+    return screen && getComputedStyle(screen).visibility !== 'hidden'
+  })
   await reducedPage.waitForFunction(() => {
     const input = document.querySelector('.search-page input[type=search]')
     return input && document.activeElement === input

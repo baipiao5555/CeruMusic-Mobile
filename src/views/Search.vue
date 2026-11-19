@@ -29,6 +29,12 @@ import {
 } from '@/core/search'
 import { matchCloudLyrics } from '@/core/lyrics/cloud'
 import { searchEntryFocusEpoch } from '@/core/searchEntry'
+import {
+  LOCAL_PLUGIN_ID,
+  localEntryToTrack,
+  localPermissionGranted,
+  scanLocalMusic
+} from '@/core/local/media'
 
 /** 一次搜索最多取多少条。 */
 const RESULT_LIMIT = 30
@@ -93,7 +99,9 @@ let requestSeq = 0
 let searchedProviderKey = ''
 let resumeSubmittedSearch = false
 
+const deviceTracks = ref<Track[]>([])
 const libraryTracks = computed(() => [
+  ...deviceTracks.value,
   ...libraryState.favorites,
   ...libraryState.playlists.flatMap((playlist) => playlist.tracks)
 ])
@@ -102,7 +110,7 @@ const suggestions = computed(() => {
   const needle = normalizeText(query.value)
   if (!needle || mode.value !== 'name') return []
   const local = suggestTracks(query.value, libraryTracks.value, Infinity).filter(
-    (track) => !selected.value ||
+    (track) => track.pluginId === LOCAL_PLUGIN_ID || !selected.value ||
       (track.pluginId === selected.value.pluginId && track.providerId === selected.value.providerId)
   )
   const seen = new Set<string>()
@@ -124,10 +132,13 @@ const showSuggest = computed(
 
 const historyVisible = computed(() => !query.value.trim() && searchHistory.items.length > 0)
 
-/** 音源零结果时，退回本地索引，至少让用户看到「打一个字就能找到」的歌。 */
+/** 本机与曲库结果独立展示，在线音源有结果时也不把它们隐藏。 */
 const localMatches = computed(() => {
-  if (mode.value === 'lyric' || loading.value || results.value.length || !searched.value || !query.value.trim()) return []
-  return suggestTracks(query.value, libraryTracks.value, 12)
+  if (mode.value === 'lyric' || loading.value || !searched.value || !query.value.trim()) return []
+  const remote = new Set(results.value.map((track) => `${track.pluginId}:${track.providerId}:${track.id}`))
+  return suggestTracks(query.value, libraryTracks.value, Infinity)
+    .filter((track) => !remote.has(`${track.pluginId}:${track.providerId}:${track.id}`))
+    .slice(0, 12)
 })
 
 /* —— 以下只做纯 UI 派生：分组计数、真错误/无结果分流、热门词轮换 —— */
@@ -659,6 +670,10 @@ watch(() => route.query.target, (value, previous) => {
 
 onMounted(() => {
   if (inputQuery.value.trim()) void runSearch()
+  void (async () => {
+    if (!(await localPermissionGranted())) return
+    deviceTracks.value = (await scanLocalMusic()).map(localEntryToTrack)
+  })()
 })
 
 watch(searchEntryFocusEpoch, () => {
@@ -944,7 +959,7 @@ onBeforeUnmount(stopPendingSearch)
           <span class="en">In Library</span>
         </div>
         <div class="pad">
-          <p class="meta">音源没有返回结果，这些来自你的收藏、歌单和搜过的歌。</p>
+          <p class="meta">这些结果来自本机音乐、收藏、歌单和搜过的歌。</p>
         </div>
         <div class="pad mt4">
           <SongRow

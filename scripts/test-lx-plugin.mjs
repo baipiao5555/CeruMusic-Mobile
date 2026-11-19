@@ -318,8 +318,7 @@ lx.send('inited', { sources: {
   assert.deepEqual(disabledUpdate, { updated: true, running: false, enabled: false })
 
   const framesBeforeFile = page.frames().length
-  const workersBeforeFile = page.workers().length
-  const fileWorkerCreated = page.waitForEvent('worker')
+  const workersBeforeFile = new Set(page.workers())
   await page.locator('input[type="file"]').setInputFiles({
     name: 'lx-file.js',
     mimeType: 'text/javascript',
@@ -331,7 +330,8 @@ lx.on('request', () => {
   })
   await page.getByRole('button', { name: '\u5b89\u88c5\u5e76\u542f\u7528', exact: true }).click()
   await page.waitForFunction(() => window.__ceruDebug.pluginState.plugins.some((item) => item.name === 'LX file source' && item.running))
-  const fileWorker = await fileWorkerCreated
+  const fileWorker = page.workers().find((worker) => !workersBeforeFile.has(worker))
+  assert.ok(fileWorker, 'file-installed LX plugin must create a Worker')
   const pendingStarted = page.waitForRequest(origin + '/pending-invoke')
   const fileId = await page.evaluate(() => {
     const debug = window.__ceruDebug
@@ -359,7 +359,7 @@ lx.on('request', () => {
   assert.equal(cancelled, true, 'uninstall must reject pending plugin invocations')
   await page.waitForFunction((count) => document.querySelectorAll('iframe').length === count, framesBeforeFile - 1, { timeout: 3000 })
   assert.equal(page.frames().length, framesBeforeFile)
-  assert.equal(page.workers().length, workersBeforeFile)
+  assert.equal(page.workers().length, workersBeforeFile.size)
 
   const failed = `/**\n * @name LX failed source\n */\nglobalThis.lx.send('inited', {status:false});`
   const rejected = await page.evaluate(async (code) => {

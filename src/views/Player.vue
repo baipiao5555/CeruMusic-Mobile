@@ -202,8 +202,9 @@ const modeIcon = computed(() => {
 const favorite = computed(() => (track.value ? isFavorite(track.value) : false))
 
 const qualityShort = computed(() => {
-  if (playerState.loading) return '解析中'
-  return playerState.resolvedQuality ? qualityLabel(playerState.resolvedQuality) : '自动'
+  const quality = playerState.resolvedQuality || playerState.quality
+  const label = qualityLabel(quality)
+  return playerState.loading ? (quality ? `${label} · 解析中` : '解析中') : label
 })
 
 const scrollLabel = computed(() =>

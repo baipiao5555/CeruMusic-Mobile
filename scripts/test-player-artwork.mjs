@@ -118,21 +118,22 @@ try {
       await page.locator('.mini').click()
     }
     const art = page.locator('.p-art img')
+    const record = page.locator('.p-record')
     await art.waitFor({ state: 'visible' })
     await page.waitForFunction(() => {
       const img = document.querySelector('.p-art img')
       return img?.complete && img.naturalWidth > 0 &&
-        getComputedStyle(img).animationPlayState === 'running'
+        getComputedStyle(document.querySelector('.p-record')).animationPlayState === 'running'
     })
     await page.waitForTimeout(400)
     assert.equal(await art.evaluate(img => getComputedStyle(img).borderRadius), '50%')
-    const angle = await art.evaluate(img => getComputedStyle(img).transform)
+    const angle = await record.evaluate(element => getComputedStyle(element).transform)
     await page.waitForTimeout(250)
-    assert.notEqual(await art.evaluate(img => getComputedStyle(img).transform), angle)
+    assert.notEqual(await record.evaluate(element => getComputedStyle(element).transform), angle)
     const beforePause = await page.locator('.p-art').boundingBox()
 
     const layout = await page.evaluate(() => {
-      const selectors = ['.p-top', '.p-art', '.p-meta', '.p-lyric', '.p-seek', '.p-ctrl', '.p-sub']
+      const selectors = ['.p-top', '.p-art', '.p-meta', '.p-lyric', '.p-seek', '.p-ctrl', '.p-tools']
       return selectors.map(selector => {
         const rect = document.querySelector(selector).getBoundingClientRect()
         return { selector, top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right }
@@ -142,36 +143,40 @@ try {
       const rect = layout[index]
       assert.ok(rect.top >= -1 && rect.bottom <= viewport.height + 1, `${rect.selector} vertical overflow`)
       assert.ok(rect.left >= -1 && rect.right <= viewport.width + 1, `${rect.selector} horizontal overflow`)
-      if (index > 0) assert.ok(layout[index - 1].bottom <= rect.top + 1, `${rect.selector} overlaps`)
+      if (index > 0) {
+        const previous = layout[index - 1]
+        const sameColumn = Math.min(previous.right, rect.right) > Math.max(previous.left, rect.left)
+        if (sameColumn) assert.ok(previous.bottom <= rect.top + 1, `${rect.selector} overlaps ${JSON.stringify({ previous, current: rect })}`)
+      }
     }
     await page.evaluate(() => { window.__ceruDebug.player.playerState.loading = true })
-    assert.equal(await art.evaluate(img => getComputedStyle(img).animationPlayState), 'paused')
-    const buffered = await art.evaluate(img => img.getAnimations()[0].currentTime)
+    assert.equal(await record.evaluate(element => getComputedStyle(element).animationPlayState), 'paused')
+    const buffered = await record.evaluate(element => element.getAnimations()[0].currentTime)
     await page.waitForTimeout(250)
-    assert.equal(await art.evaluate(img => img.getAnimations()[0].currentTime), buffered)
+    assert.equal(await record.evaluate(element => element.getAnimations()[0].currentTime), buffered)
     assert.deepEqual(await page.locator('.p-art').boundingBox(), beforePause)
     await page.evaluate(() => { window.__ceruDebug.player.playerState.loading = false })
     await page.waitForTimeout(180)
-    assert.ok(await art.evaluate((img, time) => img.getAnimations()[0].currentTime > time, buffered))
+    assert.ok(await record.evaluate((element, time) => element.getAnimations()[0].currentTime > time, buffered))
     const label = `player-${viewport.width}${useLx ? '-lx' : ''}`
     await page.screenshot({ path: resolve(output, `${label}-playing.png`) })
 
     await page.locator('.p-ctrl .p-play').click()
     await page.waitForFunction(() => !window.__ceruDebug.player.playerState.playing)
     await page.waitForTimeout(100)
-    assert.equal(await art.evaluate(img => getComputedStyle(img).animationPlayState), 'paused')
-    const stopped = await art.evaluate(img => img.getAnimations()[0].currentTime)
+    assert.equal(await record.evaluate(element => getComputedStyle(element).animationPlayState), 'paused')
+    const stopped = await record.evaluate(element => element.getAnimations()[0].currentTime)
     await page.waitForTimeout(300)
-    assert.equal(await art.evaluate(img => img.getAnimations()[0].currentTime), stopped)
+    assert.equal(await record.evaluate(element => element.getAnimations()[0].currentTime), stopped)
     assert.deepEqual(await page.locator('.p-art').boundingBox(), beforePause)
     await page.screenshot({ path: resolve(output, `${label}-paused.png`) })
 
     await page.locator('.p-ctrl .p-play').click()
     await page.waitForFunction(() => window.__ceruDebug.player.playerState.playing)
     await page.waitForTimeout(180)
-    assert.ok(await art.evaluate((img, time) => img.getAnimations()[0].currentTime > time, stopped))
+    assert.ok(await record.evaluate((element, time) => element.getAnimations()[0].currentTime > time, stopped))
     await page.emulateMedia({ reducedMotion: 'reduce' })
-    assert.equal(await art.evaluate(img => getComputedStyle(img).animationName), 'none')
+    assert.equal(await record.evaluate(element => getComputedStyle(element).animationName), 'none')
     console.log(`PASS circle, play/pause/buffering/resume, stable layout, reduced motion: ${viewport.width}x${viewport.height}${useLx ? ' LX search/playback flow' : ''}`)
     await page.close()
   }

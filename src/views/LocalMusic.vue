@@ -13,6 +13,7 @@ import {
   type LocalEntry
 } from '@/core/local/media'
 import { useListWindow } from '@/core/ui/listWindow'
+import { rememberTracks } from '@/core/search'
 
 const router = useRouter()
 
@@ -73,6 +74,7 @@ async function scan(): Promise<void> {
     const found = await scanLocalMusic()
     entries.value = found
     tracks.value = found.map(localEntryToTrack)
+    rememberTracks(tracks.value)
   } finally {
     scanning.value = false
     scanned.value = true

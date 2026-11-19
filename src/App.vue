@@ -179,6 +179,41 @@ const EXIT_CONFIRM_MS = 2200
 let lastExitPress = 0
 let tabSwipe: { x: number; y: number; time: number; path: string } | null = null
 let appExiting = false
+let touchClickSequence = 0
+let touchClickStartedAt = 0
+let touchClickTarget: Element | null = null
+let handledTouchClickSequence = -1
+let handledTouchClickTarget: Element | null = null
+
+function clickableElement(target: EventTarget | null): Element | null {
+  return target instanceof Element
+    ? target.closest('button, a[href], [role="button"], [role="checkbox"]')
+    : null
+}
+
+function onTouchClickStart(event: TouchEvent): void {
+  if (event.touches.length !== 1) {
+    touchClickTarget = null
+    return
+  }
+  touchClickSequence += 1
+  touchClickStartedAt = performance.now()
+  touchClickTarget = clickableElement(event.target)
+}
+
+/** Some WebViews emit two click events for one tap; a real second tap has a new touch sequence. */
+function onDuplicateTouchClick(event: MouseEvent): void {
+  if (event.detail === 0 || !touchClickTarget || performance.now() - touchClickStartedAt > 800) return
+  const target = clickableElement(event.target)
+  if (target !== touchClickTarget) return
+  if (handledTouchClickSequence === touchClickSequence && handledTouchClickTarget === target) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    return
+  }
+  handledTouchClickSequence = touchClickSequence
+  handledTouchClickTarget = target
+}
 
 function onTabTouchStart(event: TouchEvent): void {
   if (!settingsState.swipeTabs || event.touches.length !== 1) return
@@ -280,6 +315,8 @@ onMounted(async () => {
   restoreSettings()
   initSystemInsets()
   initNativeTheme()
+  window.addEventListener('touchstart', onTouchClickStart, { passive: true, capture: true })
+  document.addEventListener('click', onDuplicateTouchClick, true)
   window.addEventListener('touchstart', onTabTouchStart, { passive: true })
   window.addEventListener('touchend', onTabTouchEnd, { passive: true })
   document.addEventListener('visibilitychange', onAppVisibilityChange)
@@ -372,6 +409,8 @@ onUnmounted(() => {
   disposeSheetFocus?.()
   disposeSheetFocus = undefined
   document.removeEventListener('visibilitychange', onAppVisibilityChange)
+  window.removeEventListener('touchstart', onTouchClickStart, true)
+  document.removeEventListener('click', onDuplicateTouchClick, true)
   window.removeEventListener('touchstart', onTabTouchStart)
   window.removeEventListener('touchend', onTabTouchEnd)
 })

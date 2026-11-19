@@ -22,7 +22,7 @@ const modules = {
     dispose() {}
   }`,
   './network': 'export const requestRemote = async () => globalThis.__lxQualityFixture.response; export const validateRemoteUrl = (value) => new URL(value)',
-  '../storage/idb': 'export const idb = {}',
+  '../storage/idb': 'export const idb = {}; export const sha256Hex = async (value) => value',
   './plugin/manager': 'export const allProviders = () => []',
   './lx-runtime.js?raw': 'export default ""'
 }

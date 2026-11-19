@@ -396,7 +396,7 @@ export function initPlayer(): void {
   })
   audio.addEventListener('error', () => {
     playerState.loading = false
-    if (!audio?.src) return
+    if (!audio?.src || startPending) return
     playerState.error = '音频加载失败，请尝试切换音质或音源'
     playerState.playing = false
     logEvent(
@@ -468,16 +468,19 @@ function absoluteArtwork(url: string): string {
   return new URL(url, location.href).href
 }
 
-async function resolvePlaybackUrl(track: Track): Promise<string> {
+async function resolvePlaybackUrls(track: Track): Promise<{ url: string; fallbackUrl: string }> {
   const local = localUrlFor(track)
   if (local) {
     playerState.resolvedQuality = 'local'
-    return local
+    return { url: local, fallbackUrl: '' }
   }
   const remote = await playableUrl(track, playerState.quality)
   // 本机音乐已经是 127.0.0.1 直出，再套一层缓存代理没有意义，还会白占磁盘。
-  if (track.pluginId === 'local' || !settingsState.playbackCache) return remote
-  return cachedAudioUrl(remote)
+  if (track.pluginId === 'local' || !settingsState.playbackCache) {
+    return { url: remote, fallbackUrl: '' }
+  }
+  const cached = await cachedAudioUrl(remote)
+  return { url: cached, fallbackUrl: cached === remote ? '' : remote }
 }
 
 function releaseBlob(): void {
@@ -554,6 +557,7 @@ async function startPlayback(
   reloadRequired = false
   playerState.loading = true
   playerState.error = ''
+  playerState.resolvedQuality = ''
   playerState.currentTime = seekTo
   // 从这里开始到新源 metadata 到达，进度条只认 seekTo，不许读旧的 audio.currentTime。
   awaitingLoad = true
@@ -586,7 +590,7 @@ async function startPlayback(
   )
   void loadLyrics(track)
   try {
-    const url = await resolvePlaybackUrl(track)
+    const { url, fallbackUrl } = await resolvePlaybackUrls(track)
     if (token !== resolveToken) return
     releaseBlob()
     if (url.startsWith('blob:')) blobUrl = url
@@ -609,7 +613,16 @@ async function startPlayback(
       },
       { once: true }
     )
-    await audio!.play()
+    try {
+      await audio!.play()
+    } catch (error) {
+      // A broken local cache proxy must not make every online source unplayable.
+      if (!fallbackUrl || token !== resolveToken) throw error
+      logEvent('warn', 'PLAYER', '本机播放缓存不可用，改用原始音频地址', String(error))
+      audio!.src = fallbackUrl
+      applyPlaybackRate()
+      await audio!.play()
+    }
     // 旧请求不再拥有共享 audio，即使新歌曲用了同一 URL 也不能暂停它。
     // 用户主动取消已由 cancelPendingStart() 停止并卸载音源。
     if (token !== resolveToken) return
@@ -617,6 +630,7 @@ async function startPlayback(
     startPending = false
     playerState.playing = true
     playerState.loading = false
+    playerState.error = ''
     startBackgroundAudio(
       track,
       true,

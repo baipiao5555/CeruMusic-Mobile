@@ -9,10 +9,16 @@
 - 一次触摸若被部分 WebView 重复派发 `click`，只执行第一次；真实的第二次触摸仍正常生效。
 - 本地播放缓存代理请求失败时，自动改用音源返回的原始音频地址，避免缓存代理异常导致所有在线音源都不能播。
 - 换歌时清掉上一首遗留的解析音质/错误状态。
+- `SyncHttp` 前端代理改为共享注册，浏览器不再出现重复注册警告。
+- 修正 Android Manifest 中乱码的 Lyricon 描述和登录回调注释。
+- 播放缓存代理的原生上行地址统一经过 `NetworkSafety` 校验，私有/回环地址返回 403，不再进入上游请求。
+- AGP 8.2 的 release lint 无法读取 Lyricon 的 Kotlin 2.3 元数据；已关闭该过旧分析器，构建不再输出 metadata 警告，Web 与 Java 编译检查保留。
 
 ## 回归测试
 
 - `test-v270-bugfixes.mjs`：本机搜索、缓存 500 直连回退、手动音质、重复点击、单次切歌全部通过。
+- `test-v272-hardening.mjs`：Manifest 编码、`SyncHttp` 单次注册和缓存代理上行校验通过。
+- `test-sync-webdav.mjs`、`test-sync-two-way.mjs`、`test-webdav-media.mjs` 通过。
 - `test-search-suggestions.mjs`、`test-ui-races.mjs` 通过。
 - `test-search-entry-motion.mjs`、`test-tab-motion.mjs`、`test-player-morph.mjs`、`test-list-window.mjs` 通过。
 - `test-lx-plugin.mjs`、`test-lx-quality.mjs`、`test-lx-catalog.mjs`、`test-network-policy.mjs` 通过。
@@ -27,7 +33,7 @@
 ## 发布产物
 
 - APK：`D:\LX\CeruMusic-Mobile-v2.7.2.apk`
-- 大小：`7554484` 字节
-- SHA256：`50d2652e945576994c605505f508802e0b67154738a492c3bea8821f9095dffb`
+- 大小：`7554429` 字节
+- SHA256：`dad9f63d217dd63eda27c7093bcc8f57092ebcb40fd1a231fa64ae8d499144d2`
 
 versionName 2.7.2，versionCode 24052；签名证书与旧版本一致，可覆盖安装。

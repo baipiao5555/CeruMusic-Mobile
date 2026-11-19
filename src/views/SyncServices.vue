@@ -193,7 +193,7 @@ async function remove(): Promise<void> {
     </main>
   </div>
 
-  <div v-if="showAdd" class="sheet-mask" @click.self="!busy && (showAdd=false)">
+  <div v-if="showAdd" class="sheet-mask sheet-standalone" @click.self="!busy && (showAdd=false)">
     <section class="sheet add-sheet" role="dialog" aria-modal="true" aria-label="添加 WebDAV 连接"><div class="grab" /><header class="sh-head"><h2 class="sh-title">添加 WebDAV 连接</h2><button class="iconbtn quiet" :disabled="busy" aria-label="关闭连接配置" @click="showAdd=false"><Icon name="close" :size="18" /></button></header><div class="add-sheet-content">
       <p class="form-intro">连接 NAS 或自建服务，仅授权你填写的专用目录。</p>
       <div class="sync-form"><label>名称<input v-model="form.name" maxlength="80" placeholder="我的 WebDAV" /></label><label>专用目录地址<input v-model="form.address" type="url" autocomplete="off" placeholder="https://dav.example.com/CeruMusic/" /></label><label>用户名<input v-model="form.username" autocomplete="off" maxlength="512" /></label><label>密码 / 应用密码<input v-model="form.password" type="password" autocomplete="new-password" maxlength="8192" /></label><label class="check"><input v-model="form.confirmed" type="checkbox" />只授权此地址和目录，不访问上级目录或跟随重定向</label><label v-if="form.address.trim().toLowerCase().startsWith('http:')" class="check risk"><input v-model="form.allowInsecureHttp" type="checkbox" />如使用 HTTP：我了解账号与数据不加密，只用于可信网络</label></div>

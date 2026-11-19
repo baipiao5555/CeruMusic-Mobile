@@ -603,7 +603,7 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
     </div>
 
     <!-- 安装确认 -->
-    <div v-if="pending" class="sheet-mask" @click.self="pending = null">
+    <div v-if="pending" class="sheet-mask sheet-standalone" @click.self="pending = null">
       <div class="scrim" @click="pending = null" />
       <div class="sheet">
         <div class="grab" />
@@ -652,7 +652,7 @@ function configFields(plugin: PluginDescriptor): Array<{ key: string; value: any
     </div>
 
     <!-- 插件配置 -->
-    <div v-if="editing" class="sheet-mask" @click.self="editing = null">
+    <div v-if="editing" class="sheet-mask sheet-standalone" @click.self="editing = null">
       <div class="scrim" @click="editing = null" />
       <div class="sheet">
         <div class="grab" />

@@ -156,7 +156,7 @@ async function startImport(): Promise<void> {
 </script>
 
 <template>
-  <div class="sheet-mask" @click.self="emit('close')">
+  <div class="sheet-mask sheet-standalone" @click.self="emit('close')">
     <div class="scrim" @click="emit('close')" />
     <div class="sheet">
       <div class="grab" />

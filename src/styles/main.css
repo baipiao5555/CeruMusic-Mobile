@@ -1443,7 +1443,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   background: rgba(11, 23, 19, 0.38);
   -webkit-backdrop-filter: blur(2px);
   backdrop-filter: blur(2px);
-  animation: fade-in 0.18s ease;
 }
 .sheet {
   position: absolute;
@@ -1458,7 +1457,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   border-radius: var(--r-2xl) var(--r-2xl) 0 0;
   padding: 8px 0 calc(22px + var(--safe-bottom));
   box-shadow: 0 -18px 50px -18px rgba(0, 0, 0, 0.35);
-  animation: sheet-up 0.28s var(--e-out);
 }
 .sheet .grab {
   width: 38px;
@@ -1511,16 +1509,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   background: rgba(5, 15, 11, 0.45);
   -webkit-backdrop-filter: blur(3px);
   backdrop-filter: blur(3px);
-  animation: fade-in 0.18s ease;
 }
 .sheet-mask .sheet {
   position: relative;
   width: min(100%, 620px);
 }
+/* Only sheets without Vue Transition opt in to keyframes. Otherwise removing
+   enter-active restores the old keyframes and replays the entrance a second time. */
+.sheet-mask.sheet-standalone {
+  animation: fade-in 0.18s ease;
+}
+.sheet-mask.sheet-standalone .sheet {
+  animation: sheet-up 0.28s var(--e-out);
+}
 .sheet-pop-enter-active,
 .sheet-pop-leave-active {
   animation: none;
-  transition: opacity 0.2s linear;
+  transition: opacity var(--motion-sheet) linear;
 }
 .sheet-pop-enter-active .sheet,
 .sheet-pop-leave-active .sheet {
@@ -1723,6 +1728,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   .search-launch:active,
   .lyric-launch:active {
     transform: none;
+  }
+  .sheet-mask.sheet-standalone,
+  .sheet-mask.sheet-standalone .sheet {
+    animation: none;
   }
   .sheet-pop-enter-active,
   .sheet-pop-leave-active,

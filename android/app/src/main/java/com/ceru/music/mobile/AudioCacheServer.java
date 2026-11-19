@@ -145,6 +145,13 @@ public class AudioCacheServer {
                 writeError(out, 400, "unsupported url");
                 return;
             }
+            try {
+                NetworkSafety.validate(context, new URL(upstream));
+            } catch (Exception error) {
+                String message = error.getMessage();
+                writeError(out, 403, message == null ? "blocked url" : message);
+                return;
+            }
             String ext = query.get("x");
 
             File cacheFile = new File(dir, sha1(upstream) + ".bin");

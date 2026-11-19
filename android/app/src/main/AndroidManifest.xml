@@ -20,7 +20,7 @@
         <!-- Lyricon provider discovery -->
         <meta-data android:name="lyricon_module" android:value="true" />
         <meta-data android:name="lyricon_module_author" android:value="CeruMusic Mobile" />
-        <meta-data android:name="lyricon_module_description" android:value="婢滈煶姝岃瘝鍏变韩" />
+        <meta-data android:name="lyricon_module_description" android:value="澜音歌词共享" />
         <meta-data android:name="lyricon_module_tags" android:resource="@array/lyricon_module_tags" />
 
         <activity
@@ -36,7 +36,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 婢滈煶璐﹀彿鐧诲綍鍥炶皟锛歝erumusic://oauth/callback -->
+            <!-- 澜音账号登录回调：cerumusic://oauth/callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

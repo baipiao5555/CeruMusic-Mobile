@@ -45,9 +45,11 @@ const page = await context.newPage()
 const resolves = []
 let cacheRequests = 0
 let directRequests = 0
+let duplicateSyncHttpWarnings = 0
 page.on('console', message => {
   const match = message.text().match(/^QA_RESOLVE:(one|two):(128k|320k)$/)
   if (match) resolves.push({ id: match[1], quality: match[2] })
+  if (message.text().includes('SyncHttp') && message.text().includes('already registered')) duplicateSyncHttpWarnings += 1
 })
 
 try {
@@ -164,6 +166,7 @@ try {
     window.__ceruDebug.player.playerState.playing)
   assert.equal(resolves.length, 3, 'one next tap advances exactly one song')
   assert.equal(resolves[2].id, 'two')
+  assert.equal(duplicateSyncHttpWarnings, 0, 'SyncHttp JS proxy must be registered once')
   console.log('PASS one next-tap advances one song and performs one resolve')
   console.log(JSON.stringify({ resolves, cacheRequests, directRequests }))
 } finally {

@@ -1,6 +1,7 @@
-import { Capacitor, registerPlugin } from '@capacitor/core'
+import { Capacitor } from '@capacitor/core'
 import { secureStore } from '../native/secureStore'
 import { mainFrameCapability } from '../native/mainFrameCapability'
+import { nativeSyncHttp as native } from './nativeHttp'
 import { randomUUID } from '../../shims/crypto'
 import { exportLibrarySnapshot, parseLibrarySnapshot, commitLibrarySnapshot, applyLibrarySnapshot, snapshotCounts, snapshotTrackKey, type LibrarySnapshot, type SyncTombstone } from '../librarySnapshot'
 import { mergeSnapshots, snapshotsEqual, snapshotDocumentsEqual, type DeletionConflict, type MergeConflict, type MergeStats, type TombstoneCounts } from './merge'
@@ -84,13 +85,6 @@ interface StoredSyncEntry {
 interface StoredSyncState { version: 1; connections: Record<string, StoredSyncEntry> }
 interface RemoteState { missing: boolean; snapshot?: LibrarySnapshot; etag?: string; legacy?: boolean }
 interface Response { status: number; headers: Record<string, string>; body: string }
-interface NativeSyncHttp {
-  initialize(): Promise<void>
-  authorize(options: { connectionId: string; origin: string; basePath: string; confirmed: boolean; allowInsecureHttp: boolean; capability: string }): Promise<void>
-  revoke(options: { connectionId: string; capability: string }): Promise<void>
-  request(options: { connectionId: string; url: string; method: Method; body?: string; headers: Record<string, string>; timeoutMs: number; capability: string }): Promise<Response>
-}
-const native = registerPlugin<NativeSyncHttp>('SyncHttp')
 const approved = new Map<string, string>()
 const proofs = new Map<string, boolean>()
 const observed = new Map<string, string>()

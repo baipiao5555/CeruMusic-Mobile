@@ -1,6 +1,7 @@
-import { Capacitor, registerPlugin } from '@capacitor/core'
+import { Capacitor } from '@capacitor/core'
 import { secureStore } from '../native/secureStore'
 import { mainFrameCapability } from '../native/mainFrameCapability'
+import { nativeSyncHttp as native } from './nativeHttp'
 import { commitPlaylistImport, type PlaylistImportResult } from '../library'
 import type { Track } from '../track'
 import { listConnections, type WebDavConnection } from './webdav'
@@ -22,12 +23,6 @@ const AUDIO_EXTENSIONS = new Set([
   'mp3', 'flac', 'm4a', 'm4b', 'aac', 'ogg', 'oga', 'opus', 'wav', 'wma',
   'ape', 'aiff', 'aif', 'alac', 'mp4', 'dsf', 'dff'
 ])
-
-interface NativeSyncHttp {
-  initialize(): Promise<void>
-  authorize(options: { connectionId: string; origin: string; basePath: string; confirmed: boolean; allowInsecureHttp: boolean; capability: string }): Promise<void>
-  request(options: { connectionId: string; url: string; method: 'PROPFIND'; body?: string; headers: Record<string, string>; timeoutMs: number; capability: string }): Promise<DavResponse>
-}
 
 interface DavResponse {
   status: number
@@ -107,7 +102,6 @@ function fail(code: string, message: string): never {
   throw new WebDavMediaError(code, message)
 }
 
-const native = registerPlugin<NativeSyncHttp>('SyncHttp')
 const authorized = new Map<string, string>()
 const android = (): boolean => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'
 

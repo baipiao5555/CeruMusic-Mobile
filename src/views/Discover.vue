@@ -240,26 +240,18 @@ function playFavorite(index: number): void {
 async function restoreScroll(): Promise<void> {
   const target = lastScrollTop
   if (target <= 0) return
-  // 进场动画期间容器高度还是 0，赋值会被夹回 0，所以补几帧重试；
-  // 重试期间忽略 onScroll，否则被夹出来的 0 会把记住的位置冲掉。
+  // 新页面直接插入 DOM，等一次布局后恢复即可。不要在进场动画期间
+  // 连续读 scrollTop（会反复强制布局，是中低端安卓掉帧的常见来源）。
   await nextTick()
   restoring = true
-  let tries = 0
-  const restore = (): void => {
+  requestAnimationFrame(() => {
     const el = scrollEl.value
-    if (!el) {
-      restoring = false
-      return
-    }
-    el.scrollTop = target
-    if (Math.abs(el.scrollTop - target) > 2 && tries++ < 40) {
-      requestAnimationFrame(restore)
-    } else {
+    if (el) {
+      el.scrollTop = target
       lastScrollTop = target
-      restoring = false
     }
-  }
-  restore()
+    restoring = false
+  })
 }
 
 onMounted(async () => {

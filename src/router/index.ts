@@ -1,14 +1,19 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { routeDirection } from './transition'
+import Discover from '@/views/Discover.vue'
+import Search from '@/views/Search.vue'
+import Playlists from '@/views/Playlists.vue'
+import Library from '@/views/Library.vue'
+import Browse from '@/views/Browse.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/', name: 'discover', component: () => import('@/views/Discover.vue') },
+    { path: '/', name: 'discover', component: Discover },
     { path: '/daily', name: 'daily', component: () => import('@/views/DailyRecommendations.vue') },
-    { path: '/search', name: 'search', component: () => import('@/views/Search.vue') },
-    { path: '/playlists', name: 'playlists', component: () => import('@/views/Playlists.vue') },
-    { path: '/library', name: 'library', component: () => import('@/views/Library.vue') },
+    { path: '/search', name: 'search', component: Search },
+    { path: '/playlists', name: 'playlists', component: Playlists },
+    { path: '/library', name: 'library', component: Library },
     { path: '/player', name: 'player', component: () => import('@/views/Player.vue') },
     { path: '/settings', name: 'settings', component: () => import('@/views/Settings.vue') },
     { path: '/theme-background', name: 'theme-background', component: () => import('@/views/ThemeBackground.vue') },
@@ -22,12 +27,9 @@ const router = createRouter({
     { path: '/update', name: 'update', component: () => import('@/views/Update.vue') },
     { path: '/logs', name: 'logs', component: () => import('@/views/Logs.vue') },
     { path: '/playlist/:id', name: 'playlist', component: () => import('@/views/PlaylistDetail.vue') },
-    { path: '/browse', name: 'browse', component: () => import('@/views/Browse.vue') },
+    { path: '/browse', name: 'browse', component: Browse },
     { path: '/:pathMatch(.*)*', redirect: '/' }
-  ],
-  scrollBehavior() {
-    return { top: 0 }
-  }
+  ]
 })
 
 // Vue Router's hash history replaces state on every navigation, so

@@ -710,6 +710,22 @@ onDeactivated(() => {
   resumeSubmittedSearch = loading.value
   stopPendingSearch()
 })
+// 搜索页现在常驻挂载，不再依赖 keep-alive 的 activated/deactivated；
+// 进入/离开搜索路由时手动执行同样的恢复与清理。
+watch(
+  () => route.path === '/search',
+  (active) => {
+    if (!active) {
+      resumeSubmittedSearch = loading.value
+      stopPendingSearch()
+      return
+    }
+    if (tab.value === 'playlists') return
+    if (resumeSubmittedSearch || (searched.value && searchedProviderKey !== providerKey.value)) {
+      void runSearch()
+    }
+  }
+)
 onBeforeUnmount(stopPendingSearch)
 </script>
 

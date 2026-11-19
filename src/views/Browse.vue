@@ -191,6 +191,16 @@ watch(() => [providerKey.value, id.value, kind.value, route.query.resource], () 
   if (catalogMode.value) void loadCatalog()
   else void load()
 }, { immediate: true })
+// 音乐馆保留页面状态；重新进入时仍刷新内容，离开时使在途请求失效。
+watch(() => route.path === '/browse', (active) => {
+  if (!active) {
+    requestSeq += 1
+    categorySeq += 1
+    return
+  }
+  if (catalogMode.value) void loadCatalog()
+  else void load()
+})
 onBeforeUnmount(() => { requestSeq += 1; categorySeq += 1 })
 </script>
 

@@ -294,6 +294,12 @@ ion-app {
   color: var(--ink);
 }
 
+/* 主 Tab 常驻布局，只切换可见性；避免首次点开时临时排版整页。 */
+.screen.tab-screen-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .screen.dark {
   background: #08100e;
   color: #eaf2ee;
@@ -1663,120 +1669,38 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 }
 
 /* ---------- 20. 动效 / 页面转场 ---------- */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.18s ease;
+/*
+ * 页面切换只移动新页面这一层，旧页面立即从 DOM 移除。
+ * 不用全屏 opacity 交叉淡化：两张 1080p 页面叠在一起时，安卓 WebView
+ * 需要同时合成两层内容、自定义背景和遮罩，最容易在中低端机上掉帧。
+ */
+.screen.route-motion-tab {
+  animation: route-tab-in 0.16s var(--e-out) both;
 }
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+.screen.route-motion-forward {
+  animation: route-forward-in 0.19s var(--e-out) both;
 }
-
-.tab-fade-enter-active,
-.tab-fade-leave-active {
-  position: absolute;
-  inset: 0;
-  background: var(--porcelain);
-  backface-visibility: hidden;
+.screen.route-motion-back {
+  animation: route-back-in 0.19s var(--e-out) both;
 }
-.tab-fade-enter-active {
-  z-index: 2;
-  will-change: opacity;
-  transition: opacity var(--motion-tab) linear;
+.screen.route-motion-search {
+  animation: route-search-in 0.19s var(--e-out) both;
 }
-.tab-fade-leave-active {
-  z-index: 1;
-  pointer-events: none;
-  transition: opacity var(--motion-tab) linear;
+@keyframes route-tab-in {
+  from { transform: translate3d(0, 8px, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
-.tab-fade-enter-from {
-  opacity: 0;
+@keyframes route-forward-in {
+  from { transform: translate3d(16px, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
-.tab-fade-leave-to {
-  opacity: 0.98;
+@keyframes route-back-in {
+  from { transform: translate3d(-12px, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
-
-.page-forward-enter-active,
-.page-forward-leave-active,
-.page-back-enter-active,
-.page-back-leave-active {
-  position: absolute;
-  inset: 0;
-  background: var(--porcelain);
-  backface-visibility: hidden;
-}
-.page-forward-enter-active,
-.page-back-enter-active {
-  z-index: 2;
-  will-change: opacity;
-  transition: opacity var(--motion-page) linear;
-}
-.page-forward-leave-active,
-.page-back-leave-active {
-  z-index: 1;
-  transition: opacity 0.16s linear;
-  pointer-events: none;
-}
-.page-forward-enter-from {
-  opacity: 0;
-}
-.page-forward-leave-to {
-  opacity: 0.92;
-}
-.page-back-enter-from {
-  opacity: 0;
-}
-.page-back-leave-to {
-  opacity: 0.92;
-}
-
-/* 搜索是二级页：旧页保持原位，新页只做短距离上移和淡入。 */
-.search-enter-enter-active,
-.search-enter-leave-active {
-  position: absolute;
-  inset: 0;
-  background: var(--porcelain);
-  backface-visibility: hidden;
-}
-.search-enter-enter-active {
-  z-index: 2;
-  will-change: opacity;
-  transition: opacity var(--motion-page) linear;
-}
-.search-enter-leave-active {
-  z-index: 1;
-  transition: opacity 0.16s linear;
-  pointer-events: none;
-}
-.search-enter-enter-from {
-  opacity: 0;
-}
-.search-enter-leave-to {
-  opacity: 0.92;
-}
-
-/* 播放器走封面连续展开时，页面本身只淡入，避免和封面位移叠加。 */
-.player-morph-enter-active,
-.player-morph-leave-active {
-  position: absolute;
-  inset: 0;
-  background: #192d48;
-  backface-visibility: hidden;
-}
-.player-morph-enter-active {
-  z-index: 2;
-  transition: opacity 0.3s ease;
-}
-.player-morph-leave-active {
-  z-index: 1;
-  transition: opacity 0.18s linear;
-  pointer-events: none;
-}
-.player-morph-enter-from {
-  opacity: 0;
-}
-.player-morph-leave-to {
-  opacity: 0.86;
+@keyframes route-search-in {
+  from { transform: translate3d(0, 14px, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1803,29 +1727,19 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
   .sheet-pop-enter-active,
   .sheet-pop-leave-active,
   .sheet-pop-enter-active .sheet,
-  .sheet-pop-leave-active .sheet,
-  .search-enter-enter-active,
-  .search-enter-leave-active,
-  .player-morph-enter-active,
-  .player-morph-leave-active,
-  .page-forward-enter-active,
-  .page-forward-leave-active,
-  .page-back-enter-active,
-  .page-back-leave-active {
+  .sheet-pop-leave-active .sheet {
     transition: opacity 0.12s ease;
   }
-  .search-enter-enter-from,
-  .search-enter-leave-to,
-  .player-morph-enter-from,
-  .player-morph-leave-to,
   .sheet-pop-enter-from .sheet,
-  .sheet-pop-leave-to .sheet,
-  .page-forward-enter-from,
-  .page-forward-leave-to,
-  .page-back-enter-from,
-  .page-back-leave-to {
+  .sheet-pop-leave-to .sheet {
     transform: none;
     opacity: 0.92;
+  }
+  .screen.route-motion-tab,
+  .screen.route-motion-forward,
+  .screen.route-motion-back,
+  .screen.route-motion-search {
+    animation: none;
   }
 }
 

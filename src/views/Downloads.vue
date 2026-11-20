@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
+import MusicStorageCard from '@/components/MusicStorageCard.vue'
+import { musicFoldersState } from '@/core/local/folders'
 import {
   cancelTask,
   clearCompleted,
   downloadState,
   downloadSummary,
+  downloadLocation,
+  exportLegacyDownload,
+  isLegacyDownload,
   removeTask,
   retryTask,
   type DownloadTask
@@ -18,6 +23,15 @@ import { confirmAction } from '@/core/confirm'
 import { openSearch } from '@/core/searchEntry'
 
 const router = useRouter()
+const exporting = ref('')
+async function exportOld(task: DownloadTask): Promise<void> {
+  if (exporting.value) return
+  if (!await confirmAction({ title:'导出旧版下载？', body:'复制到 '+musicFoldersState.download.label+'。旧文件保留，不会删除。', confirmText:'复制并导出' })) return
+  exporting.value = task.id
+  try { await exportLegacyDownload(task); notify('导出成功：'+downloadLocation(task)) }
+  catch (error: any) { notify('导出未完成：'+(error?.message || '无法写入文件夹')) }
+  finally { exporting.value = '' }
+}
 const summary = computed(() => downloadSummary())
 const tasks = computed(() => downloadState.tasks)
 
@@ -101,7 +115,7 @@ async function remove(task: DownloadTask): Promise<void> {
     danger: completed
   })
   if (!ok) return
-  await removeTask(task.id, true)
+  try { await removeTask(task.id, completed) } catch (error: any) { notify('未能删除：'+(error?.message || '请检查文件夹权限')) }
 }
 
 async function clearAll(): Promise<void> {
@@ -113,8 +127,7 @@ async function clearAll(): Promise<void> {
     danger: true
   })
   if (!ok) return
-  await clearCompleted()
-  notify('已清理下载文件')
+  try { await clearCompleted(); notify('已清理下载文件') } catch (error: any) { notify('部分文件未能删除：'+(error?.message || '请检查文件夹权限')) }
 }
 
 function queueHint(task: DownloadTask): string {
@@ -136,7 +149,7 @@ function completedMeta(task: DownloadTask): string {
 
 <template>
   <div class="screen">
-    <div class="scroll safe-t-lg">
+    <div class="scroll safe-t-lg downloads-scroll">
       <div class="navrow">
         <button class="iconbtn quiet" aria-label="返回" @click="router.back()">
           <Icon name="back" :size="20" />
@@ -161,6 +174,7 @@ function completedMeta(task: DownloadTask): string {
         </div>
       </header>
 
+      <MusicStorageCard />
       <template v-if="tasks.length">
         <div class="sum">
           <div class="cell">
@@ -260,6 +274,7 @@ function completedMeta(task: DownloadTask): string {
                   <span v-if="qualityTag(task)" class="tag">{{ qualityTag(task) }}</span>
                 </div>
                 <div class="ptt2 truncate">{{ completedMeta(task) }}</div>
+                <p class="download-location" :title="task.path">{{ downloadLocation(task) }}<button v-if="isLegacyDownload(task)" :disabled="!!exporting" @click="exportOld(task)">{{ exporting===task.id ? '导出中…' : '导出' }}</button></p>
               </div>
               <button class="ibtn" aria-label="播放" @click="play(task)">
                 <Icon name="play" :size="15" />
@@ -272,7 +287,7 @@ function completedMeta(task: DownloadTask): string {
         </section>
 
         <p class="foot">
-          文件保存在应用专属目录，只能在本应用内播放；卸载应用或在系统设置中清除数据会一并删除。<br />
+          新下载保存在上方共享目录或你选择的文件夹，可在文件管理器中找到。旧版应用目录的歌曲可点“导出”，复制后旧文件仍保留。<br />
           下载中退出应用的任务，下次启动会标记为「上次下载被中断」。
         </p>
       </template>
@@ -288,6 +303,8 @@ function completedMeta(task: DownloadTask): string {
 </template>
 
 <style scoped>
+.download-location{font-size:10px;line-height:1.5;color:var(--ink-3);margin:4px 0 0;overflow-wrap:anywhere;user-select:text}.download-location button{min-height:32px;padding:0 8px;color:var(--brand-strong);font-size:11px;margin-left:4px}
+
 .navrow {
   display: flex;
   align-items: center;
@@ -567,5 +584,8 @@ function completedMeta(task: DownloadTask): string {
 }
 .empty {
   padding-top: 96px;
+}
+@media(min-width:768px){
+  .downloads-scroll>.music-storage,.sum,.psec,.foot{max-width:920px;width:calc(100% - var(--pad)*2);margin-left:auto;margin-right:auto}
 }
 </style>

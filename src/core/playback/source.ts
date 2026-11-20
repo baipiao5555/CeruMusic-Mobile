@@ -1,63 +1,73 @@
 import { Capacitor } from '@capacitor/core'
 import { allProviders, invokeProvider, type ProviderHandle } from '../plugin/manager'
-import { selectPlaybackQuality } from '../quality'
+import { playbackQualityCandidates } from '../quality'
 import { localAudioUrl } from '../cache/audioCache'
 import type { Track } from '../track'
 import { isWebDavTrack, resolveWebDavTrackSource } from '../sync/webdavMedia'
 
 export function providerForTrack(track: Track): ProviderHandle | undefined {
-  return (
-    allProviders(true).find(
-      (provider) =>
-        provider.providerId === track.providerId && provider.pluginId === track.pluginId
-    ) ?? allProviders().find((provider) => provider.providerId === track.providerId)
-  )
+  const all = allProviders(true)
+  const exact = all.find(p => p.providerId === track.providerId && p.pluginId === track.pluginId)
+  return exact || (!track.pluginId ? allProviders().find(p => p.providerId === track.providerId) : undefined)
 }
 
 export interface TrackSource {
   url: string
   headers?: Record<string, string>
+  quality?: string
 }
 
-/** Asks the owning plugin for a playable/downloadable URL. */
-export async function resolveTrackSource(
-  track: Track,
-  requestedQuality = ''
-): Promise<TrackSource> {
-  // WebDAV 音乐库：地址由连接目录 + 相对路径重建，Basic 凭据每次从安全仓库读取。
-  // 带 Authorization 的音频会由 playableUrl 完整下载为 blob 后再播放，不是 Range 边下边播。
-  if (isWebDavTrack(track)) return resolveWebDavTrackSource(track)
-  // 本机音乐：不走插件，直接交给本机小服务按 MediaStore id 出流。
-  if (track.pluginId === 'local') {
-    const url = await localAudioUrl(track.id)
-    if (!url) throw new Error('本机音乐服务没有启动')
-    return { url }
-  }
+/** Intersect the owning source capabilities with the song, never advertise unsupported tiers. */
+export function trackQualityCandidates(track: Track, requested = ''): Array<string | undefined> {
   const provider = providerForTrack(track)
   if (!provider) throw new Error('音源插件未启用')
   const order = provider.qualities.length ? provider.qualities : track.qualities
-  const available = track.qualities.length ? track.qualities : provider.qualities
-  const quality = selectPlaybackQuality(order, available, requestedQuality)
-  const result = await invokeProvider(provider, 'tracks.resolve', [track.ref, quality])
-  if (!result?.ok) throw new Error(result?.error?.message || '无法获取播放地址')
-  return { url: result.url, headers: result.requestHeaders }
+  const available = provider.qualities.length && track.qualities.length ? provider.qualities.filter(q => track.qualities.includes(q)) : track.qualities.length ? track.qualities : provider.qualities
+  if (order.length && track.qualities.length && !available.length) throw new Error('歌曲与音源没有共同支持的音质')
+  return playbackQualityCandidates(order, available, requested)
 }
-
-/** Returns a URL the <audio> element can load, downloading to a blob when headers are needed. */
-export async function playableUrl(track: Track, requestedQuality = ''): Promise<string> {
-  const source = await resolveTrackSource(track, requestedQuality)
-  if (source.headers && Object.keys(source.headers).length) {
-    return fetchWithHeaders(source.url, source.headers)
+/** Auto URL acquisition falls back too, so download and playback do not have conflicting rules. */
+export async function resolveTrackSource(track: Track, requestedQuality = '', signal?: AbortSignal): Promise<TrackSource> {
+  signal?.throwIfAborted()
+  if (isWebDavTrack(track)) return resolveWebDavTrackSource(track)
+  if (track.pluginId === 'local') {
+    if (track.localPath) return { url: Capacitor.convertFileSrc(track.localPath), quality:'local' }
+    const url = await localAudioUrl(track.id)
+    if (!url) throw new Error('本机音乐服务没有启动')
+    return { url, quality:'local' }
   }
-  return source.url
+  const provider = providerForTrack(track)
+  if (!provider) throw new Error('音源插件未启用')
+  let failure: unknown
+  for (const quality of trackQualityCandidates(track, requestedQuality)) {
+    signal?.throwIfAborted()
+    try {
+      const result = await invokeProvider(provider, 'tracks.resolve', [track.ref, quality], signal)
+      signal?.throwIfAborted()
+      if (!result?.ok || typeof result.url !== 'string' || !result.url) throw new Error(result?.error?.message || '无法获取播放地址')
+      return { url: result.url, headers: result.requestHeaders, quality }
+    } catch (error) { signal?.throwIfAborted(); failure = error }
+  }
+  throw failure || new Error('没有可用的音质')
+}
+export async function playableSource(track: Track, requestedQuality = '', signal?: AbortSignal): Promise<TrackSource> {
+  const source = await resolveTrackSource(track, requestedQuality, signal)
+  signal?.throwIfAborted()
+  if (source.headers && Object.keys(source.headers).length) return { ...source, url:await fetchWithHeaders(source.url, source.headers, signal) }
+  return source
+}
+export async function playableUrl(track: Track, requestedQuality = ''): Promise<string> {
+  return (await playableSource(track, requestedQuality)).url
 }
 
-async function fetchWithHeaders(url: string, headers: Record<string, string>): Promise<string> {
+async function fetchWithHeaders(url: string, headers: Record<string, string>, signal?: AbortSignal): Promise<string> {
   const { CapacitorHttp } = await import('@capacitor/core')
   if (!Capacitor.isNativePlatform()) {
-    const response = await fetch(url, { headers })
+    const response = await fetch(url, { headers, signal })
     if (!response.ok) throw new Error('音频下载失败: HTTP ' + response.status)
-    return URL.createObjectURL(await response.blob())
+    const blob = await response.blob(); signal?.throwIfAborted()
+    signal?.throwIfAborted()
+  return URL.createObjectURL(blob)
   }
   const response = await CapacitorHttp.request({
     url,
@@ -65,6 +75,7 @@ async function fetchWithHeaders(url: string, headers: Record<string, string>): P
     headers,
     responseType: 'arraybuffer'
   })
+  signal?.throwIfAborted()
   if (response.status < 200 || response.status >= 300) {
     throw new Error('音频下载失败: HTTP ' + response.status)
   }
@@ -79,5 +90,6 @@ async function fetchWithHeaders(url: string, headers: Record<string, string>): P
   } else {
     blob = new Blob([JSON.stringify(response.data)], { type: 'audio/mpeg' })
   }
+  signal?.throwIfAborted()
   return URL.createObjectURL(blob)
 }

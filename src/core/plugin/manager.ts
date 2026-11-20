@@ -10,6 +10,9 @@ import { accountSurfaceEvent, type AccountSurfaceSpec } from './accountSurface'
 import { invalidateOwnerResources } from '../resourceNavigation'
 import { secureStore } from '../native/secureStore'
 import { inspectLxPlugin } from './lx'
+import { normalizeKnownPluginCode } from './compat'
+export { normalizeKnownPluginCode as preparePluginCode } from './compat'
+import { repositoryPath, requestRepository } from './distribution'
 
 interface PluginProviderInfo {
   id: string
@@ -44,6 +47,10 @@ export interface PluginDescriptor {
   sourceUrl?: string
   /** Effective URL used for auto-update; local files may get this from metadata. */
   updateUrl?: string
+  installOrigin?: 'market' | 'url' | 'file' | 'unknown'
+  catalogKey?: string
+  artifactSha256?: string
+  hasRollback?: boolean
   format?: 'lx'
 }
 
@@ -59,14 +66,21 @@ interface PluginRecord {
   sourceUrl?: string
   updateUrl?: string
   loadError?: string
+  installOrigin?: 'market' | 'url' | 'file' | 'unknown'
+  catalogKey?: string
+  artifactSha256?: string
+  previous?: PluginRecord
+  previousConfig?: Record<string, any>
 }
 
+export interface SearchSourceSelection { pluginId: string; providerId: string }
 export const pluginState = reactive({
   plugins: [] as PluginDescriptor[],
   loading: true,
   initialized: false,
   selectedProvider: '' as string,
   selectedSourcePlugin: {} as Record<string, string>,
+  searchSources: [] as SearchSourceSelection[],
   accountEpochs: {} as Record<string, number>
 })
 
@@ -210,6 +224,10 @@ function descriptorFor(record: PluginRecord, host?: PluginHost): PluginDescripto
     surfaces: manifest.modules?.surfaces ?? [],
     sourceUrl: record.sourceUrl,
     updateUrl: record.updateUrl ?? record.sourceUrl,
+    installOrigin: record.installOrigin,
+    catalogKey: record.catalogKey,
+    artifactSha256: record.artifactSha256,
+    hasRollback: Boolean(record.previous),
     format: manifest.format
   }
 }
@@ -218,16 +236,27 @@ function refresh(): void {
   pluginState.plugins = [...records.values()]
     .sort((a, b) => a.order - b.order)
     .map((record) => descriptorFor(record, hosts.get(record.pluginId)))
-  const selected = pluginState.selectedProvider
-  const providers = allProviders()
-  if (!selected || !providers.some((item) => item.providerId === selected)) {
-    pluginState.selectedProvider = providers[0]?.providerId ?? ''
-  }
+  const selected = pluginState.selectedProvider, active = allProviders(true)
+  const owner = pluginState.selectedSourcePlugin[selected]
+  if (active.some(p => p.providerId === selected && (!owner || p.pluginId === owner))) return
+  const eligible = pluginState.searchSources.length ? active.filter(p => pluginState.searchSources.some(s => s.pluginId === p.pluginId && s.providerId === p.providerId)) : active
+  const platform = (id: string) => ({kw:'kuwo',kg:'kugou',tx:'qq',wy:'netease',mg:'migu'} as Record<string,string>)[id] || id
+  const next = eligible.find(p => platform(p.providerId) === platform(selected)) || eligible[0]
+  pluginState.selectedProvider = next?.providerId || ''
+  if (next) pluginState.selectedSourcePlugin[next.providerId] = next.pluginId
+
 }
 
 async function save(record: PluginRecord): Promise<void> {
-  records.set(record.pluginId, record)
   await idb.set('plugins', record.pluginId, record)
+  records.set(record.pluginId, record)
+}
+
+const pluginOperations = new Set<string>()
+async function withPluginOperation<T>(id: string, operation: () => Promise<T>): Promise<T> {
+  if (pluginOperations.has(id)) throw new Error('这个插件正在安装、更新或管理，请稍后重试')
+  pluginOperations.add(id)
+  try { return await operation() } finally { pluginOperations.delete(id) }
 }
 
 async function getConfig(pluginId: string): Promise<Record<string, any>> {
@@ -288,6 +317,20 @@ export function allProviders(includeAlternatives = false): ProviderHandle[] {
   return result
 }
 
+/** Explicit multi-source search scope, separate from default provider and plugin enable flags. */
+export function searchProviders(): ProviderHandle[] {
+  if (pluginState.searchSources.length) return allProviders(true).filter(p => pluginState.searchSources.some(s => s.pluginId === p.pluginId && s.providerId === p.providerId))
+  const providers = allProviders()
+  const selected = providers.find(p => p.providerId === pluginState.selectedProvider && (!pluginState.selectedSourcePlugin[p.providerId] || pluginState.selectedSourcePlugin[p.providerId] === p.pluginId))
+  return selected ? [selected] : providers.slice(0, 1)
+}
+export function setSearchSources(sources: SearchSourceSelection[]): void {
+  const active = allProviders(true)
+  if (!sources.length || sources.some(s => !active.some(p => p.pluginId === s.pluginId && p.providerId === s.providerId))) throw new Error('请选择至少一个已启用的平台来源')
+  const unique = sources.filter((s, i) => sources.findIndex(x => x.pluginId === s.pluginId && x.providerId === s.providerId) === i).map(s => ({ pluginId:s.pluginId, providerId:s.providerId }))
+  localStorage.setItem('ceru.searchSources.v1', JSON.stringify(unique))
+  pluginState.searchSources = unique
+}
 export interface PlaylistImporterHandle {
   pluginId: string
   pluginName: string
@@ -367,7 +410,9 @@ export async function importPlaylist(
   if (!host) throw new Error('插件未运行，请先启用插件')
   // 桌面端把内容原样交给插件；部分插件会从整段分享文案里解析参数。
   // 先按原样调用，失败后再用提取出的链接/ID 重试。
-  const candidates = [value.trim().slice(0, 8192), normalizePlaylistInput(value)].filter(
+  const raw = value.trim().slice(0, 8192)
+  // LX validates the platform URL itself; never retry a foreign URL as a bare ID.
+  const candidates = (pluginState.plugins.find(p => p.pluginId === importer.pluginId)?.format === 'lx' ? [raw] : [raw, normalizePlaylistInput(value)]).filter(
     (item, index, list) => item && list.indexOf(item) === index
   )
   let lastError: unknown
@@ -388,6 +433,7 @@ async function importPlaylistWith(
 ): Promise<ImportedPlaylist> {
   const tracks: Track[] = []
   const seen = new Set<string>()
+  const seenCursors = new Set<string>()
   let cursor: string | undefined
   let name = importer.title
   for (let page = 0; page < 50; page++) {
@@ -406,7 +452,9 @@ async function importPlaylistWith(
     }
     cursor = result?.nextCursor
     if (!cursor) break
-    if (tracks.length >= 5000) break
+    if (seenCursors.has(cursor)) throw new Error('歌单分页游标重复，导入已取消')
+    seenCursors.add(cursor)
+    if (tracks.length >= 5000 || page === 49) throw new Error('歌单超过 5000 首导入上限，未提交不完整歌单')
   }
   return { name, tracks }
 }
@@ -424,6 +472,8 @@ export async function initPlugins(): Promise<void> {
         )
       }
       selectedProvider = localStorage.getItem('ceru.selectedProvider') || ''
+      const scope = JSON.parse(localStorage.getItem('ceru.searchSources.v1') || '[]')
+      if (Array.isArray(scope) && scope.length <= 200) pluginState.searchSources = scope.filter(x => typeof x?.pluginId === 'string' && typeof x?.providerId === 'string').map(x => ({pluginId:x.pluginId,providerId:x.providerId}))
     } catch {}
     const list = await idb.all<PluginRecord>('plugins')
     for (const record of list) {
@@ -477,12 +527,25 @@ export async function installPlugin(
     grantDeclared?: boolean
     sourceUrl?: string
     updateUrl?: string
+    installOrigin?: 'market' | 'url' | 'file' | 'unknown'
+    catalogKey?: string
   } = {}
 ): Promise<PluginDescriptor> {
+  if (new TextEncoder().encode(code).byteLength > 16 * 1024 * 1024) throw new Error('插件文件过大')
+  code = await normalizeKnownPluginCode(code)
   const manifest = inspectPlugin(code)
+  if (typeof manifest.id !== 'string' || !manifest.id || !Array.isArray(manifest.permissions || [])) throw new Error('插件声明缺少有效 ID 或权限清单')
   if (manifest.format !== 'lx' && manifest.manifestVersion !== 2) throw new Error('只支持澜音 v2 插件或洛雪音源')
   const pluginId = (await sha256Hex(manifest.id)).slice(0, 32)
-  const existing = records.get(pluginId)
+  return withPluginOperation(pluginId, async () => {
+  const original = records.get(pluginId)
+  const existing: PluginRecord | undefined = original ? JSON.parse(JSON.stringify(original)) : undefined
+  if (existing && (existing.manifest.publisher || existing.manifest.author || '') !== (manifest.publisher || manifest.author || '')) {
+    throw new Error('同 ID 插件的发布身份发生变化，不能自动覆盖；请核对来源')
+  }
+  const configBefore = existing ? await getConfig(pluginId) : {}
+  const selectedBefore = pluginState.selectedProvider
+  const ownerBefore = pluginState.selectedSourcePlugin[selectedBefore] || allProviders().find(p => p.providerId === selectedBefore)?.pluginId
   const declarations = manifest.permissions ?? []
   const grants = options.grantDeclared === false
     ? existing?.grants ?? []
@@ -493,47 +556,130 @@ export async function installPlugin(
     pluginId,
     code,
     manifest,
-    enabled: existing?.enabled ?? false,
+    enabled: options.enable ?? existing?.enabled ?? false,
     order: existing?.order ?? records.size,
     grants,
     denied: existing?.denied ?? [],
     installedAt: existing?.installedAt ?? Date.now(),
-    sourceUrl: options.sourceUrl ?? existing?.sourceUrl,
+    sourceUrl: options.installOrigin === 'file' ? undefined : options.sourceUrl ?? existing?.sourceUrl,
     updateUrl:
       options.updateUrl ??
       options.sourceUrl ??
       existing?.updateUrl ??
-      manifestUpdateUrl(manifest)
+      manifestUpdateUrl(manifest),
+    installOrigin: options.installOrigin ?? existing?.installOrigin ?? (options.sourceUrl ? 'url' : 'file'),
+    catalogKey: options.catalogKey ?? existing?.catalogKey,
+    artifactSha256: await sha256Hex(code),
+    previous: existing ? { ...existing, previous: undefined, previousConfig: undefined } : undefined,
+    previousConfig: existing ? configBefore : undefined
   }
   const oldHost = hosts.get(pluginId)
-  if (oldHost) {
-    hosts.delete(pluginId)
-    await oldHost.dispose()
-  }
-  await save(record)
-  refresh()
-  if (options.enable !== false) {
-    try {
-      await enablePlugin(pluginId)
-    } catch (error) {
-      if (existing) {
-        await save(existing)
-        refresh()
-        if (existing.enabled) await enablePlugin(pluginId).catch(() => undefined)
-      }
-      throw error
+  let saved = false, disposed = false
+  try {
+    // Persist first. Quota/storage failures must not stop the currently working host.
+    await save(record); saved = true
+    if (oldHost) { hosts.delete(pluginId); disposed = true; await oldHost.dispose() }
+    refresh()
+    if (options.enable !== false && (options.enable !== undefined || !existing || existing.enabled)) await enablePluginInternal(pluginId)
+    if (selectedBefore && allProviders(true).some(p => p.providerId === selectedBefore && (!ownerBefore || p.pluginId === ownerBefore))) {
+      selectProvider(selectedBefore, ownerBefore)
     }
+    return descriptorFor(record, hosts.get(pluginId))
+  } catch (error: any) {
+    if (!saved) throw error
+    const failedHost = hosts.get(pluginId)
+    hosts.delete(pluginId)
+    await failedHost?.dispose().catch(() => undefined)
+    try {
+      if (existing) {
+        await save(existing); await saveConfig(pluginId, configBefore)
+        if (existing.enabled && disposed) await enablePluginInternal(pluginId)
+      } else { await idb.del('plugins', pluginId); records.delete(pluginId) }
+      refresh()
+      if (selectedBefore && allProviders(true).some(p => p.providerId === selectedBefore && (!ownerBefore || p.pluginId === ownerBefore))) selectProvider(selectedBefore, ownerBefore)
+    } catch (restoreError: any) { throw new Error(`${error?.message || error}；旧版恢复失败：${restoreError?.message || restoreError}`) }
+    throw error
   }
-  return descriptorFor(record, hosts.get(pluginId))
+  })
 }
 
-function comparePluginVersions(a: string, b: string): number {
-  const left = String(a ?? '').match(/\d+/g)?.map(Number) ?? []
-  const right = String(b ?? '').match(/\d+/g)?.map(Number) ?? []
-  const length = Math.max(left.length, right.length)
-  for (let index = 0; index < length; index += 1) {
-    const diff = (left[index] ?? 0) - (right[index] ?? 0)
+export async function restorePluginPrevious(pluginId: string): Promise<PluginDescriptor> {
+  return withPluginOperation(pluginId, async () => {
+    const current = records.get(pluginId), previous = current?.previous
+    if (!current || !previous) throw new Error('没有可恢复的上一版插件')
+    if (inspectPlugin(previous.code).id !== current.manifest.id) throw new Error('恢复文件身份不一致')
+    const config = await getConfig(pluginId)
+    await save(previous)
+    const host = hosts.get(pluginId); hosts.delete(pluginId)
+    try {
+      await host?.dispose()
+      await saveConfig(pluginId, current.previousConfig || {})
+      if (previous.enabled) await enablePluginInternal(pluginId)
+      refresh(); return descriptorFor(previous, hosts.get(pluginId))
+    } catch (error) {
+      const failedHost = hosts.get(pluginId); hosts.delete(pluginId)
+      await failedHost?.dispose().catch(() => undefined)
+      await save(current); await saveConfig(pluginId, config)
+      if (current.enabled) await enablePluginInternal(pluginId)
+      refresh(); throw error
+    }
+  })
+}
+
+export interface PluginUpdateCandidate {
+  pluginId: string; code: string; manifest: any; previousVersion: string; version: string
+  previousHash: string; contentHash: string; versionOrder: number; contentChanged: boolean
+  permissionsChanged: boolean; removedProviders: string[]
+}
+export async function previewPluginUpdate(pluginId: string): Promise<PluginUpdateCandidate> {
+  const record = records.get(pluginId)
+  if (!record) throw new Error('插件不存在')
+  const url = record.updateUrl || record.sourceUrl
+  if (!url) throw new Error('没有更新地址；可在来源详情绑定同一插件的文件链接')
+  const code = await fetchPluginCode(url), manifest = inspectPlugin(code)
+  if (manifest.id !== record.manifest.id) throw new Error('更新文件与已安装音源 ID 不一致')
+  if ((manifest.publisher || manifest.author || '') !== (record.manifest.publisher || record.manifest.author || '')) throw new Error('更新文件发布身份发生变化，需人工核对')
+  const permissionKeys = (m: any) => (m.permissions || []).map((p: any) => `${p.key}:${p.name}:${stableScope(p.scope || {})}`).sort()
+  const previousHash = await sha256Hex(record.code), contentHash = await sha256Hex(code)
+  const nextProviders = new Set((manifest.contributes?.providers || []).map((p: any) => p.id))
+  return { pluginId, code, manifest, previousVersion: record.manifest.version, version: manifest.version,
+    previousHash, contentHash, versionOrder: comparePluginVersions(manifest.version, record.manifest.version),
+    contentChanged: previousHash !== contentHash,
+    permissionsChanged: permissionKeys(manifest).some((p: string) => !permissionKeys(record.manifest).includes(p)),
+    removedProviders: manifest.format === 'lx' ? [] : (record.manifest.contributes?.providers || []).filter((p: any) => !nextProviders.has(p.id)).map((p: any) => p.name || p.id) }
+}
+export async function applyPluginUpdate(candidate: PluginUpdateCandidate, confirmPermissions = false): Promise<PluginDescriptor> {
+  const record = records.get(candidate.pluginId)
+  if (!record || await sha256Hex(record.code) !== candidate.previousHash || await sha256Hex(candidate.code) !== candidate.contentHash) throw new Error('插件或候选文件已经变化，请重新检查并确认')
+  if (candidate.versionOrder < 0) throw new Error('不自动降级；如需回退请恢复上一版')
+  if (candidate.permissionsChanged && !confirmPermissions) throw new Error('更新权限发生变化，需要重新确认')
+  return installPlugin(candidate.code, { enable: record.enabled, grantDeclared: confirmPermissions && candidate.permissionsChanged,
+    sourceUrl: record.sourceUrl, updateUrl: record.updateUrl, installOrigin: record.installOrigin, catalogKey: record.catalogKey })
+}
+
+export function comparePluginVersions(a: string, b: string): number {
+  const parse = (value: string) => {
+    const m = String(value).match(/^v?(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:\.(0|[1-9]\d*))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/)
+    if (!m) throw new Error('版本格式无法自动比较，请核对后手动导入')
+    return { numbers: [Number(m[1]), Number(m[2] || 0), Number(m[3] || 0)], pre: m[4]?.split('.') }
+  }
+  const left = parse(a), right = parse(b)
+  for (let index = 0; index < 3; index += 1) {
+    const diff = left.numbers[index] - right.numbers[index]
     if (diff !== 0) return diff
+  }
+  if (!left.pre && !right.pre) return 0
+  if (!left.pre) return 1
+  if (!right.pre) return -1
+  for (let i = 0; i < Math.max(left.pre.length, right.pre.length); i++) {
+    const x = left.pre[i], y = right.pre[i]
+    if (x === y) continue
+    if (x === undefined) return -1
+    if (y === undefined) return 1
+    const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y)
+    if (nx && ny) return Number(x) - Number(y)
+    if (nx !== ny) return nx ? -1 : 1
+    return x < y ? -1 : 1
   }
   return 0
 }
@@ -542,29 +688,16 @@ function comparePluginVersions(a: string, b: string): number {
 export async function checkPluginUpdate(
   pluginId: string
 ): Promise<{ updated: boolean; previousVersion: string; version: string }> {
-  const record = records.get(pluginId)
-  if (!record) throw new Error('插件不存在')
-  const updateUrl = record.updateUrl || record.sourceUrl
-  if (!updateUrl) throw new Error('这个插件没有更新地址，无法自动检查更新')
-  const code = await fetchPluginCode(updateUrl)
-  const manifest = inspectPlugin(code)
-  if (manifest.id !== record.manifest.id) throw new Error('更新文件与已安装音源不一致')
-  const previousVersion = String(record.manifest.version ?? '')
-  const version = String(manifest.version ?? '')
-  if (comparePluginVersions(version, previousVersion) <= 0) {
-    return { updated: false, previousVersion, version: previousVersion }
-  }
-  await installPlugin(code, {
-    enable: record.enabled,
-    grantDeclared: true,
-    sourceUrl: record.sourceUrl,
-    updateUrl
-  })
-  return { updated: true, previousVersion, version }
+  const candidate = await previewPluginUpdate(pluginId)
+  if (candidate.versionOrder <= 0) return { updated: false, previousVersion: candidate.previousVersion, version: candidate.previousVersion }
+  if (candidate.permissionsChanged || candidate.removedProviders.length) throw new Error('更新权限或平台发生变化，请到音源市场确认后更新')
+  await applyPluginUpdate(candidate)
+  return { updated: true, previousVersion: candidate.previousVersion, version: candidate.version }
 }
 
 /** Allows a file-installed plugin to get a remote update source. */
 export async function setPluginUpdateUrl(pluginId: string, url: string): Promise<PluginDescriptor> {
+  return withPluginOperation(pluginId, async () => {
   const record = records.get(pluginId)
   if (!record) throw new Error('插件不存在')
   const value = url.trim()
@@ -572,10 +705,13 @@ export async function setPluginUpdateUrl(pluginId: string, url: string): Promise
   const code = await fetchPluginCode(value)
   const manifest = inspectPlugin(code)
   if (manifest.id !== record.manifest.id) throw new Error('更新地址返回的音源与已安装的不一致')
+  if ((manifest.publisher || manifest.author || '') !== (record.manifest.publisher || record.manifest.author || '')) throw new Error('更新地址的发布身份发生变化，请核对来源')
+  const previousUrl = record.updateUrl
   record.updateUrl = value
-  await save(record)
+  try { await save(record) } catch (error) { record.updateUrl = previousUrl; throw error }
   refresh()
   return descriptorFor(record, hosts.get(pluginId))
+  })
 }
 
 const PLUGIN_UPDATE_CLOCK_KEY = 'ceru.pluginUpdate.lastChecked'
@@ -588,6 +724,7 @@ export interface PluginUpdateSummary {
   version: string
   previousVersion: string
   error?: string
+  available?: boolean
 }
 
 function readUpdateClock(): number {
@@ -609,7 +746,7 @@ function markUpdateChecked(): void {
  * 默认 6 小时内只跑一次，force 可以无视节流；单个插件失败不影响其它插件。
  */
 export async function checkAllPluginUpdates(
-  options: { force?: boolean; quiet?: boolean } = {}
+  options: { force?: boolean; quiet?: boolean; previewOnly?: boolean } = {}
 ): Promise<PluginUpdateSummary[]> {
   if (!options.force && Date.now() - readUpdateClock() < PLUGIN_UPDATE_INTERVAL) return []
   const targets = [...records.values()].filter(
@@ -620,6 +757,13 @@ export async function checkAllPluginUpdates(
     const name = String(record.manifest?.name ?? record.pluginId)
     const previousVersion = String(record.manifest?.version ?? '')
     try {
+      if (options.previewOnly) {
+        const preview = await previewPluginUpdate(record.pluginId)
+        const available = preview.versionOrder >= 0 && preview.contentChanged
+        results.push({ pluginId: record.pluginId, name, previousVersion, version: preview.version, updated: false, available })
+        if (available && !options.quiet) showToast(`${name} 有可确认的更新，请到音源市场查看`)
+        continue
+      }
       const result = await checkPluginUpdate(record.pluginId)
       results.push({
         pluginId: record.pluginId,
@@ -659,12 +803,18 @@ function stableScope(value: any): string {
   )
 }
 
-export async function fetchPluginCode(url: string): Promise<string> {
+export async function fetchPluginCode(url: string, options: { signal?: AbortSignal; onAttempt?: (message: string) => void } = {}): Promise<string> {
   let response: { status: number; body?: unknown }
   try {
-    response = await requestRemote({ url, raw: true, timeoutMs: 30_000 })
+    const path = repositoryPath(url)
+    if (path) response = await requestRepository(path, options)
+    else {
+      options.onAttempt?.('正在获取在线插件文件…')
+      response = await requestRemote({ url, raw: true, timeoutMs: 20_000, signal: options.signal })
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    if (message.startsWith('仓库下载失败')) throw new Error(message)
     if (/Failed to fetch|NetworkError|Load failed|Network request failed/i.test(message)) {
       throw new Error('无法下载插件：链接不可访问，或该地址未允许跨域访问')
     }
@@ -678,8 +828,8 @@ export async function fetchPluginCode(url: string): Promise<string> {
   }
   const code = String(response.body ?? '').trim()
   if (!code) throw new Error('插件文件内容为空')
-  if (code.length > 16 * 1024 * 1024) throw new Error('插件文件过大')
-  return code
+  if (new TextEncoder().encode(code).byteLength > 16 * 1024 * 1024) throw new Error('插件文件过大')
+  return normalizeKnownPluginCode(code)
 }
 
 export function inspectPlugin(code: string): any {
@@ -710,7 +860,7 @@ export async function installDemoPlugin(): Promise<PluginDescriptor> {
   return installPlugin(await response.text(), { enable: true, grantDeclared: true })
 }
 
-export async function enablePlugin(pluginId: string): Promise<void> {
+async function enablePluginInternal(pluginId: string): Promise<void> {
   const record = records.get(pluginId)
   if (!record) throw new Error('插件不存在')
   if (hosts.has(pluginId)) {
@@ -752,7 +902,10 @@ export async function enablePlugin(pluginId: string): Promise<void> {
   refresh()
 }
 
-export async function disablePlugin(pluginId: string): Promise<void> {
+export async function enablePlugin(pluginId: string): Promise<void> {
+  return withPluginOperation(pluginId, () => enablePluginInternal(pluginId))
+}
+async function disablePluginInternal(pluginId: string): Promise<void> {
   const record = records.get(pluginId)
   if (!record) return
   const host = hosts.get(pluginId)
@@ -763,8 +916,12 @@ export async function disablePlugin(pluginId: string): Promise<void> {
   refresh()
 }
 
+export async function disablePlugin(pluginId: string): Promise<void> {
+  return withPluginOperation(pluginId, () => disablePluginInternal(pluginId))
+}
 export async function removePlugin(pluginId: string): Promise<void> {
-  await disablePlugin(pluginId)
+  return withPluginOperation(pluginId, async () => {
+  await disablePluginInternal(pluginId)
   await secureStore.clearNamespace('plugin.account.' + pluginId)
   invalidatePluginAccountCache(pluginId)
   records.delete(pluginId)
@@ -775,6 +932,7 @@ export async function removePlugin(pluginId: string): Promise<void> {
     if (String(key).startsWith(pluginId + ':')) await idb.del('pluginStorage', key)
   }
   refresh()
+  })
 }
 
 export async function getPluginConfig(pluginId: string): Promise<Record<string, any>> {
@@ -791,11 +949,12 @@ export async function savePluginConfig(
 export async function invokeProvider(
   provider: ProviderHandle,
   method: string,
-  args: any[] = []
+  args: any[] = [],
+  signal?: AbortSignal
 ): Promise<any> {
   const host = hosts.get(provider.pluginId)
   if (!host) throw new Error('插件未运行，请先在设置中启用')
-  return host.invokeProvider(provider.providerId, method, args)
+  return host.invokeProvider(provider.providerId, method, args, signal)
 }
 
 export function selectProvider(providerId: string, pluginId?: string): void {

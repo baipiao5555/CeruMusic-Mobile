@@ -198,7 +198,7 @@ function playFavorite(index: number): void {
 .collection-tabs { display: flex; gap: 26px; padding: 13px var(--pad) 12px; }
 .collection-tabs button { position: relative; min-width: 44px; min-height: 44px; color: var(--ink-3); font-size: 16px; }
 .collection-tabs button.on { color: var(--ink); font-weight: 650; }
-.collection-tabs button.on::after { content: ''; position: absolute; bottom: 0; left: 0; width: 19px; height: 3px; border-radius: 3px; background: var(--tint); }
+.collection-tabs button.on::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 22px; height: 3px; border-radius: 3px; background: var(--tint); }
 .liked-card { display: flex; align-items: center; width: calc(100% - var(--pad) * 2); margin: 0 var(--pad) 14px; padding: 13px 14px; border-radius: 12px; background: var(--surface-2); gap: 13px; text-align: left; }
 .liked-cover { display: grid; place-items: center; width: 59px; height: 59px; flex: none; border-radius: 10px; background: linear-gradient(135deg, #f6acbf, #e75a85); color: #fff; }
 .liked-card > span:nth-child(2) { flex: 1; min-width: 0; }

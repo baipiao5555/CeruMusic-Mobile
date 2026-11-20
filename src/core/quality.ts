@@ -1,4 +1,3 @@
-import { selectQuality } from '@shiqianjiang/ceru-plugin-sdk/quality'
 import { allProviders } from './plugin/manager'
 
 const KNOWN_ORDER = [
@@ -91,36 +90,28 @@ export function availableQualities(): string[] {
 }
 
 /** The best quality a track advertises, used for the compact list badge. */
-export function highestQuality(qualities: string[] | null | undefined): string {
-  if (!qualities?.length) return ''
-  let best = qualities[0]
-  let bestRank = KNOWN_ORDER.indexOf(best)
-  for (const quality of qualities) {
-    const rank = KNOWN_ORDER.indexOf(quality)
-    if (rank > bestRank) {
-      best = quality
-      bestRank = rank
-    }
-  }
-  return best
-}
+export function highestQuality(qualities: string[] | null | undefined): string { return sortedQualities(qualities || []).at(-1) || '' }
 
 /**
  * Resolve the quality sent to the plugin. An empty request means "highest
  * available"; otherwise pick the requested quality or the closest lower one.
  */
-export function selectPlaybackQuality(
-  order: string[],
-  available: string[],
-  requested: string
-): string | undefined {
-  const choices = available.length ? [...available] : [...order]
+/** Normalize known qualities regardless of provider/list ordering; preserve custom tier order. */
+export function sortedQualities(values: string[], declaredOrder = values): string[] {
+  const rank: Record<string, number> = { low:0, '128k':0, standard:1, '192k':1, high:2, '320k':2, lossless:3, flac:3, flac24bit:4, hires:5, atmos:6, atmos_plus:7, master:8 }
+  const score = (q: string) => rank[q] ?? (9 + Math.max(0, declaredOrder.indexOf(q)))
+  return [...new Set(values.filter(q => typeof q === 'string' && q))].sort((a, b) => score(a) - score(b))
+}
+export function selectPlaybackQuality(order: string[], available: string[], requested: string): string | undefined {
+  const choices = sortedQualities(available.length ? available : order, order)
   if (!choices.length) return undefined
-  if (!requested) return choices[choices.length - 1]
-
-  const usableOrder = [...order]
-  for (const quality of choices) {
-    if (!usableOrder.includes(quality)) usableOrder.push(quality)
-  }
-  return selectQuality(usableOrder, choices, requested) ?? choices[choices.length - 1]
+  if (!requested || choices.includes(requested)) return requested || choices.at(-1)
+  const complete = sortedQualities([...order, ...choices, requested], order)
+  const requestedRank = complete.indexOf(requested)
+  return choices.filter(q => complete.indexOf(q) <= requestedRank).at(-1) || choices[0]
+}
+/** Automatic playback tries highest to lowest. Manual selection stays a single requested tier. */
+export function playbackQualityCandidates(order: string[], available: string[], requested = ''): Array<string | undefined> {
+  const choices = sortedQualities(available.length ? available : order, order)
+  return requested ? [selectPlaybackQuality(order, available, requested)] : choices.length ? choices.reverse() : [undefined]
 }

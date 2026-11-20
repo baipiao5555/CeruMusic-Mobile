@@ -131,6 +131,7 @@ try {
   await directRequest
   assert.equal(resolves.length, 1, 'one row tap starts one resolve')
   assert.equal(resolves[0].quality, '320k')
+  console.log('CACHE_DIAGNOSTIC', JSON.stringify(await page.evaluate(async () => {  const s = await import('/src/core/settings.ts'); const a = await import('/src/core/cache/audioCache.ts'); return { enabled:s.settingsState.playbackCache, cached:await a.cachedAudioUrl('https://audio.test/one.wav'), localStorage:localStorage.getItem('ceru.settings.v1') } })))
   assert.equal(cacheRequests > 0, true)
   assert.equal(directRequests > 0, true)
   assert.equal(await page.evaluate(() => window.__ceruDebug.player.playerState.error), '')

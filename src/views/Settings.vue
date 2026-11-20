@@ -114,7 +114,7 @@ const ROW_TERMS: Record<string, string> = {
   'data:clear': '清除播放记录 清除 队列 历史 播放记录',
   'data:reset': '恢复默认设置 恢复 默认 重置',
   'about:scope': '版本 关于 应用 插件协议',
-  'about:autoUpdate': '插件自动更新 插件 更新',
+  'about:autoUpdate': '自动检查音源更新 插件 更新',
   'about:update': '检查更新 版本 更新 升级'
 }
 
@@ -1128,7 +1128,7 @@ async function resetSettings(): Promise<void> {
           <div v-if="show('about:autoUpdate')" class="settingrow">
             <span class="ico"><Icon name="plugin" :size="15" /></span>
             <div class="body">
-              <div class="lab">插件自动更新</div>
+              <div class="lab">自动检查音源更新</div>
               <div class="sub">启动时检查已安装插件的新版本</div>
             </div>
             <button
@@ -1136,7 +1136,7 @@ async function resetSettings(): Promise<void> {
               :class="{ on: settingsState.pluginAutoUpdate }"
               role="switch"
               :aria-checked="settingsState.pluginAutoUpdate"
-              aria-label="插件自动更新"
+              aria-label="自动检查音源更新"
               @click="updateSettings({ pluginAutoUpdate: !settingsState.pluginAutoUpdate })"
             />
           </div>

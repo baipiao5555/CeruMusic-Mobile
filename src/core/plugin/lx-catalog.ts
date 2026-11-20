@@ -1,6 +1,6 @@
 import { md5 } from '@noble/hashes/legacy'
 import { bytesToHex } from '@noble/hashes/utils'
-import { requestRemote } from './network'
+import { requestRemote, validateRemoteUrl } from './network'
 
 export const LX_SOURCE_NAMES: Record<string, string> = {
   kw: '\u9177\u6211\u97f3\u4e50',
@@ -86,7 +86,7 @@ function entity(source: string, info: any, duration: number): any | null {
   }
 }
 
-function mapSong(source: string, item: any): any | null {
+export function mapLxSong(source: string, item: any): any | null {
   if (!item || typeof item !== 'object') return null
   if (source === 'kw') {
     const qualities: Array<[string, any]> = []
@@ -97,31 +97,31 @@ function mapSong(source: string, item: any): any | null {
       }
     }
     return entity(source, {
-      songmid: String(item.MUSICRID ?? item.rid ?? '').replace(/^MUSIC_/, ''),
+      songmid: String(item.MUSICRID ?? item.rid ?? item.id ?? '').replace(/^MUSIC_/, ''),
       name: text(item.SONGNAME ?? item.NAME ?? item.name),
       singer: text(item.ARTIST ?? item.artist).replace(/&/g, ' / '),
       albumName: text(item.ALBUM ?? item.album),
       albumId: item.ALBUMID ?? item.albumid ?? '',
-      img: item.pic ?? item.albumpic ?? '',
+      img: item.pic ?? item.albumpic ?? item.pic120 ?? item.pic500 ?? '',
       ...qualityInfo(qualities)
     }, seconds(item.DURATION ?? item.duration))
   }
   if (source === 'kg') {
     const qualities: Array<[string, any]> = []
     for (const [quality, prefix] of [['128k', ''], ['320k', 'HQ'], ['flac', 'SQ'], ['flac24bit', 'Res']]) {
-      const hash = item[`${prefix}FileHash`]
+      const hash = item[`${prefix}FileHash`] ?? item[({ '': 'hash', HQ: 'hash_320', SQ: 'hash_flac', Res: 'hash_high' } as Record<string,string>)[prefix]]
       if (hash) qualities.push([quality, { hash, size: item[`${prefix}FileSize`] ?? 0 }])
     }
     return entity(source, {
-      songmid: item.Audioid ?? item.audio_id ?? item.ID,
+      songmid: item.Audioid ?? item.audio_id ?? item.album_audio_id ?? item.ID,
       hash: item.FileHash ?? item.hash,
-      name: text(item.SongName ?? item.songname ?? item.OriSongName),
-      singer: singers(item.Singers, item.SingerName ?? item.singername),
+      name: text(item.SongName ?? item.songname ?? item.audio_name ?? item.OriSongName),
+      singer: singers(item.Singers, item.SingerName ?? item.singername ?? item.author_name),
       albumName: text(item.AlbumName ?? item.album_name),
       albumId: item.AlbumID ?? item.album_id ?? '',
-      img: item.Image ?? item.img ?? '',
+      img: item.Image ?? item.img ?? item.image ?? item.sizable_cover ?? item.trans_param?.union_cover ?? '',
       ...qualityInfo(qualities)
-    }, seconds(item.Duration ?? item.duration))
+    }, item.timelength != null ? seconds(item.timelength) / 1000 : seconds(item.Duration ?? item.duration))
   }
   if (source === 'tx') {
     const albumMid = item.albummid ?? item.album?.mid ?? ''
@@ -174,7 +174,7 @@ function mapSong(source: string, item: any): any | null {
       MG_QUALITIES[format.formatType],
       { size: format.asize ?? format.isize ?? 0 }
     ])
-    const image = item.img3 || item.img2 || item.img1 || ''
+    const image = item.img3 || item.img2 || item.img1 || item.albumImgs?.[0]?.img || ''
     return entity(source, {
       songmid: item.songId,
       copyrightId: item.copyrightId,
@@ -279,7 +279,7 @@ export async function searchLxCatalog(
   }
   if (!Array.isArray(rows)) throw new Error('\u6b4c\u66f2\u76ee\u5f55\u6570\u636e\u683c\u5f0f\u9519\u8bef')
   const seen = new Set<string>()
-  const items = rows.map((item) => mapSong(source, item)).filter((item) => {
+  const items = rows.map((item) => mapLxSong(source, item)).filter((item) => {
     if (!item || seen.has(item.ref.id)) return false
     seen.add(item.ref.id)
     return true
@@ -316,4 +316,55 @@ export function lxMusicInfo(ref: any, source = String(ref?.providerId ?? '')): a
       ? { hash: String(ref.id) }
       : {})
   }
+}
+
+/** Built-in LX catalog artwork, independent of whether a musicUrl-only script declares pic. */
+export async function resolveLxArtwork(source: string, ref: any, ignoreSupplied = false): Promise<string> {
+  const info = lxMusicInfo(ref, source)
+  const normalize = (value: any): string => {
+    if (typeof value !== 'string' || !value) return ''
+    try { const url=validateRemoteUrl(value.trim().replace(/^http:/i, 'https:').replace(/^\/\//, 'https://').replace(/\{size\}/g, '500'));const origin=/^img([1-4])\.(?:kwcdn|sycdn)\.kuwo\.cn$/i.exec(url.hostname);if(origin)url.hostname='img'+origin[1]+'.kuwo.cn';return url.href } catch { return '' }
+  }
+  const supplied = normalize(info.img)
+  if (supplied && !ignoreSupplied) return supplied
+  const request = async (url: string, options: any = {}): Promise<any> => {
+    const result = await requestRemote({url,timeoutMs:6000,...options})
+    if (result.status < 200 || result.status >= 300) throw new Error('封面信息请求失败')
+    return result.body
+  }
+  let image: any
+  if (source === 'kw') {
+    if (!/^\d+$/.test(String(info.songmid))) return ''
+    image = await request('https://artistpicserver.kuwo.cn/pic.web?' + new URLSearchParams({corp:'kuwo',type:'rid_pic',pictype:'500',size:'500',rid:String(info.songmid)}), {raw:true})
+  } else if (source === 'kg') {
+    const hash = info.hash || ref.id
+    if (!/^[a-f\d]{16,64}$/i.test(String(hash))) return ''
+    try {
+      const data = await request('https://media.store.kugou.com/v1/get_res_privilege', {method:'POST',headers:{'Content-Type':'application/json','KG-RC':'1','KG-THash':'expand_search_manager.cpp:852736169:451'},body:JSON.stringify({appid:1001,area_code:'1',behavior:'play',clientver:'9020',need_hash_offset:1,relate:1,resource:[{album_audio_id:info.songmid,album_id:info.albumId,hash,id:0,name:info.name,type:'audio'}],userid:0,token:''})})
+      image = data?.data?.[0]?.info?.image
+    } catch { /* Try the platform's public song metadata endpoint; no auth or TLS bypass. */ }
+    if (!image) {
+      const data = await request('https://m.kugou.com/api/v1/song/get_song_info?' + new URLSearchParams({cmd:'playInfo',hash:String(hash),mid:'123456789123456789'}))
+      image = data?.data?.imgUrl || data?.data?.imgurl || data?.imgUrl || data?.imgurl
+    }
+  } else if (source === 'wy') {
+    if (!/^\d+$/.test(String(info.songmid))) return ''
+    const data = await request('https://music.163.com/api/song/detail/?' + new URLSearchParams({ids:JSON.stringify([String(info.songmid)]),id:String(info.songmid)}), {headers:{Referer:'https://music.163.com/'}})
+    const song = data?.songs?.find((s: any) => String(s.id) === String(info.songmid))
+    image = song?.al?.picUrl || song?.album?.picUrl
+  } else if (source === 'tx') {
+    let albumMid = info.albumMid || (typeof info.albumId === 'string' && /[a-z]/i.test(info.albumId) ? info.albumId : '')
+    if (!albumMid) {
+      const param = /^\d+$/.test(String(info.songmid)) ? {song_id:Number(info.songmid)} : {song_mid:String(info.songmid)}
+      const data = await request('https://u.y.qq.com/cgi-bin/musicu.fcg', {method:'POST',headers:{'Content-Type':'application/json',Referer:'https://y.qq.com/'},body:JSON.stringify({comm:{ct:24,cv:0},req_0:{module:'music.pf_song_detail_svr',method:'get_song_detail_yqq',param}})})
+      albumMid = data?.req_0?.data?.track_info?.album?.mid || ''
+    }
+    if (/^[a-zA-Z0-9]+$/.test(albumMid)) image = `https://y.gtimg.cn/music/photo_new/T002R500x500M000${albumMid}.jpg`
+  } else if (source === 'mg') {
+    if (!/^[a-zA-Z0-9_-]+$/.test(String(info.songmid))) return ''
+    const data = await request('https://c.musicapp.migu.cn/MIGUM2.0/v1.0/content/resourceinfo.do?resourceType=2', {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({resourceId:String(info.songmid)}).toString()})
+    const song = data?.resource?.find((s: any) => String(s.songId) === String(info.songmid))
+    image = song?.albumImgs?.[0]?.img || song?.img
+  }
+  return normalize(typeof image === 'string' ? image.trim() : image)
 }

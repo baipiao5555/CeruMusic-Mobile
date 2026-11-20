@@ -123,6 +123,8 @@ try {
   await input.press('Enter')
   await page.waitForTimeout(100)
   await page.getByRole('button', { name: 'browse', exact: true }).click()
+  // Multi-select now retains the prior source on click. Explicitly test browse as the sole scope.
+  await page.evaluate(async () => { const m = await import('/src/core/plugin/manager.ts'); const browse = m.allProviders(true).find(p => p.providerId === 'browse'); m.setSearchSources([browse]); m.selectProvider(browse.providerId, browse.pluginId) })
   await page.waitForTimeout(900)
   await check('unsupported provider cannot receive old search results', async () => {
     assert.equal(await page.locator('.search-page .songrow').count(), 0)

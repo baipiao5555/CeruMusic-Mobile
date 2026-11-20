@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import TrackArtwork from '@/components/TrackArtwork.vue'
+import SongSourcesSheet from './SongSourcesSheet.vue'
+import { sourcesOf, trackKey, platformLabel, withSources } from '@/core/trackGrouping'
 import Icon from './Icon.vue'
 import SongActionsSheet from './SongActionsSheet.vue'
-import { playerState, type Track } from '@/core/playback/player'
+import { playerState, playTracks, type Track } from '@/core/playback/player'
+import { notify } from '@/core/plugin/manager'
 import { isFavorite } from '@/core/library'
 import { isDownloaded, isDownloading } from '@/core/downloads'
 import { highestQuality, qualityLabel } from '@/core/quality'
@@ -26,18 +30,23 @@ const props = withDefaults(
   { index: 0, showIndex: false, showCover: true, selectable: false, selected: false, query: '' }
 )
 
-const showActions = ref(false)
+const showActions = ref(false), showSources = ref(false), chosenKey = ref('')
+const sourceTracks = computed(()=>sourcesOf(props.track))
+const sourcePlatforms = computed(()=>[...new Set(sourceTracks.value.map(platformLabel))])
 
 const emit = defineEmits<{
   play: [queue: Track[], index: number]
   'toggle-select': []
 }>()
 
-const active = computed(
-  () =>
-    playerState.queue[playerState.index]?.id === props.track.id &&
-    playerState.queue[playerState.index]?.providerId === props.track.providerId
-)
+const active = computed(() => { const current=playerState.queue[playerState.index]; return Boolean(current && sourceTracks.value.some(t=>trackKey(t)===trackKey(current))) })
+function chooseSource(source:Track):void {
+  chosenKey.value = trackKey(source); showSources.value=false
+  const queue = [...(props.queue || [props.track])]
+  queue[props.index] = withSources(source,sourceTracks.value)
+  void playTracks(queue,props.index).catch(e=>notify(e.message || '该来源播放失败'))
+}
+
 
 const favorite = computed(() => isFavorite(props.track))
 const downloaded = computed(() => isDownloaded(props.track))
@@ -58,6 +67,8 @@ function play(): void {
     emit('toggle-select')
     return
   }
+  const chosen = sourceTracks.value.find(t=>trackKey(t)===chosenKey.value)
+  if (chosen && trackKey(chosen)!==trackKey(props.track)) { chooseSource(chosen); return }
   emit('play', props.queue ?? [props.track], props.index)
 }
 
@@ -88,13 +99,7 @@ function formatDuration(ms: number): string {
     <span v-else-if="showIndex" class="idx">{{ String(index + 1).padStart(2, '0') }}</span>
 
     <div v-if="showCover" class="cover">
-      <img
-        :src="track.artwork"
-        alt=""
-        loading="lazy"
-        decoding="async"
-        @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
-      />
+      <TrackArtwork :track="track" />
     </div>
 
     <div class="meta-wrap">
@@ -122,6 +127,11 @@ function formatDuration(ms: number): string {
           <Icon name="download" :size="11" />
         </span>
       </div>
+      <div class="song-sources" v-if="track.pluginId !== 'local'">
+        <span v-for="name in sourcePlatforms.slice(0,3)" :key="name" class="platform-tag">{{ name }}</span><span v-if="sourcePlatforms.length>3" class="platform-tag">+{{ sourcePlatforms.length-3 }}</span>
+        <button v-if="sourceTracks.length>1 && !selecting" class="song-sources-button" :aria-label="'查看 '+track.title+' 的 '+sourceTracks.length+' 个来源'" @click.stop="showSources=true">{{ sourceTracks.length }} 个来源 <Icon name="chevron-down" :size="11" /></button>
+        <small v-else-if="track.providerName !== sourcePlatforms[0]">{{ track.providerName }}</small>
+      </div>
     </div>
 
     <div v-if="!selecting" class="r" @click.stop>
@@ -135,7 +145,7 @@ function formatDuration(ms: number): string {
     </div>
   </div>
 
-  <Teleport to="body">
+  <Teleport to="body"><SongSourcesSheet v-if="showSources" :track="track" :selected="chosenKey || (active ? trackKey(playerState.queue[playerState.index]) : trackKey(track))" @choose="chooseSource" @close="showSources=false" />
     <transition name="sheet-pop">
       <SongActionsSheet
         v-if="showActions"
@@ -148,6 +158,8 @@ function formatDuration(ms: number): string {
 </template>
 
 <style scoped>
+.song-sources{display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:5px}.platform-tag{font-size:9px;color:var(--brand-strong);background:var(--tint-soft);border-radius:4px;padding:3px 5px}.song-sources small{font-size:9px;color:var(--ink-3)}.song-sources-button{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--ink-3);background:none;border:0;min-height:30px;padding:4px 6px}.song-sources-button:focus-visible{outline:2px solid var(--tint)}
+
 .songrow.selecting.selected {
   background: var(--tint-soft);
 }

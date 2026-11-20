@@ -2,6 +2,7 @@
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import PlaylistSearchPane from '@/components/PlaylistSearchPane.vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
+import { groupTracks, sourcesOf, sameRecording } from '@/core/trackGrouping'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
 import {
@@ -9,6 +10,8 @@ import {
   invokeProvider,
   pluginState,
   selectProvider,
+  searchProviders,
+  setSearchSources,
   type ProviderHandle
 } from '@/core/plugin/manager'
 import { playTracks, toTrack, type Track } from '@/core/playback/player'
@@ -32,7 +35,6 @@ import { searchEntryFocusEpoch } from '@/core/searchEntry'
 import {
   LOCAL_PLUGIN_ID,
   localEntryToTrack,
-  localPermissionGranted,
   scanLocalMusic
 } from '@/core/local/media'
 
@@ -68,13 +70,13 @@ function goBack(): void {
   if (window.history.state?.back) router.back()
   else void router.replace('/')
 }
-const providers = computed(() => allProviders())
+const providers = computed(() => { const chosen = pluginState.searchSources; const selected = (p: ProviderHandle) => chosen.some(s => s.pluginId === p.pluginId && s.providerId === p.providerId); return allProviders(true).sort((a,b) => Number(selected(b)) - Number(selected(a))) })
+const searchScope = computed(() => searchProviders())
+const sourceWarnings = ref<string[]>([])
 const selected = computed(
-  () => providers.value.find((item) => item.providerId === pluginState.selectedProvider) ?? providers.value[0]
+  () => providers.value.find(item => item.providerId === pluginState.selectedProvider && (!pluginState.selectedSourcePlugin[item.providerId] || pluginState.selectedSourcePlugin[item.providerId] === item.pluginId)) ?? searchScope.value[0] ?? providers.value[0]
 )
-const providerKey = computed(() =>
-  selected.value ? `${selected.value.pluginId}:${selected.value.providerId}:${pluginState.accountEpochs[selected.value.pluginId] || 0}` : ''
-)
+const providerKey = computed(() => [selected.value?.pluginId || '', ...searchScope.value.map(p => `${p.pluginId}:${p.providerId}:${pluginState.accountEpochs[p.pluginId] || 0}`)].join('|'))
 
 const query = ref(String(route.query.q ?? ''))
 /** 当前结果对应的关键词（缩词兜底时会和输入框不一致），高亮按它走。 */
@@ -111,7 +113,7 @@ const suggestions = computed(() => {
   if (!needle || mode.value !== 'name') return []
   const local = suggestTracks(query.value, libraryTracks.value, Infinity).filter(
     (track) => track.pluginId === LOCAL_PLUGIN_ID || !selected.value ||
-      (track.pluginId === selected.value.pluginId && track.providerId === selected.value.providerId)
+      searchScope.value.some(p => track.pluginId === p.pluginId && track.providerId === p.providerId)
   )
   const seen = new Set<string>()
   return [...remoteSuggestions.value, ...local]
@@ -135,9 +137,9 @@ const historyVisible = computed(() => !query.value.trim() && searchHistory.items
 /** 本机与曲库结果独立展示，在线音源有结果时也不把它们隐藏。 */
 const localMatches = computed(() => {
   if (mode.value === 'lyric' || loading.value || !searched.value || !query.value.trim()) return []
-  const remote = new Set(results.value.map((track) => `${track.pluginId}:${track.providerId}:${track.id}`))
+  const remote = new Set(results.value.flatMap(sourcesOf).map((track) => `${track.pluginId}:${track.providerId}:${track.id}`))
   return suggestTracks(query.value, libraryTracks.value, Infinity)
-    .filter((track) => !remote.has(`${track.pluginId}:${track.providerId}:${track.id}`))
+    .filter((track) => !remote.has(`${track.pluginId}:${track.providerId}:${track.id}`) && !results.value.some(r=>sameRecording(r,track)))
     .slice(0, 12)
 })
 
@@ -260,7 +262,7 @@ function scheduleSuggestions(): void {
   suggestTimer = setTimeout(async () => {
     suggestTimer = undefined
     try {
-      const tracks = await fetchTracks(provider, text)
+      const tracks = (await fetchScopeTracks(searchScope.value, text, false)).tracks
       if (seq !== suggestSeq || key !== providerKey.value ||
         text !== query.value.trim() || !showSuggest.value) return
       remoteSuggestions.value = tracks
@@ -317,11 +319,36 @@ async function fetchTracks(provider: ProviderHandle, text: string, limit = RESUL
   const page = await invokeProvider(provider, 'tracks.search', [
     { query: text, kinds: ['track'], filters: {}, limit }
   ])
+  if (page?.ok === false || page?.error) throw new Error(page?.error?.message || '音源搜索失败')
   const items = (page?.items ?? []).filter((item: any) => {
     const kind = item?.ref?.kind
     return Boolean(item?.ref?.id) && (!kind || kind === 'track' || kind === 'song')
   })
   return items.map((item: any) => toTrack(item, provider))
+}
+
+/** Search the explicit source set; one broken source cannot erase other source results. */
+async function fetchScopeTracks(scope: ProviderHandle[], text: string, relax = true): Promise<{tracks: Track[]; warnings:string[]; used:string}> {
+  const replies = await Promise.allSettled(scope.map(async provider => {
+    const fetched = await fetchTracks(provider, text)
+    let tracks = relax ? rankTracks(fetched, text) : fetched, used = text
+    if (relax && !tracks.length) for (const query of fallbackQueries(text)) {
+      tracks = rankTracks(await fetchTracks(provider, query), query)
+      if (tracks.length) { used = query; break }
+    }
+    return {tracks, used}
+  }))
+  const warnings:string[] = [], tracks:Track[] = [], seen = new Set<string>(); let used = text
+  replies.forEach((reply,i) => {
+    if (reply.status === 'rejected') { warnings.push(`${scope[i].name} · ${scope[i].pluginName}：${reply.reason?.message || '搜索失败'}`); return }
+    if (reply.value.tracks.length && used === text) used = reply.value.used
+    for (const track of reply.value.tracks) {
+      const key = `${track.pluginId}:${track.providerId}:${track.id}`
+      if (!seen.has(key)) { seen.add(key); tracks.push(track) }
+    }
+  })
+  if (!tracks.length && warnings.length === scope.length) throw new Error(warnings.join('；'))
+  return {tracks:relax ? rankTracks(tracks, text) : tracks,warnings,used}
 }
 
 /**
@@ -493,7 +520,9 @@ async function runSearch(): Promise<void> {
   cancelSuggestions()
   const seq = ++requestSeq
   const provider = selected.value
+  const scope = searchScope.value.filter(p => p.methods.includes('tracks.search'))
   const text = query.value.trim()
+  sourceWarnings.value = []
   if (searchedProviderKey !== providerKey.value) {
     results.value = []
     appliedQuery.value = ''
@@ -513,7 +542,7 @@ async function runSearch(): Promise<void> {
     searched.value = false
     return
   }
-  if (!provider || !provider.methods.includes('tracks.search')) {
+  if (!scope.length || (mode.value === 'lyric' && !provider?.methods.includes('tracks.search'))) {
     error.value = provider ? '当前音源不支持搜索' : '请先安装并启用音源插件'
     results.value = []
     appliedQuery.value = ''
@@ -542,21 +571,11 @@ async function runSearch(): Promise<void> {
       }
       return
     }
-    let tracks = rankTracks(await fetchTracks(provider, text), text)
-    let used = text
-    if (!tracks.length) {
-      for (const candidate of fallbackQueries(text)) {
-        if (seq !== requestSeq) return
-        const relaxed = rankTracks(await fetchTracks(provider, candidate), candidate)
-        if (relaxed.length) {
-          tracks = relaxed
-          used = candidate
-          break
-        }
-      }
-    }
+    const found = await fetchScopeTracks(scope, text)
     if (seq !== requestSeq) return
-    results.value = tracks
+    const tracks = found.tracks, used = found.used
+    sourceWarnings.value = [...searchScope.value.filter(p => !p.methods.includes('tracks.search')).map(p => `${p.name} · ${p.pluginName}：不支持单曲搜索，已跳过`),...found.warnings]
+    results.value = groupTracks(tracks, selected.value)
     appliedQuery.value = used
     relaxedQuery.value = used === text ? '' : used
     rememberTracks(tracks)
@@ -615,8 +634,14 @@ function reset(): void {
 }
 
 function choose(provider: ProviderHandle): void {
-  selectProvider(provider.providerId, provider.pluginId)
+  const chosen = [...searchScope.value]
+  const at = chosen.findIndex(p => p.pluginId === provider.pluginId && p.providerId === provider.providerId)
+  if (at >= 0) { if (chosen.length === 1) return; chosen.splice(at,1) } else chosen.push(provider)
+  setSearchSources(chosen)
+  if (!chosen.some(p => p.providerId === selected.value?.providerId && p.pluginId === selected.value?.pluginId)) selectProvider(chosen[0].providerId, chosen[0].pluginId)
 }
+function isSearchSource(provider: ProviderHandle): boolean { return searchScope.value.some(p => p.pluginId === provider.pluginId && p.providerId === provider.providerId) }
+
 
 watch(
   providerKey,
@@ -671,8 +696,7 @@ watch(() => route.query.target, (value, previous) => {
 onMounted(() => {
   if (inputQuery.value.trim()) void runSearch()
   void (async () => {
-    if (!(await localPermissionGranted())) return
-    deviceTracks.value = (await scanLocalMusic()).map(localEntryToTrack)
+    deviceTracks.value = (await scanLocalMusic({ requestPermission: false })).map(localEntryToTrack)
   })()
 })
 
@@ -798,9 +822,10 @@ onBeforeUnmount(stopPendingSearch)
       </div>
       <PlaylistSearchPane v-show="tab === 'playlists'" ref="playlistPane" :query="playlistQuery" />
       <template v-if="tab !== 'playlists'">
+      <p v-if="providers.length" class="pad search-scope-caption">已选择 {{ searchScope.length }} 个搜索来源 · 可多选 <button @click="router.push('/plugins?select=platforms')">管理来源</button><small v-if="mode === 'lyric'">歌词 / 歌单搜索使用默认来源</small></p>
       <div class="pad search-filters">
         <div v-if="providers.length" class="chip-row source-filters">
-          <button v-for="provider in providers" :key="provider.pluginId + ':' + provider.providerId" class="chip" :class="{ active: selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId }" @click="choose(provider)"><span v-if="selected?.providerId === provider.providerId && selected?.pluginId === provider.pluginId" class="dot" />{{ provider.name }}</button>
+          <button v-for="provider in providers" :key="provider.pluginId + ':' + provider.providerId" class="chip" :class="{ active: isSearchSource(provider) }" @click="choose(provider)"><span v-if="isSearchSource(provider)" class="dot" />{{ provider.name }}<small v-if="providers.filter(p => p.name === provider.name).length > 1"> · {{ provider.pluginName }}</small></button>
         </div>
             <button
               type="button"
@@ -852,7 +877,7 @@ onBeforeUnmount(stopPendingSearch)
           </span>
         </div>
         <p class="meta mt12">
-          正在「{{ selected?.name ?? '音源' }}」搜索「{{ query.trim() }}」…
+          正在 {{ searchScope.length }} 个来源搜索「{{ query.trim() }}」…
         </p>
       </div>
 
@@ -908,11 +933,11 @@ onBeforeUnmount(stopPendingSearch)
         <p v-if="!otherProvider" class="meta mt4">只有一个音源，可以去插件页再装一个。</p>
       </div>
 
-      <template v-if="results.length">
+      <template v-if="results.length"><div v-if="sourceWarnings.length" class="pad"><p v-for="warning in sourceWarnings" :key="warning" class="notice search-source-warning">{{ warning }}</p></div>
         <div class="section-head mt24">
           <div class="st">
             <h2>{{ mode === 'lyric' ? '歌词命中' : '搜索结果' }}</h2>
-            <span class="idx">{{ results.length }}</span>
+            <span class="idx">{{ results.length }} 首 · {{ results.reduce((sum,t) => sum + sourcesOf(t).length,0) }} 个来源</span>
             <span v-if="loading" class="meta">搜索中…</span>
             <span v-else-if="mode === 'lyric' && lyricMissing.length" class="meta">
               另有 {{ lyricMissing.length }} 首只在歌词库里
@@ -930,11 +955,11 @@ onBeforeUnmount(stopPendingSearch)
           </p>
         </div>
 
-        <div v-if="tab === 'songs'" class="pad mt4">
+        <div v-if="tab === 'songs'" class="pad mt4" data-search-results>
           <p v-if="mode === 'lyric' && loading && lyricProgress.total" class="meta lyr-progress">
             正在比对歌词 {{ lyricProgress.done }} / {{ lyricProgress.total }}
           </p>
-          <template v-for="(track, index) in results" :key="track.providerId + track.id">
+          <template v-for="(track, index) in results" :key="track.pluginId + ':' + track.providerId + ':' + track.id">
             <SongRow
               :track="track"
               :index="index"
@@ -1002,6 +1027,8 @@ onBeforeUnmount(stopPendingSearch)
 </template>
 
 <style scoped>
+.search-scope-caption{font-size:12px;color:var(--ink-3);margin:8px 0}.search-scope-caption button{color:var(--brand-strong);font:inherit;border:0;background:none;padding:8px;min-height:44px}.search-scope-caption small{display:block;font-size:11px}.search-source-warning{font-size:12px;overflow-wrap:anywhere}
+
 .findrow {
   display: flex;
   align-items: center;

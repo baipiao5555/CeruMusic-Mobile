@@ -148,19 +148,14 @@ check('刷新后更新地址仍然保留', local?.updateUrl === SOURCE_URL, JSON
 
 await page.goto(APP_URL + '/#/plugins', { waitUntil: 'networkidle' })
 await page.waitForTimeout(1200)
-console.log('plugins page:', page.url(), JSON.stringify(await page.locator('.pitem').allInnerTexts()))
-await page.screenshot({ path: 'scripts/plugin-autoupdate-local-page.png' })
-const item = page.locator('.pitem', { hasText: '本地更新测试音源' }).first()
-await item.locator('.pchev').click()
-await page.waitForTimeout(200)
-check('插件详情显示自动更新地址', (await item.locator('.update-url-note').count()) === 1)
-await item.locator('.update-url-edit').click()
-const input = item.locator('.update-url-row input')
-check(
-  '点击修改后显示带原地址的输入框',
-  (await input.count()) === 1 && (await input.inputValue()) === SOURCE_URL,
-  await input.count() ? await input.inputValue() : '缺少输入框'
-)
+await page.locator('.market-tabs').getByRole('button', { name: /^已安装/ }).click()
+await page.getByRole('button', { name: '插件管理', exact:true }).click()
+const item = page.locator('.installed-card', { hasText: '本地更新测试音源' }).first()
+await item.getByRole('button', { name: '文件导入', exact: true }).click()
+const panel = page.locator('.market-panel')
+check('插件来源详情显示自动更新地址', (await panel.locator('code').allInnerTexts()).join(' ').includes(SOURCE_URL) || (await panel.getByLabel('更新文件地址').inputValue()) === SOURCE_URL)
+const input = panel.getByLabel('更新文件地址', { exact: true })
+check('修改更新地址的输入框保留原地址', (await input.count()) === 1 && (await input.inputValue()) === SOURCE_URL, await input.inputValue())
 await page.screenshot({ path: 'scripts/plugin-autoupdate-local.png' })
 
 const fatal = errors.filter((line) => !line.includes('sandboxed and lacks the'))

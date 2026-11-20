@@ -133,14 +133,28 @@ function parseBody(text: string): any {
 }
 
 async function nativeRequest(input: HttpRequestInput, url: URL): Promise<HttpResponse> {
-  const response = await SecureHttp.request({
+  const timeoutMs = Math.min(60_000, Math.max(1_000, input.timeoutMs ?? 30_000))
+  const request = SecureHttp.request({
     url: url.href,
     method: (input.method ?? 'GET').toUpperCase(),
     headers: sanitizeHeaders(input.headers),
     body: input.body,
-    timeoutMs: Math.min(60_000, Math.max(1_000, input.timeoutMs ?? 30_000)),
+    timeoutMs,
     responseType: input.responseType === 'arraybuffer' ? 'arraybuffer' : undefined
   })
+  // Native connect/read timeouts do not bound DNS lookup or a stalled bridge callback.
+  // Bound the complete wait as well; late native results cannot reach canceled callers.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let abort: (() => void) | undefined
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('原生网络请求超时，请重试或切换下载线路')), timeoutMs)
+    abort = () => reject(input.signal?.reason || new DOMException('请求已取消', 'AbortError'))
+    input.signal?.addEventListener('abort', abort, { once: true })
+    if (input.signal?.aborted) abort()
+  })
+  let response: Awaited<typeof request>
+  try { response = await Promise.race([request, deadline]) }
+  finally { clearTimeout(timer); if (abort) input.signal?.removeEventListener('abort', abort) }
   const body = String(response.body ?? '')
   if (body.length > (input.responseType === 'arraybuffer' ? Math.ceil(MAX_BODY_BYTES / 3) * 4 : MAX_BODY_BYTES)) {
     throw new Error('响应内容过大')
@@ -199,9 +213,11 @@ async function webRequest(input: HttpRequestInput, initialUrl: URL): Promise<Htt
       }
       const length = Number(response.headers.get('content-length') ?? 0)
       if (length > MAX_BODY_BYTES) throw new Error('响应内容过大')
-      const data = input.responseType === 'arraybuffer'
-        ? new Uint8Array(await response.arrayBuffer())
-        : await response.text()
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      if (bytes.length > MAX_BODY_BYTES) throw new Error('响应内容过大')
+      const charset = /charset\s*=\s*[\"']?([^;\s\"']+)/i.exec(response.headers.get('content-type') || '')?.[1] || 'utf-8'
+      let data: string | Uint8Array = bytes
+      if (input.responseType !== 'arraybuffer') { try { data = new TextDecoder(charset).decode(bytes) } catch { data = new TextDecoder().decode(bytes) } }
       if (data.length > MAX_BODY_BYTES) throw new Error('响应内容过大')
       const responseHeaders: Record<string, string> = {}
       response.headers.forEach((value, key) => {

@@ -113,7 +113,10 @@ public class SystemBarsPlugin extends Plugin {
         getActivity().runOnUiThread(() -> {
             try {
                 if (color != null) {
-                    getActivity().getWindow().setNavigationBarColor(Color.parseColor(color));
+                    int resolved = Color.parseColor(color);
+                    // API 23-25 cannot draw dark navigation icons; keep their background readable.
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && Boolean.TRUE.equals(darkIcons)) resolved = Color.BLACK;
+                    getActivity().getWindow().setNavigationBarColor(resolved);
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     WindowCompat.getInsetsController(

@@ -1,6 +1,8 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
+import { reactive } from 'vue'
 import type { Track } from '../track'
 import { localAudioUrl } from '../cache/audioCache'
+import { downloadState } from '../downloads'
 
 /**
  * 本机音乐（Android）。
@@ -19,15 +21,23 @@ export interface LocalEntry {
   durationMs: number
   size: number
   mime: string
+  uri?: string
+  artwork?: string
+  origin?: 'download' | 'folder' | 'media'
+  relativePath?: string
+  isMusic?: boolean
+  isRecording?: boolean
+  isTone?: boolean
 }
 
 interface LocalMediaNative {
   check(): Promise<{ granted: boolean }>
   request(): Promise<{ granted: boolean }>
-  scan(): Promise<{ tracks: LocalEntry[] }>
+  scan(options?: { source?: 'all' | 'folders' }): Promise<{ tracks: LocalEntry[]; granted?: boolean; error?: string }>
 }
 
 const NativeLocalMedia = registerPlugin<LocalMediaNative>('LocalMedia')
+export const localScanState = reactive({ granted: false, error: '' })
 
 /** 本机曲目统一挂在这个虚拟音源下，播放时由 source.ts 直接给代理地址。 */
 export const LOCAL_PLUGIN_ID = 'local'
@@ -58,15 +68,40 @@ export async function requestLocalPermission(): Promise<boolean> {
   }
 }
 
-export async function scanLocalMusic(): Promise<LocalEntry[]> {
+export async function scanLocalMusic(options: { requestPermission?: boolean; source?: 'all' | 'folders' } = {}): Promise<LocalEntry[]> {
   if (!Capacitor.isNativePlatform()) return []
-  if (!(await localPermissionGranted())) {
-    if (!(await requestLocalPermission())) return []
+  localScanState.error = ''
+  localScanState.granted = await localPermissionGranted()
+  if (!localScanState.granted && options.requestPermission !== false && options.source === 'all') {
+    localScanState.granted = await requestLocalPermission()
   }
   try {
-    const result = await NativeLocalMedia.scan()
-    return Array.isArray(result?.tracks) ? result.tracks : []
-  } catch {
+    // App-owned downloads need no READ_MEDIA_AUDIO permission and are absent from MediaStore.
+    const result = await NativeLocalMedia.scan({ source: options.source || 'folders' })
+    if (typeof result?.granted === 'boolean') localScanState.granted = result.granted
+    localScanState.error = result?.error || ''
+    const found = Array.isArray(result?.tracks) ? result.tracks : []
+    const normalize = (value: string) => {
+      try { return decodeURIComponent(value.replace(/^file:\/+/, '/')) } catch { return value }
+    }
+    const seen = new Set<string>()
+    return found.filter(entry => {
+      let identity = entry.uri ? normalize(entry.uri) : entry.id
+      if (entry.uri?.startsWith('content://') && entry.uri.includes('/document/')) {
+        try { const url = new URL(entry.uri); identity = url.hostname + ':' + decodeURIComponent(url.pathname.split('/document/').pop()!) } catch { /* Keep other valid entries if a provider has malformed encoding. */ }
+      }
+      if (seen.has(identity)) return false; seen.add(identity); return true
+    }).map(entry => {
+      if (!entry.uri) return entry
+      const download = downloadState.tasks.find(task => task.status === 'completed' && task.path &&
+        normalize(task.path) === normalize(entry.uri!) && task.track)
+      if (!download) return entry
+      return { ...entry, title: download.track.title || entry.title, artist: download.track.artist || entry.artist,
+        album: download.track.album || entry.album, durationMs: entry.durationMs || download.track.durationMs,
+        artwork: download.track.artwork, origin: 'download' as const }
+    })
+  } catch (error: any) {
+    localScanState.error = error?.message || '本机扫描失败，请重试'
     return []
   }
 }
@@ -83,7 +118,8 @@ export function localEntryToTrack(entry: LocalEntry): Track {
     artist: entry.artist || '未知歌手',
     album: entry.album || '',
     durationMs: Number(entry.durationMs) || 0,
-    artwork: '/default-cover.png',
+    artwork: entry.artwork || '/default-cover.png',
+    localPath: entry.uri,
     qualities: []
   }
 }

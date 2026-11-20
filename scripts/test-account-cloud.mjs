@@ -9,7 +9,7 @@ import { randomUUID, createHash } from 'node:crypto'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = process.env.CERU_SYNC_SOURCE_ROOT || path.resolve(here, '..')
 const out = process.env.CERU_QA_DIR || path.resolve(here, '../../../../verification/cloud')
-const ts = createRequire('D:/LX/CeruMusic-Mobile/package.json')('typescript')
+const ts = createRequire(root+'/package.json')('typescript')
 const checks = []
 function environment(handler, directory, options = {}) {
   const storage = new Map(), requests = [], modules = new Map()

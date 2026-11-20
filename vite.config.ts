@@ -27,7 +27,7 @@ export default defineConfig({
     ]
   },
   build: {
-    target: 'es2020',
+    target: 'chrome87',
     minify: 'esbuild',
     chunkSizeWarningLimit: 2000
   },

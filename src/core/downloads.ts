@@ -19,6 +19,7 @@ export interface DownloadTask {
   total: number
   fileName: string
   path: string
+  location?: string
   size: number
   error: string
   createdAt: number
@@ -52,7 +53,7 @@ function findTask(id: string): DownloadTask | undefined {
 
 function taskFor(track: Track): DownloadTask | undefined {
   return downloadState.tasks.find(
-    (task) => task.track.id === track.id && task.track.providerId === track.providerId
+    (task) => task.track.id === track.id && task.track.providerId === track.providerId && task.track.pluginId === track.pluginId
   )
 }
 
@@ -179,14 +180,15 @@ async function verifyFiles(): Promise<void> {
   for (const task of downloadState.tasks) {
     if (task.status !== 'completed' || !task.fileName) continue
     try {
-      await Filesystem.stat({
-        path: 'Music/' + task.fileName,
-        directory: Directory.External
-      })
+      const absolutePath = task.path?.startsWith('file:')
+        ? decodeURIComponent(new URL(task.path).pathname) : task.path
+      if (task.path?.startsWith('content://')) await Downloader.stat({ path: task.path })
+      else await Filesystem.stat(absolutePath
+        ? { path: absolutePath }
+        : { path: 'Music/' + task.fileName, directory: Directory.External })
     } catch {
       task.status = 'failed'
-      task.error = '文件已被删除'
-      task.path = ''
+      task.error = '文件无法读取，可能已移动、删除或文件夹授权被撤回'
       task.progress = 0
     }
   }
@@ -252,6 +254,7 @@ async function runTask(task: DownloadTask): Promise<void> {
     })
     task.fileName = result.fileName
     task.path = result.path
+    task.location = result.location
     task.size = result.size
     task.received = result.size
     task.total = result.size
@@ -349,15 +352,27 @@ export function retryTask(id: string): void {
 }
 
 export async function removeTask(id: string, deleteFile = true): Promise<void> {
-  const index = downloadState.tasks.findIndex((task) => task.id === id)
-  if (index < 0) return
-  const [task] = downloadState.tasks.splice(index, 1)
+  const task = findTask(id)
+  if (!task) return
+  if (task.status === 'queued' || task.status === 'downloading') await cancelTask(id)
+  if (deleteFile && task.fileName && Capacitor.isNativePlatform()) await Downloader.delete({ fileName: task.fileName, path: task.path })
+  const index = downloadState.tasks.findIndex(item => item.id === id)
+  if (index >= 0) downloadState.tasks.splice(index, 1)
   if (task.blobUrl) URL.revokeObjectURL(task.blobUrl)
-  if (deleteFile && task.fileName && Capacitor.isNativePlatform()) {
-    try {
-      await Downloader.delete({ fileName: task.fileName })
-    } catch {}
-  }
+  persist()
+}
+
+export function isLegacyDownload(task: DownloadTask): boolean {
+  return task.status === 'completed' && !!task.path && !task.path.startsWith('content://') && !task.blobUrl
+}
+export function downloadLocation(task: DownloadTask): string {
+  return task.location ? task.location + (task.fileName ? ' / '+task.fileName : '') : (isLegacyDownload(task) ? '旧版应用专属目录（可导出到共享文件夹）' : task.path || '位置未记录')
+}
+export async function exportLegacyDownload(task: DownloadTask): Promise<void> {
+  if (!isLegacyDownload(task)) return
+  const result = await Downloader.exportLegacy({ path: task.path, fileName: task.fileName })
+  // Keep the old physical copy; only point this download record to the verified export.
+  task.path = result.path; task.fileName = result.fileName; task.location = result.location; task.size = result.size
   persist()
 }
 

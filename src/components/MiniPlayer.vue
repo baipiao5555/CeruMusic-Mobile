@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import TrackArtwork from '@/components/TrackArtwork.vue'
 import Icon from './Icon.vue'
 import { currentTrack, playerState, togglePlay } from '@/core/playback/player'
 import {
@@ -54,12 +55,11 @@ onMounted(() => {
       <div class="bar"><i :style="{ width: progress + '%' }" /></div>
       <button class="mini-track" :aria-label="`打开播放器：${track!.title}`" @click="openPlayer()">
       <div class="cover" ref="cover">
-        <img
+        <TrackArtwork
+          :track="track!" :eager="true"
           class="mini-record"
           :class="{ playing: playerState.playing && !playerState.loading }"
-          :src="track!.artwork || '/default-cover.png'"
           alt=""
-          @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
         />
       </div>
       <div class="info">

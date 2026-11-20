@@ -1,3 +1,4 @@
+import { installRuntimeCompatibility } from './runtimeCompat'
 export interface SandboxArtifact {
   header: { manifest: any }
   modules: Record<string, string>
@@ -113,7 +114,8 @@ function buildFrameDocument(entryCode: string): string {
     for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     var boot = JSON.parse(new TextDecoder().decode(bytes));
     var entry = (0, eval)("(" + boot.entry + ")");
-    globalThis.__ceruStart(entry);
+    var installCompatibility = (0, eval)(${JSON.stringify("(" + installRuntimeCompatibility.toString() + ")")});
+    globalThis.__ceruStart(function(core) { installCompatibility(core); return entry(core); });
   } catch (error) {
     parent.postMessage({ type: "failed", data: { message: String((error && error.message) || error) } }, "*");
   }

@@ -19,7 +19,7 @@ const bundled = await build({
     setup(builder) {
       builder.onResolve({ filter: /^\.\/network$/ }, () => ({ path: 'network', namespace: 'fixture' }))
       builder.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({
-        contents: 'export const requestRemote = (input) => globalThis.__lxCatalogRequest(input)'
+        contents: 'export const requestRemote = (input) => globalThis.__lxCatalogRequest(input); export const validateRemoteUrl = (value) => new URL(value)'
       }))
     }
   }]

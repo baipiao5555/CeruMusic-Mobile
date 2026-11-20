@@ -50,6 +50,18 @@
       throw error;
     }, 'AbortSignal.throwIfAborted');
   }
+  if (!original.randomUUID && global.crypto && typeof global.crypto.getRandomValues === 'function') {
+    // Share the existing CSPRNG fallback with parent WebView, iframe and Worker.
+    // Never substitute Math.random or expand plugin permissions.
+    var secureRandom = global.crypto.getRandomValues.bind(global.crypto);
+    install(global.crypto, 'randomUUID', function randomUUID() {
+      var bytes = secureRandom(new Uint8Array(16));
+      bytes[6] = (bytes[6] & 15) | 64;
+      bytes[8] = (bytes[8] & 63) | 128;
+      var hex = Array.from(bytes, function (byte) { return byte.toString(16).padStart(2, '0'); }).join('');
+      return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+    }, 'crypto.randomUUID');
+  }
   var chromium = global.navigator && global.navigator.userAgent.match(/(?:Chrome|Chromium)\/([\d.]+)/);
   global.__ceruCompat = { original: original, patched: patched, chromium: chromium ? chromium[1] : '' };
 })(typeof globalThis !== 'undefined' ? globalThis : typeof self !== 'undefined' ? self : this);

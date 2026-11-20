@@ -1,6 +1,7 @@
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import {
   allProviders,
+  searchProviders,
   invokeProvider,
   notify,
   registerHostHooks,
@@ -18,10 +19,13 @@ import {
 import { toTrack, type Track } from '../track'
 import { matchCloudLyrics } from '../lyrics/cloud'
 import { normalizeTimedWords, type TimedLyricWord } from '../lyrics/timeline'
-import { playableUrl, providerForTrack } from './source'
+import { playableSource, providerForTrack, trackQualityCandidates } from './source'
 import { localUrlFor } from '../downloads'
 import { cachedAudioUrl } from '../cache/audioCache'
 import { logEvent } from '../logs'
+import { isWebDavTrack } from '../sync/webdavMedia'
+import { qualityLabel } from '../quality'
+import { sourcesOf, sameRecording, sourceKey, sourceLabel, withSources } from '../trackGrouping'
 
 export type { Track } from '../track'
 export { toTrack }
@@ -60,6 +64,7 @@ export const playerState = reactive({
 
 let audio: HTMLAudioElement | null = null
 let resolveToken = 0
+let playbackController: AbortController | null = null
 let startPending = false
 /**
  * 新音源已经设进 <audio>、但它的 metadata 还没到时为 true。
@@ -99,6 +104,7 @@ function cancelPendingStart(): boolean {
   if (!startPending) return false
   startPending = false
   resolveToken += 1
+  playbackController?.abort(); playbackController = null
   clearLoadTimer()
   playerState.loading = false
   playerState.playing = false
@@ -397,6 +403,18 @@ export function initPlayer(): void {
   audio.addEventListener('error', () => {
     playerState.loading = false
     if (!audio?.src || startPending) return
+    const track = currentTrack()
+    if (track && !playerState.quality && track.pluginId !== 'local' && !isWebDavTrack(track)) {
+      try {
+        const choices = trackQualityCandidates(track)
+        const used = choices.indexOf(playerState.resolvedQuality || undefined)
+        const lower = used >= 0 ? choices.slice(used + 1) : []
+        if (lower.length) {
+          void startPlayback(track, playerState.currentTime, true, lower).catch(() => {})
+          return
+        }
+      } catch { /* The owning source may have been disabled meanwhile. */ }
+    }
     playerState.error = '音频加载失败，请尝试切换音质或音源'
     playerState.playing = false
     logEvent(
@@ -443,6 +461,11 @@ function updatePositionState(): void {
   } catch {}
 }
 
+watch(() => currentTrack()?.artwork, () => {
+  const track = currentTrack()
+  if (track) { attachMediaSession(track); syncBackgroundAudio(track, playerState.playing, playerState.currentTime * 1000, playerState.duration * 1000) }
+})
+
 function attachMediaSession(track: Track): void {
   if (!('mediaSession' in navigator)) return
   try {
@@ -468,13 +491,16 @@ function absoluteArtwork(url: string): string {
   return new URL(url, location.href).href
 }
 
-async function resolvePlaybackUrls(track: Track): Promise<{ url: string; fallbackUrl: string }> {
+async function resolvePlaybackUrls(track: Track, quality = playerState.quality, signal?: AbortSignal): Promise<{ url: string; fallbackUrl: string }> {
   const local = localUrlFor(track)
   if (local) {
     playerState.resolvedQuality = 'local'
     return { url: local, fallbackUrl: '' }
   }
-  const remote = await playableUrl(track, playerState.quality)
+  const source = await playableSource(track, quality, signal)
+  signal?.throwIfAborted()
+  const remote = source.url
+  playerState.resolvedQuality = source.quality || quality || ''
   // 本机音乐已经是 127.0.0.1 直出，再套一层缓存代理没有意义，还会白占磁盘。
   if (track.pluginId === 'local' || !settingsState.playbackCache) {
     return { url: remote, fallbackUrl: '' }
@@ -490,57 +516,22 @@ function releaseBlob(): void {
   }
 }
 
-function normalizeForMatch(value: string): string {
-  return String(value ?? '')
-    .toLowerCase()
-    .replace(/[\s\-_.·()[\]【】]/g, '')
-}
-
-/** Finds the same song on another enabled provider after a playback failure. */
-async function findFallbackTrack(track: Track): Promise<Track | null> {
+/** Only selected/running sources; exact recording checks prevent unrelated covers being substituted. */
+async function findFallbackTrack(track: Track, attempted: Set<string>, searched: Set<string>): Promise<Track | null> {
   if (!settingsState.autoSourceFallback) return null
-  const title = normalizeForMatch(track.title)
-  const artist = normalizeForMatch(track.artist)
-  if (!title) return null
-  const providers = allProviders().filter(
-    (provider) =>
-      !(provider.pluginId === track.pluginId && provider.providerId === track.providerId) &&
-      provider.methods.includes('tracks.search') &&
-      provider.methods.includes('tracks.resolve')
-  )
-  for (const provider of providers) {
+  const eligible = searchProviders().filter(p => !attempted.has(sourceKey(p)) && p.methods.includes('tracks.search') && p.methods.includes('tracks.resolve'))
+  const known = sourcesOf(track)
+  for (const source of known) if (eligible.some(p=>p.pluginId===source.pluginId&&p.providerId===source.providerId) && sameRecording(track,source)) return withSources(source,known)
+  for (const provider of eligible) {
+    if (searched.has(sourceKey(provider))) continue
+    searched.add(sourceKey(provider))
+    const controller = new AbortController(), timer = setTimeout(()=>controller.abort(),12_000)
     try {
-      const page = await invokeProvider(provider, 'tracks.search', [
-        {
-          query: `${track.title} ${track.artist}`.trim(),
-          kinds: ['track'],
-          filters: {},
-          limit: 10
-        }
-      ])
-      const matches = (page?.items ?? [])
-        .filter((item: any) => item.ref?.kind === 'track')
-        .map((item: any) => toTrack(item, provider))
-        .filter((candidate: Track) => {
-          const candidateTitle = normalizeForMatch(candidate.title)
-          const candidateArtist = normalizeForMatch(candidate.artist)
-          return (
-            (candidateTitle === title ||
-              candidateTitle.includes(title) ||
-              title.includes(candidateTitle)) &&
-            (!artist ||
-              candidateArtist.includes(artist) ||
-              artist.includes(candidateArtist))
-          )
-        })
-      if (matches.length) {
-        return (
-          matches.find((candidate: Track) => candidate.artist === track.artist) ?? matches[0]
-        )
-      }
-    } catch {
-      // Try the next provider.
-    }
+      const page = await invokeProvider(provider,'tracks.search',[{query:`${track.title} ${track.artist}`.trim(),kinds:['track'],filters:{},limit:10}],controller.signal)
+      const candidate = (page?.items || []).filter((x:any)=>x.ref?.kind==='track').map((x:any)=>toTrack(x,provider)).find((t:Track)=>sameRecording(track,t))
+      if (candidate) return withSources(candidate,[...known,candidate])
+    } catch { /* This source failed this lookup; continue without looping back to it. */ }
+    finally { clearTimeout(timer) }
   }
   return null
 }
@@ -548,9 +539,14 @@ async function findFallbackTrack(track: Track): Promise<Track | null> {
 async function startPlayback(
   track: Track,
   seekTo = 0,
-  allowFallback = true
+  allowFallback = true,
+  remainingQualities?: Array<string | undefined>,
+  attempted = new Set<string>(),
+  searched = new Set<string>()
 ): Promise<void> {
   if (!audio) initPlayer()
+  attempted.add(sourceKey(track))
+  playbackController?.abort()
   const token = ++resolveToken
   startPending = true
   pendingStartSeek = seekTo
@@ -562,16 +558,6 @@ async function startPlayback(
   // 从这里开始到新源 metadata 到达，进度条只认 seekTo，不许读旧的 audio.currentTime。
   awaitingLoad = true
   clearLoadTimer()
-  loadTimer = setTimeout(() => {
-    if (token !== resolveToken || !playerState.loading) return
-    startPending = false
-    detachAudioSource()
-    releaseBlob()
-    playerState.loading = false
-    playerState.playing = false
-    playerState.error = '加载超时，请重试或切换音源'
-    logEvent('error', 'PLAYER', playerState.error, `歌曲：${track.title} / ${track.artist}`)
-  }, 25_000)
   playerState.duration = track.durationMs ? track.durationMs / 1000 : 0
   playerState.lyrics = []
   playerState.lyricSource = ''
@@ -590,38 +576,52 @@ async function startPlayback(
   )
   void loadLyrics(track)
   try {
-    const { url, fallbackUrl } = await resolvePlaybackUrls(track)
-    if (token !== resolveToken) return
-    releaseBlob()
-    if (url.startsWith('blob:')) blobUrl = url
-    audio!.src = url
-    // Some WebViews reset playbackRate when a new source is attached.
-    applyPlaybackRate()
-    // 新音源的 metadata 一到就解除时间轴锁定；要续播的位置也在这里落下去。
-    audio!.addEventListener(
-      'loadedmetadata',
-      () => {
-        // 连点多个音源时，只有最后一次 startPlayback 注册的监听可以落位置。
+    const qualities = localUrlFor(track) || track.pluginId === 'local' || isWebDavTrack(track) ? [undefined] : remainingQualities || trackQualityCandidates(track, playerState.quality)
+    for (let index = 0; index < qualities.length; index++) {
+      const quality = qualities[index]
+      if (token !== resolveToken) return
+      playerState.resolvedQuality = quality || ''
+      const controller = new AbortController(); playbackController = controller
+      let rejectAbort: (reason: unknown) => void = () => {}
+      const aborted = new Promise<never>((_resolve, reject) => { rejectAbort = reject })
+      const onAbort = () => rejectAbort(controller.signal.reason || new Error('播放已取消'))
+      controller.signal.addEventListener('abort', onAbort, { once:true })
+      const timer = setTimeout(() => controller.abort(new Error(`${qualityLabel(quality)}音质加载超时`)), isWebDavTrack(track) ? 60_000 : 12_000)
+      try {
+        await Promise.race([aborted, (async () => {
+          const { url, fallbackUrl } = await resolvePlaybackUrls(track, quality, controller.signal)
+          controller.signal.throwIfAborted()
+          if (token !== resolveToken) return
+          releaseBlob(); if (url.startsWith('blob:')) blobUrl = url
+          audio!.src = url; applyPlaybackRate()
+          audio!.addEventListener('loadedmetadata', () => {
+            if (token !== resolveToken || controller.signal.aborted) return
+            awaitingLoad = false
+            if (seekTo > 0) { try { audio!.currentTime = seekTo } catch {} }
+            resetClock()
+          }, { once:true })
+          try { await audio!.play() }
+          catch (error) {
+            controller.signal.throwIfAborted()
+            if (!fallbackUrl || token !== resolveToken) throw error
+            logEvent('warn', 'PLAYER', '本机播放缓存不可用，改用原始音频地址', String(error))
+            audio!.src = fallbackUrl; applyPlaybackRate(); await audio!.play()
+          }
+          controller.signal.throwIfAborted()
+        })()])
         if (token !== resolveToken) return
-        awaitingLoad = false
-        if (seekTo > 0) {
-          try {
-            audio!.currentTime = seekTo
-          } catch {}
-        }
-        resetClock()
-      },
-      { once: true }
-    )
-    try {
-      await audio!.play()
-    } catch (error) {
-      // A broken local cache proxy must not make every online source unplayable.
-      if (!fallbackUrl || token !== resolveToken) throw error
-      logEvent('warn', 'PLAYER', '本机播放缓存不可用，改用原始音频地址', String(error))
-      audio!.src = fallbackUrl
-      applyPlaybackRate()
-      await audio!.play()
+        if (index > 0) notify(`自动音质已回落至${qualityLabel(playerState.resolvedQuality)}`)
+        break
+      } catch (error) {
+        if (token !== resolveToken) return
+        controller.abort(); detachAudioSource(); releaseBlob()
+        if (index === qualities.length - 1) throw error
+        awaitingLoad = true; playerState.playing = false; playerState.loading = true
+        logEvent('warn', 'PLAYER', `${qualityLabel(quality)}不可用，尝试较低音质`, String(error))
+      } finally {
+        clearTimeout(timer); controller.signal.removeEventListener('abort', onAbort)
+        if (playbackController === controller) playbackController = null
+      }
     }
     // 旧请求不再拥有共享 audio，即使新歌曲用了同一 URL 也不能暂停它。
     // 用户主动取消已由 cancelPendingStart() 停止并卸载音源。
@@ -649,7 +649,7 @@ async function startPlayback(
     playerState.playing = false
     if (allowFallback && settingsState.autoSourceFallback) {
       playerState.loading = true
-      const fallback = await findFallbackTrack(track)
+      const fallback = await findFallbackTrack(track, attempted, searched)
       if (token === resolveToken && fallback) {
         const index = playerState.queue.findIndex(
           (item) => item.id === track.id && item.providerId === track.providerId
@@ -658,12 +658,12 @@ async function startPlayback(
         logEvent(
           'warn',
           'PLAYER',
-          `「${track.title}」播放失败，已切换到 ${fallback.providerName}`,
-          `原音源：${track.providerName} → ${fallback.providerName}`
+          `「${track.title}」播放失败，已切换到 ${sourceLabel(fallback)}`,
+          `原来源：${sourceLabel(track)} → ${sourceLabel(fallback)}`
         )
-        notify(`「${track.title}」播放失败，已切换到 ${fallback.providerName}`)
+        notify(`「${track.title}」播放失败，已切换到 ${sourceLabel(fallback)}`)
         persist()
-        await startPlayback(fallback, seekTo, false)
+        await startPlayback(fallback, seekTo, true, undefined, attempted, searched)
         return
       }
       playerState.loading = false

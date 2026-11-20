@@ -4,6 +4,8 @@ import { themeBackgroundScene } from '@/core/themeBackground'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar } from '@capacitor/status-bar'
+import TrackArtwork from '@/components/TrackArtwork.vue'
+import { sourceLabel } from '@/core/trackGrouping'
 import Icon from '@/components/Icon.vue'
 import {
   currentTrack,
@@ -203,7 +205,7 @@ const favorite = computed(() => (track.value ? isFavorite(track.value) : false))
 
 const qualityShort = computed(() => {
   const quality = playerState.resolvedQuality || playerState.quality
-  const label = qualityLabel(quality)
+  const label = !playerState.quality && quality && quality !== 'local' ? '自动 · ' + qualityLabel(quality) : qualityLabel(quality)
   return playerState.loading ? (quality ? `${label} · 解析中` : '解析中') : label
 })
 
@@ -467,11 +469,7 @@ onUnmounted(() => {
       <div class="p-core">
         <button ref="playerArt" class="p-art" type="button" aria-label="点击封面打开完整歌词" @click="openLyrics">
           <span class="p-record" :class="{ playing: playerState.playing && !playerState.loading }">
-          <img
-            :src="track.artwork || '/default-cover.png'"
-            :alt="track.title + '的封面'"
-            @error="($event.target as HTMLImageElement).src = '/default-cover.png'"
-          />
+          <TrackArtwork :track="track" :eager="true" :alt="track.title + '的封面'" />
           </span>
         </button>
 
@@ -761,7 +759,7 @@ onUnmounted(() => {
         <div class="sh-head">
           <div>
             <div class="sh-title">播放设置</div>
-            <div class="meta">{{ track.providerName }} · {{ qualityShort }}</div>
+            <div class="meta">{{ sourceLabel(track) }} · {{ qualityShort }}</div>
           </div>
           <button class="iconbtn quiet" aria-label="关闭" @click="closeSettings">
             <Icon name="close" :size="18" />

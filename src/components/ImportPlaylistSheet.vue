@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from './Icon.vue'
-import { commitPlaylistImport, createPlaylistWithTracks, libraryState } from '@/core/library'
+import { commitPlaylistImport, libraryState } from '@/core/library'
 import { parsePlaylistFile, type PlaylistFilePreview, PLAYLIST_FILE_LIMITS } from '@/core/playlistFile'
 import { confirmAction } from '@/core/confirm'
 import {
@@ -97,6 +97,7 @@ function describeImportError(error: unknown): { message: string; detail: string 
     }
   }
   if (/登录|login|auth|token|401|403|permission/.test(text)) {
+    if (selectedIsLx.value) return { message: 'LX 适配器只读取公开歌单；请先在原平台将歌单公开，再粘贴完整链接重试。', detail }
     return { message: '这个歌单需要登录才能读取，请先在音源插件里登录对应平台再回来重试。', detail }
   }
   if (/timeout|timed out|abort|超时/.test(text)) {
@@ -114,6 +115,7 @@ const selectedImporter = computed<PlaylistImporterHandle | undefined>(() => {
     importers.value[0]
   )
 })
+const selectedIsLx = computed(() => pluginState.plugins.find(p => p.pluginId === selectedImporter.value?.pluginId)?.format === 'lx')
 
 function chooseImporter(importer: PlaylistImporterHandle): void {
   selectedImporterId.value = `${importer.pluginId}:${importer.id}`
@@ -142,9 +144,9 @@ async function startImport(): Promise<void> {
     if (!result.tracks.length) {
       throw new Error('没有解析到歌曲：歌单可能为空、未公开，或需要先在插件里登录。')
     }
-    const playlist = createPlaylistWithTracks(result.name || importer.title, result.tracks)
+    const committed = commitPlaylistImport([{ name: result.name || importer.title, tracks: result.tracks }])
     emit('close')
-    router.push('/playlist/' + playlist.id)
+    router.push('/playlist/' + committed.createdIds[0])
   } catch (error: unknown) {
     const described = describeImportError(error)
     importError.value = described.message
@@ -220,7 +222,7 @@ async function startImport(): Promise<void> {
       </div>
 
       <template v-else-if="importers.length">
-        <p class="sh-sub pad">解析和登录态由插件提供，支持平台取决于你安装的音源插件。</p>
+        <p class="sh-sub pad">{{ selectedIsLx ? '使用当前 LX 插件的平台读取公开歌单；导入歌曲仍由这个音源播放，无需另装插件。' : '解析和登录态由插件提供，支持平台取决于你安装的音源插件。' }}</p>
 
         <div class="imp-chips pad">
           <button

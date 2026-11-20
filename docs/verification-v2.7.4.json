@@ -1,0 +1,26 @@
+{
+  "release": "v2.7.4",
+  "nativeApiContractVersions": [
+    23,
+    28,
+    29,
+    32
+  ],
+  "themeVersions": [
+    23,
+    25,
+    26,
+    27,
+    28,
+    29,
+    32,
+    33,
+    36
+  ],
+  "newApiLintIssues": 0,
+  "coreMarketSuites": 14,
+  "browserSuites": 5,
+  "tabletChecks": 287,
+  "actualDeviceTest": false,
+  "legacyWebViewSimulation": "removed native Array.at/randomUUID and rejected dvh; not an installed Chromium87 engine"
+}

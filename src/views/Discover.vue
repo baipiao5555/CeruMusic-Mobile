@@ -5,6 +5,7 @@ import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
 import {
   allProviders,
+  searchProviders,
   invokeProvider,
   pluginState,
   selectProvider,
@@ -25,9 +26,10 @@ onMounted(() => { dailyDateTimer = setInterval(updateDailyDate, 60000); document
 onActivated(updateDailyDate)
 onBeforeUnmount(() => { if (dailyDateTimer) clearInterval(dailyDateTimer); document.removeEventListener('visibilitychange', updateDailyDate) })
 const providers = computed(() => allProviders())
-const selected = computed(
-  () => providers.value.find((item) => item.providerId === pluginState.selectedProvider) ?? providers.value[0]
-)
+const defaultProvider = computed(()=>providers.value.find(p=>p.providerId===pluginState.selectedProvider&&(!pluginState.selectedSourcePlugin[p.providerId]||p.pluginId===pluginState.selectedSourcePlugin[p.providerId])))
+function supportsHome(p:ProviderHandle):boolean {return p.methods.includes('charts.list') || p.methods.includes('playlists.list')}
+const selected = computed(()=>{const primary=defaultProvider.value;return primary&&supportsHome(primary)?primary:searchProviders().find(supportsHome)||primary||providers.value[0]})
+const homeFallback = computed(()=>defaultProvider.value && selected.value && (selected.value.pluginId!==defaultProvider.value.pluginId||selected.value.providerId!==defaultProvider.value.providerId))
 const providerKey = computed(() =>
   selected.value ? `${selected.value.pluginId}:${selected.value.providerId}` : ''
 )
@@ -102,7 +104,8 @@ async function loadPlaylists(): Promise<void> {
     playlists.value = (page?.items ?? []).filter((item: any) => item.ref?.kind === 'playlist')
     saveCache(key)
   } catch (err: any) {
-    console.warn('加载歌单失败:', err)
+    if (seq !== playlistRequestSeq || key !== providerKey.value) return
+    error.value = '歌单加载失败：' + (err?.message || '网络请求失败')
   }
 }
 
@@ -146,6 +149,7 @@ async function fetchAll(provider: ProviderHandle, seq: number): Promise<void> {
       const res = await invokeProvider(provider, 'playlists.categories', [])
       if (seq !== requestSeq) return
       categories.value = res?.items ?? []
+      if (res?.warning) error.value = res.warning
       if (!categories.value[activeCategory.value]) activeCategory.value = 0
       const category = categories.value[activeCategory.value]
       if (category?.ref) {
@@ -156,7 +160,8 @@ async function fetchAll(provider: ProviderHandle, seq: number): Promise<void> {
       }
     }
   } catch (err: any) {
-    console.warn('加载歌单失败:', err)
+    if (seq !== requestSeq) return
+    error.value = '歌单加载失败：' + (err?.message || '网络请求失败')
   }
 }
 
@@ -226,7 +231,7 @@ function openChart(chart: any): void {
 }
 
 function openCatalog(tab: 'playlists' | 'charts' = 'playlists'): void {
-  router.push({ path: '/browse', query: { tab } })
+  router.push({ path: '/browse', query: { tab,provider:selected.value?.providerId,plugin:selected.value?.pluginId } })
 }
 
 function playHistory(index: number): void {
@@ -358,7 +363,7 @@ watch(providerKey, () => void load())
         <div v-if="!providers.length" class="empty">
           <div class="glyph"><Icon name="plugin" :size="30" /></div><h3>把喜欢的音乐带进来</h3><p>启用音源后可搜索和浏览音乐；本地音乐与已有收藏仍可使用。</p><button class="btn btn-primary mt8" @click="router.push('/plugins')"><Icon name="plus" :size="17" />添加音源</button>
         </div>
-        <div v-else-if="error && !charts.length" class="empty">
+        <div v-else-if="error && !charts.length && !playlists.length" class="empty">
           <div class="glyph"><Icon name="wifi-off" :size="30" /></div><h3>{{ error }}</h3><p>检查网络后重试，或切换音源。</p><button class="btn btn-ghost btn-sm mt8" @click="load(true)"><Icon name="refresh" :size="16" />重新加载</button>
         </div>
         <div v-else-if="!playlists.length && !charts.length" class="home-note pad">
@@ -366,7 +371,8 @@ watch(providerKey, () => void load())
         </div>
       </template>
 
-      <div class="home-source-footer"><button @click="sourcePickerOpen = true">{{ providerName }}<Icon name="chevron-down" :size="13" /></button><button :disabled="loading" @click="load(true)"><Icon name="refresh" :size="14" />刷新内容</button></div>
+      <p v-if="error && (charts.length || playlists.length)" class="pad home-fallback-note" role="status">{{ error }} · 可点击下方刷新内容重试</p>
+      <p v-if="homeFallback" class="pad home-fallback-note">默认来源 {{ defaultProvider?.name }} 未提供首页目录；这里展示已选来源 {{ selected?.name }} 的内容，默认来源不变。</p><div class="home-source-footer"><button @click="sourcePickerOpen = true">{{ providerName }}<Icon name="chevron-down" :size="13" /></button><button :disabled="loading" @click="load(true)"><Icon name="refresh" :size="14" />刷新内容</button></div>
     </div>
 
     <Teleport to="body">
@@ -383,6 +389,8 @@ watch(providerKey, () => void load())
 </template>
 
 <style scoped>
+.home-fallback-note{font-size:11px;color:var(--ink-3);line-height:1.9;margin:12px 0}
+
 .daily-entry{display:flex;align-items:center;gap:13px;margin:0 var(--pad) 18px;width:calc(100% - var(--pad) * 2);min-height:84px;padding:11px 14px;border:1px solid var(--line-2);border-radius:14px;text-align:left;background:linear-gradient(120deg,var(--tint-soft),var(--porcelain));color:var(--ink)}.daily-card-date{flex:none;width:44px;text-align:center;color:var(--brand-strong)}.daily-card-date small{font-size:10px;display:block}.daily-card-date strong{font-size:30px;line-height:1.25;font-weight:650}.daily-card-copy{flex:1;min-width:0}.daily-card-copy strong{display:block;font-size:15px;font-weight:600;line-height:1.5}.daily-card-copy small{display:block;font-size:10px;color:var(--ink-3);line-height:1.6;margin-top:4px}@media(max-width:375px){.daily-entry{gap:10px;padding-left:11px;padding-right:11px}.daily-card-copy strong{font-size:14px}}
 .home-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:0 12px 0 var(--pad); min-height:58px; }
 .home-channels { display:flex; align-items:center; gap:22px; min-width:0; }

@@ -3,9 +3,9 @@ import fs from 'node:fs/promises'
 import { gzipSync } from 'node:zlib'
 import { createRequire } from 'node:module'
 import { createHash } from 'node:crypto'
-const product = 'D:/LX/CeruMusic-Mobile'
-const work = 'D:/LX/CeruMusic-Mobile-第一阶段与兼容修复-2026-11-16/work'
-const evidence = 'D:/LX/CeruMusic-Mobile-第一阶段与兼容修复-2026-11-16/evidence'
+const product = process.env.CERU_SOURCE_ROOT || new URL('..',import.meta.url).pathname.replace(/^\/([A-Za-z]:)/,'$1')
+const work = product
+const evidence = process.env.CERU_QA_DIR || product + '/../evidence'
 const { build } = createRequire(product + '/package.json')('esbuild')
 const source = process.argv.includes('--staged') ? work + '/src/core/playlistFile.ts' : product + '/src/core/playlistFile.ts'
 const bundled = await build({ absWorkingDir: product, entryPoints: [source], bundle: true, format: 'esm', platform: 'browser', write: false, logLevel: 'silent', nodePaths: [product + '/node_modules'] })

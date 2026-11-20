@@ -19,6 +19,7 @@ import java.net.InetAddress;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -109,7 +110,7 @@ public class SecureHttpPlugin extends Plugin {
             response.put("status", status);
             response.put("body", binaryResponse
                     ? Base64.encodeToString(bytes, Base64.NO_WRAP)
-                    : new String(bytes, StandardCharsets.UTF_8));
+                    : new String(bytes, responseCharset(connection.getContentType())));
             JSObject responseHeaders = new JSObject();
             for (Map.Entry<String, List<String>> entry : connection.getHeaderFields().entrySet()) {
                 if (entry.getKey() == null || entry.getValue() == null || entry.getValue().isEmpty()) continue;
@@ -120,6 +121,14 @@ public class SecureHttpPlugin extends Plugin {
             return response;
         }
         throw new Exception("重定向次数过多");
+    }
+
+    private static Charset responseCharset(String contentType) {
+        if (contentType != null) {
+            java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("charset\\s*=\\s*[\"']?([^;\\s\"']+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(contentType);
+            if (matcher.find()) { try { return Charset.forName(matcher.group(1)); } catch (Exception ignored) {} }
+        }
+        return StandardCharsets.UTF_8;
     }
 
     private static boolean isRedirect(int status) {

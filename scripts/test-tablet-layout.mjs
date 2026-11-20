@@ -599,6 +599,7 @@ try {
     reducedMotion: 'no-preference'
   })
   await context.addInitScript(() => {
+    if(window.top!==window)return
     try {
       localStorage.setItem('ceru.update.v1', JSON.stringify({ autoCheck: false }))
       localStorage.setItem(

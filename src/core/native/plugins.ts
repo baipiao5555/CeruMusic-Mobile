@@ -12,6 +12,7 @@ interface DownloadResult {
   path: string
   fileName: string
   size: number
+  location?: string
 }
 
 export interface DownloaderPlugin {
@@ -22,7 +23,9 @@ export interface DownloaderPlugin {
     headers?: Record<string, string>
   }): Promise<DownloadResult>
   cancel(options: { id: string }): Promise<void>
-  delete(options: { fileName: string }): Promise<void>
+  delete(options: { fileName: string; path?: string }): Promise<void>
+  stat(options: { path: string }): Promise<{ size: number }>
+  exportLegacy(options: { path: string; fileName: string }): Promise<DownloadResult>
   addListener(
     event: 'progress',
     listener: (event: DownloadProgressEvent) => void

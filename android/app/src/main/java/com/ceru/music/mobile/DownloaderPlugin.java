@@ -13,7 +13,9 @@ import android.net.NetworkCapabilities;
 import android.os.Environment;
 
 import java.io.File;
-import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.OutputStream;
+import android.net.Uri;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
@@ -64,14 +66,12 @@ public class DownloaderPlugin extends Plugin {
         final String safeName = sanitizeFileName(fileName);
         executor.execute(() -> {
             try {
-                File target = uniqueFile(safeName);
-                long size = perform(id, url, headers, target, job);
-                JSObject result = new JSObject();
-                result.put("id", id);
-                result.put("path", target.getAbsolutePath());
-                result.put("fileName", target.getName());
-                result.put("size", size);
-                call.resolve(result);
+                MusicFoldersPlugin.Target target = MusicFoldersPlugin.create(getContext(), safeName);
+                try {
+                    long size = perform(id, url, headers, target, job);
+                    if (job.cancelled) throw new Exception("已取消");
+                    JSObject result = target.finish(size); result.put("id", id); call.resolve(result);
+                } catch (Exception error) { target.abort(); throw error; }
             } catch (Exception error) {
                 call.reject(messageOf(error));
             } finally {
@@ -88,32 +88,52 @@ public class DownloaderPlugin extends Plugin {
         call.resolve();
     }
 
-    @PluginMethod
-    public void delete(PluginCall call) {
-        String fileName = call.getString("fileName");
-        if (fileName == null || fileName.isEmpty()) {
-            call.reject("文件名不能为空");
-            return;
-        }
+    @PluginMethod public void stat(PluginCall call) {
+        String path = call.getString("path", "");
         try {
-            File dir = musicDir();
-            File target = new File(dir, fileName);
-            String root = dir.getCanonicalPath() + File.separator;
-            if (!target.getCanonicalPath().startsWith(root)) {
-                call.reject("文件不在下载目录内");
-                return;
-            }
-            if (target.exists() && !target.delete()) {
-                call.reject("删除文件失败");
-                return;
+            long size;
+            if (path.startsWith("content://")) {
+                Uri uri = Uri.parse(path);
+                if (!MusicFoldersPlugin.managedUri(getContext(),uri)) throw new Exception("不是本应用创建的下载文件");
+                try (android.content.res.AssetFileDescriptor fd = getContext().getContentResolver().openAssetFileDescriptor(uri,"r")) {
+                    if (fd == null) throw new Exception("下载文件无法打开"); size = fd.getLength();
+                }
+            } else { File file = MusicFoldersPlugin.legacyFile(getContext(),path); if (!file.isFile()) throw new Exception("下载文件不存在"); size = file.length(); }
+            JSObject result = new JSObject(); result.put("size",size); call.resolve(result);
+        } catch (Exception error) { call.reject(messageOf(error)); }
+    }
+    @PluginMethod public void delete(PluginCall call) {
+        String path=call.getString("path", ""), name=call.getString("fileName", "");
+        try {
+            if (path.startsWith("content://")) {
+                Uri uri=Uri.parse(path);if(!MusicFoldersPlugin.managedUri(getContext(),uri))throw new Exception("不能删除未由本应用创建的文件");
+                if (MusicFoldersPlugin.deleteFile(getContext(),uri)) MusicFoldersPlugin.forget(getContext(),uri);
+                else throw new Exception("删除文件失败，请检查文件夹授权");
+            } else {
+                File file=path.isEmpty()?new File(musicDir(),name):MusicFoldersPlugin.legacyFile(getContext(),path);
+                file=MusicFoldersPlugin.legacyFile(getContext(),file.getAbsolutePath());
+                if(file.exists()&&!file.delete())throw new Exception("删除文件失败");
             }
             call.resolve();
-        } catch (Exception error) {
-            call.reject(messageOf(error));
-        }
+        }catch(Exception error){call.reject(messageOf(error));}
+    }
+    @PluginMethod public void exportLegacy(PluginCall call) {
+        String path=call.getString("path", ""), name=sanitizeFileName(call.getString("fileName","audio.mp3"));
+        executor.execute(()->{
+            MusicFoldersPlugin.Target target=null;
+            try {
+                File original=MusicFoldersPlugin.legacyFile(getContext(),path);if(!original.isFile()||original.length()==0)throw new Exception("旧版下载文件不存在");
+                target=MusicFoldersPlugin.create(getContext(),name);long copied=0;
+                try(InputStream input=new FileInputStream(original);OutputStream output=target.open()){
+                    byte[] buffer=new byte[16*1024];int read;while((read=input.read(buffer))!=-1){output.write(buffer,0,read);copied+=read;}
+                }
+                if(copied!=original.length())throw new Exception("导出文件不完整，旧文件仍保留");
+                call.resolve(target.finish(copied));
+            }catch(Exception error){if(target!=null)target.abort();call.reject(messageOf(error));}
+        });
     }
 
-    private long perform(String id, String initialUrl, JSObject initialHeaders, File target, Job job)
+    private long perform(String id, String initialUrl, JSObject initialHeaders, MusicFoldersPlugin.Target target, Job job)
             throws Exception {
         String currentUrl = initialUrl;
         JSObject headers = initialHeaders;
@@ -147,12 +167,12 @@ public class DownloaderPlugin extends Plugin {
                 throw new Exception("下载失败: HTTP " + status);
             }
 
-            long total = connection.getContentLengthLong();
+            long total = contentLength(connection);
             long received = 0;
             long lastSent = 0L;
             byte[] buffer = new byte[16 * 1024];
             try (InputStream input = connection.getInputStream();
-                 FileOutputStream output = new FileOutputStream(target)) {
+                 OutputStream output = target.open()) {
                 int read;
                 while ((read = input.read(buffer)) != -1) {
                     if (job.cancelled) throw new Exception("已取消");
@@ -169,9 +189,16 @@ public class DownloaderPlugin extends Plugin {
             }
             emitProgress(id, received, total);
             if (received == 0) throw new Exception("下载内容为空");
+            if (total > 0 && received != total) throw new Exception("下载文件不完整");
             return received;
         }
         throw new Exception("重定向次数过多");
+    }
+
+    private static long contentLength(HttpURLConnection connection) {
+        // URLConnection.getContentLengthLong is API 24; headers also support >2 GB on API 23.
+        try { long value=Long.parseLong(connection.getHeaderField("Content-Length"));return value>=0?value:-1; }
+        catch (RuntimeException ignored) { return -1; }
     }
 
     private void emitProgress(String id, long received, long total) {

@@ -5,9 +5,14 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.database.Cursor;
 import android.net.Uri;
+import android.media.MediaMetadataRetriever;
 import android.os.Build;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.text.TextUtils;
+import android.webkit.MimeTypeMap;
+import java.io.File;
+import java.util.Locale;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -37,8 +42,43 @@ import com.getcapacitor.annotation.PermissionCallback;
         }
 )
 public class LocalMediaPlugin extends Plugin {
+    private final java.util.concurrent.ExecutorService scanner = java.util.concurrent.Executors.newSingleThreadExecutor(r -> { Thread t=new Thread(r,"ceru-local-scan");t.setDaemon(true);return t; });
 
-    private static final long MIN_DURATION_MS = 20_000L;
+    private void appendAppDownloads(JSArray tracks) {
+        File external = getContext().getExternalFilesDir(Environment.DIRECTORY_MUSIC);
+        File internal = new File(getContext().getFilesDir(), "Music");
+        for (File file : LocalAudioFiles.list(external, internal)) {
+            JSObject item = new JSObject();
+            String uri = Uri.fromFile(file).toString();
+            String name = file.getName();
+            int dot = name.lastIndexOf('.');
+            item.put("id", "app:" + uri);
+            item.put("origin", "download");
+            item.put("uri", uri);
+            item.put("title", dot > 0 ? name.substring(0, dot) : name);
+            item.put("artist", "未知歌手");
+            item.put("album", "");
+            item.put("durationMs", 0L);
+            item.put("size", file.length());
+            String extension = dot >= 0 ? name.substring(dot + 1).toLowerCase(Locale.ROOT) : "";
+            String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
+            item.put("mime", mime == null ? "audio/mpeg" : mime);
+            MediaMetadataRetriever metadata = new MediaMetadataRetriever();
+            try {
+                metadata.setDataSource(file.getAbsolutePath());
+                String title = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE);
+                String artist = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST);
+                String album = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM);
+                String duration = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+                if (!TextUtils.isEmpty(title)) item.put("title", title);
+                if (!TextUtils.isEmpty(artist)) item.put("artist", artist);
+                if (!TextUtils.isEmpty(album)) item.put("album", album);
+                if (!TextUtils.isEmpty(duration)) item.put("durationMs", Long.parseLong(duration));
+            } catch (Exception ignored) { /* Missing tags never hide an existing audio file. */ }
+            finally { try { metadata.release(); } catch (Exception ignored) {} }
+            tracks.put(item);
+        }
+    }
 
     private boolean granted() {
         if (Build.VERSION.SDK_INT >= 33) {
@@ -75,12 +115,31 @@ public class LocalMediaPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void scan(PluginCall call) {
+    public void scan(PluginCall call) { scanner.execute(() -> scanNow(call)); }
+
+    private void scanNow(PluginCall call) {
+        JSArray tracks = new JSArray();
+        appendAppDownloads(tracks);
+        MusicFoldersPlugin.appendManaged(getContext(), tracks);
+        StringBuilder folderErrors = new StringBuilder();
+        java.util.Set<String> seen = new java.util.HashSet<>(); int[] visited = {0};
+        for (Uri tree : !"all".equals(call.getString("source")) ? MusicFoldersPlugin.scanFolders(getContext()) : java.util.Collections.<Uri>emptyList()) {
+            try {
+                if (!MusicFoldersPlugin.hasGrant(getContext(), tree, false)) throw new Exception("文件夹授权失效，请重新选择：" + MusicFoldersPlugin.folderLabel(getContext(), tree));
+                MusicFoldersPlugin.appendFolder(getContext(),tree,tracks,seen,visited,0,android.provider.DocumentsContract.getTreeDocumentId(tree));
+            } catch (Exception error) { if(folderErrors.length()>0)folderErrors.append("；");folderErrors.append(error.getMessage()); }
+        }
+        if (!"all".equals(call.getString("source")) || !granted()) {
+            JSObject result=new JSObject(); result.put("tracks",tracks);result.put("granted",granted());
+            if(folderErrors.length()>0)result.put("error",folderErrors.toString());call.resolve(result);return;
+        }
         if (!granted()) {
-            call.reject("需要「音乐和音频」权限才能扫描本机歌曲", "PERMISSION");
+            JSObject result = new JSObject();
+            result.put("tracks", tracks);
+            result.put("granted", false);
+            call.resolve(result);
             return;
         }
-        JSArray tracks = new JSArray();
         ContentResolver resolver = getContext().getContentResolver();
         Uri collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
         String[] columns = {
@@ -92,13 +151,24 @@ public class LocalMediaPlugin extends Plugin {
                 MediaStore.Audio.Media.SIZE,
                 MediaStore.Audio.Media.MIME_TYPE
         };
-        String selection = MediaStore.Audio.Media.IS_MUSIC + "!=0 AND "
-                + MediaStore.Audio.Media.DURATION + ">=" + MIN_DURATION_MS;
-        String order = MediaStore.Audio.Media.TITLE + " COLLATE LOCALIZED ASC";
+        // IS_MUSIC and duration tags are often missing, especially for newly copied/downloaded files.
+        String selection = MediaStore.Audio.Media.SIZE + ">0";
+        // MediaStore validates sort tokens; COLLATE LOCALIZED is rejected on recent Android.
+        String order = MediaStore.Audio.Media.TITLE + " ASC";
 
+        java.util.List<String> classified = new java.util.ArrayList<>(java.util.Arrays.asList(columns));
+        classified.addAll(java.util.Arrays.asList("is_music", "is_ringtone", "is_notification", "is_alarm"));
+        if (Build.VERSION.SDK_INT >= 29) classified.add("relative_path");
+        if (Build.VERSION.SDK_INT >= 31) classified.add("is_recording");
         Cursor cursor = null;
         try {
-            cursor = resolver.query(collection, columns, selection, null, order);
+            try { cursor = resolver.query(collection, classified.toArray(new String[0]), selection, null, order); }
+            catch (Exception error) {
+                String message=String.valueOf(error.getMessage()).toLowerCase(java.util.Locale.ROOT);
+                if (!message.contains("column")) throw error;
+                // An OEM may omit classification columns. Keep the valid base query, not a SQL-error mask.
+                cursor = resolver.query(collection, columns, selection, null, order);
+            }
             if (cursor != null) {
                 int idIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID);
                 int titleIndex = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE);
@@ -119,6 +189,14 @@ public class LocalMediaPlugin extends Plugin {
                     if (TextUtils.isEmpty(artist) || "<unknown>".equals(artist)) artist = "未知歌手";
                     JSObject item = new JSObject();
                     item.put("id", String.valueOf(id));
+                    item.put("origin", "media");
+                    putFlag(cursor,item,"is_music","isMusic");
+                    putFlag(cursor,item,"is_recording","isRecording");
+                    boolean tone = flag(cursor,"is_ringtone") || flag(cursor,"is_notification") || flag(cursor,"is_alarm");
+                    item.put("isTone",tone);
+                    int pathIndex=cursor.getColumnIndex("relative_path");
+                    if(pathIndex>=0)item.put("relativePath",cursor.getString(pathIndex));
+                    item.put("uri", ContentUris.withAppendedId(collection, id).toString());
                     item.put("title", title);
                     item.put("artist", artist);
                     item.put("album", album == null ? "" : album);
@@ -130,14 +208,29 @@ public class LocalMediaPlugin extends Plugin {
             }
             JSObject result = new JSObject();
             result.put("tracks", tracks);
+            result.put("granted", true);
+            if(folderErrors.length()>0)result.put("error",folderErrors.toString());
             call.resolve(result);
         } catch (SecurityException error) {
-            call.reject("没有读取本机音乐的权限", "PERMISSION");
+            JSObject result = new JSObject();
+            result.put("tracks", tracks);
+            result.put("granted", false);
+            result.put("error", "系统媒体库读取权限已被撤回；应用下载仍可使用");
+            call.resolve(result);
         } catch (Exception error) {
-            call.reject("扫描失败: " + error.getMessage());
+            JSObject result = new JSObject();
+            result.put("tracks", tracks);
+            result.put("granted", true);
+            result.put("error", "媒体库扫描失败: " + error.getMessage());
+            call.resolve(result);
         } finally {
             if (cursor != null) cursor.close();
         }
+    }
+
+    private static boolean flag(Cursor cursor, String column) { int index=cursor.getColumnIndex(column);return index>=0 && "1".equals(cursor.getString(index)); }
+    private static void putFlag(Cursor cursor, JSObject item, String column, String key) {
+        int index=cursor.getColumnIndex(column);if(index>=0 && cursor.getString(index)!=null)item.put(key,"1".equals(cursor.getString(index)));
     }
 
     /** 供内部使用：把 MediaStore id 换成 content:// 地址。 */

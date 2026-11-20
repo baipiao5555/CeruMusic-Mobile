@@ -1,9 +1,11 @@
+import { LX_PLAYLIST_SOURCES, lxPlaylistImporters, parseLxPlaylistInput, listLxPlaylistCategories, listLxPlaylists, getLxPlaylist } from './lx-playlists'
+import { LX_HOME_SOURCES, listLxCharts, getLxChartTracks } from './lx-home'
 import { PluginCore, readPluginArtifact } from '@shiqianjiang/ceru-plugin-core'
 import { IframePluginSandbox } from './sandbox'
 import { requestRemote, validateRemoteUrl } from './network'
 import { idb } from '../storage/idb'
 import { createLxArtifact, inspectLxPlugin, lxLyrics, lxProviders } from './lx'
-import { lxMusicInfo, searchLxCatalog } from './lx-catalog'
+import { lxMusicInfo, searchLxCatalog, resolveLxArtwork } from './lx-catalog'
 import { selectPlaybackQuality } from '../quality'
 import { secureStore } from '../native/secureStore'
 import { sha256Hex } from '../storage/idb'
@@ -105,6 +107,7 @@ export class PluginHost {
   private disposed = false
   private lxReady = false
   private config: Record<string, any> = {}
+  private httpFailures = new Map<string,string>()
 
   constructor(state: PluginHostState) {
     this.pluginId = state.pluginId
@@ -208,12 +211,15 @@ export class PluginHost {
       if (this.lxReady) return
       const providers = lxProviders(data?.sources)
       this.manifest.contributes.providers = providers
+      this.manifest.contributes.playlistImporters = lxPlaylistImporters(providers)
       for (const provider of providers) {
         this.providerMethods.set(provider.id, new Set([
           'tracks.search',
           'tracks.resolve',
           ...(provider.actions.includes('lyric') ? ['tracks.lyrics'] : []),
-          ...(provider.actions.includes('pic') ? ['tracks.artwork'] : [])
+          'tracks.artwork',
+          ...(LX_HOME_SOURCES.includes(provider.id) ? ['charts.list','charts.getTracks'] : []),
+          ...(LX_PLAYLIST_SOURCES.includes(provider.id) ? ['playlists.categories','playlists.list','playlists.get'] : [])
         ]))
       }
       return
@@ -373,7 +379,7 @@ export class PluginHost {
       this.controllers.set(operationId, controllers)
       const timer = setTimeout(() => controller.abort(), 60_000)
       try {
-        return await requestRemote({
+        const response = await requestRemote({
           url: url.href,
           method: data.method,
           headers: data.headers,
@@ -383,7 +389,13 @@ export class PluginHost {
           responseType: data.responseType === 'arraybuffer' ? 'arraybuffer' : undefined,
           signal: controller.signal
         })
-      } finally {
+        const body = response.body
+        const code = typeof body === 'object' && body ? Number(body.error_code || body.errno || 0) : 0
+        if (response.status >= 400 || code > 0) this.httpFailures.set(operationId, `HTTP ${response.status}${code ? ' / 接口错误 ' + code : ''}`)
+        if (this.httpFailures.size > 100) this.httpFailures.delete(this.httpFailures.keys().next().value!)
+        return response
+      } catch (error: any) { this.httpFailures.set(operationId,error.message || '请求失败');throw error }
+      finally {
         clearTimeout(timer)
         controllers.delete(controller)
         if (!controllers.size) this.controllers.delete(operationId)
@@ -531,26 +543,39 @@ export class PluginHost {
     throw new Error('手机版暂不支持该插件接口: ' + method)
   }
 
-  async invokeProvider(providerId: string, method: string, args: any[] = []): Promise<any> {
+  async invokeProvider(providerId: string, method: string, args: any[] = [], signal?: AbortSignal): Promise<any> {
     await this.ensureReady()
-    if (this.lxReady) return this.invokeLxProvider(providerId, method, args)
+    if (this.lxReady) return this.invokeLxProvider(providerId, method, args, signal)
     if (!this.core) throw new Error('插件未启动')
     const controller = new AbortController()
+    const abort = () => controller.abort(signal?.reason)
+    signal?.addEventListener('abort', abort, { once: true }); if (signal?.aborted) abort()
     const timer = setTimeout(() => controller.abort(), 60_000)
+    const operationId = randomId()
     try {
-      return await this.core.invokeProvider(providerId, method, args, {
-        id: randomId(),
+      const result = await this.core.invokeProvider(providerId, method, args, {
+        id: operationId,
         deadlineAt: Date.now() + 60_000,
         signal: controller.signal
       })
+      if (Array.isArray(result?.items) && !result.items.length && this.httpFailures.has(operationId)) throw new Error('音源接口请求失败：' + this.httpFailures.get(operationId))
+      return result
     } finally {
-      clearTimeout(timer)
+      this.httpFailures.delete(operationId)
+      clearTimeout(timer); signal?.removeEventListener('abort', abort)
     }
   }
 
-  private async invokeLxProvider(providerId: string, method: string, args: any[]): Promise<any> {
+  private async invokeLxProvider(providerId: string, method: string, args: any[], signal?: AbortSignal): Promise<any> {
     if (!this.providerMethods.get(providerId)?.has(method)) throw new Error('洛雪音源不支持该操作')
     const provider = this.manifest.contributes.providers.find((item: any) => item.id === providerId)
+    if (method.startsWith('playlists.')) {
+      if (this.status('network') !== 'granted') throw new Error('插件未获得网络访问权限')
+      if (method === 'playlists.categories') return listLxPlaylistCategories(providerId, signal)
+      if (method === 'playlists.list') return listLxPlaylists(providerId, args[0], args[1], signal)
+      return this.limitLxQualities(provider, await getLxPlaylist(providerId, args[0], args[1], 100, signal))
+    }
+    if (method === 'charts.list' || method === 'charts.getTracks') { if(this.status('network')!=='granted')throw new Error('插件未获得网络访问权限');return method==='charts.list'?listLxCharts(providerId):getLxChartTracks(providerId,args[0],args[1]) }
     if (method === 'tracks.search') {
       if (this.status('network') !== 'granted') throw new Error('插件未获得网络访问权限')
       const query = args[0] ?? {}
@@ -561,6 +586,11 @@ export class PluginHost {
         )
       }
       return result
+    }
+    if (method === 'tracks.artwork') {
+      if (this.status('network') !== 'granted') throw new Error('插件未获得网络访问权限')
+      const url = await resolveLxArtwork(providerId, args[0], Boolean(args[1]?.ignoreSupplied))
+      return { url }
     }
     const actions: Record<string, string> = {
       'tracks.resolve': 'musicUrl', 'tracks.lyrics': 'lyric', 'tracks.artwork': 'pic'
@@ -576,6 +606,8 @@ export class PluginHost {
       throw new Error('歌曲与当前洛雪音源没有共同支持的音质，请切换音源')
     }
     const controller = new AbortController()
+    const abort = () => controller.abort(signal?.reason)
+    signal?.addEventListener('abort', abort, { once: true }); if (signal?.aborted) abort()
     const timer = setTimeout(() => controller.abort(), 60_000)
     let result: any
     try {
@@ -588,14 +620,18 @@ export class PluginHost {
         }
       }], controller.signal)
     } finally {
-      clearTimeout(timer)
+      clearTimeout(timer); signal?.removeEventListener('abort', abort)
     }
     if (method === 'tracks.lyrics') return lxLyrics(result)
     const url = typeof result === 'string' ? result : result?.url
     if (!url) throw new Error(result?.error?.message || result?.error || '洛雪音源没有返回有效地址')
     validateRemoteUrl(url)
-    if (method === 'tracks.artwork') return { url }
     return { ok: true, url, requestHeaders: result?.headers ?? result?.requestHeaders }
+  }
+
+  private limitLxQualities(provider: any, result: any): any {
+    for (const item of result.items || []) if (item.metadata?.qualities) item.metadata.qualities = item.metadata.qualities.filter((q: string) => provider.qualities.includes(q))
+    return result
   }
 
   getManifest(): any {
@@ -685,10 +721,18 @@ export class PluginHost {
     limit = 100
   ): Promise<any> {
     await this.ensureReady()
-    if (!this.core) throw new Error('插件未启动')
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 120_000)
     try {
+      if (this.lxReady) {
+        const importer = this.manifest.contributes.playlistImporters?.find((i: any) => i.id === importerId)
+        const provider = this.manifest.contributes.providers?.find((p: any) => p.id === importer?.providerId)
+        if (!provider) throw new Error('该 LX 平台未提供歌单导入能力')
+        if (this.status('network') !== 'granted') throw new Error('插件未获得网络访问权限')
+        const id = parseLxPlaylistInput(provider.id, value)
+        return this.limitLxQualities(provider, await getLxPlaylist(provider.id, {id}, cursor, limit, controller.signal))
+      }
+      if (!this.core) throw new Error('插件未启动')
       return await this.core.importPlaylist(importerId, value, cursor, limit, {
         id: randomId(),
         deadlineAt: Date.now() + 120_000,

@@ -34,6 +34,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(ExternalPlugin.class);
         registerPlugin(AudioCachePlugin.class);
         registerPlugin(LocalMediaPlugin.class);
+        registerPlugin(MusicFoldersPlugin.class);
         registerPlugin(SecretStorePlugin.class);
         registerPlugin(SyncHttpPlugin.class);
         registerPlugin(SyncKeepAlivePlugin.class);

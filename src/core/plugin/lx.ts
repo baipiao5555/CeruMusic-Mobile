@@ -4,7 +4,8 @@ import { LX_SOURCE_NAMES } from './lx-catalog'
 
 export function inspectLxPlugin(code: string): any | null {
   const header = code.match(/^\s*\/\*([\s\S]*?)\*\//)?.[1]
-  if (!header || !/\blx\b/.test(code) || /\bexports\s*\.\s*manifest\s*=/.test(code)) return null
+  // Obfuscated LX scripts need not contain the literal `lx`; runtime init validates providers.
+  if (!header || /\bexports\s*\.\s*manifest\s*=/.test(code)) return null
   const fields: Record<string, string> = {}
   for (const match of header.matchAll(/^\s*\*?\s*@(\w+)[ \t]+([^\r\n]*)/gm)) {
     fields[match[1]] = match[2].trim().slice(0, 1024)

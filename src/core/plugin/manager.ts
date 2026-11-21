@@ -13,6 +13,7 @@ import { inspectLxPlugin } from './lx'
 import { normalizeKnownPluginCode } from './compat'
 export { normalizeKnownPluginCode as preparePluginCode } from './compat'
 import { repositoryPath, requestRepository } from './distribution'
+import { compareVersions } from '../version'
 
 interface PluginProviderInfo {
   id: string
@@ -657,32 +658,7 @@ export async function applyPluginUpdate(candidate: PluginUpdateCandidate, confir
     sourceUrl: record.sourceUrl, updateUrl: record.updateUrl, installOrigin: record.installOrigin, catalogKey: record.catalogKey })
 }
 
-export function comparePluginVersions(a: string, b: string): number {
-  const parse = (value: string) => {
-    const m = String(value).match(/^v?(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:\.(0|[1-9]\d*))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/)
-    if (!m) throw new Error('版本格式无法自动比较，请核对后手动导入')
-    return { numbers: [Number(m[1]), Number(m[2] || 0), Number(m[3] || 0)], pre: m[4]?.split('.') }
-  }
-  const left = parse(a), right = parse(b)
-  for (let index = 0; index < 3; index += 1) {
-    const diff = left.numbers[index] - right.numbers[index]
-    if (diff !== 0) return diff
-  }
-  if (!left.pre && !right.pre) return 0
-  if (!left.pre) return 1
-  if (!right.pre) return -1
-  for (let i = 0; i < Math.max(left.pre.length, right.pre.length); i++) {
-    const x = left.pre[i], y = right.pre[i]
-    if (x === y) continue
-    if (x === undefined) return -1
-    if (y === undefined) return 1
-    const nx = /^\d+$/.test(x), ny = /^\d+$/.test(y)
-    if (nx && ny) return Number(x) - Number(y)
-    if (nx !== ny) return nx ? -1 : 1
-    return x < y ? -1 : 1
-  }
-  return 0
-}
+export const comparePluginVersions = compareVersions
 
 /** Re-downloads a plugin with an update URL and replaces it when the manifest version is newer. */
 export async function checkPluginUpdate(

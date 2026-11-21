@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core'
 import { httpRequest } from './net'
 import { Downloader, External, type DownloadProgressEvent } from './native/plugins'
 import { notify } from './plugin/manager'
+import { compareVersions } from './version'
 import {
   DEFAULT_BACKUP,
   DEFAULT_PRIMARY,
@@ -115,28 +116,16 @@ function restore(): void {
   } catch {}
 }
 
-function versionSegments(value: string): number[] {
-  return (value.replace(/^v/i, '').match(/\d+/g) ?? []).map((part) => Number(part))
-}
-
-/** > 0 when a is newer than b. */
-function compareVersions(a: string, b: string): number {
-  const left = versionSegments(a)
-  const right = versionSegments(b)
-  const length = Math.max(left.length, right.length)
-  for (let index = 0; index < length; index++) {
-    const diff = (left[index] ?? 0) - (right[index] ?? 0)
-    if (diff !== 0) return diff
-  }
-  return 0
-}
-
 function refreshHasUpdate(): void {
-  updateState.hasUpdate = Boolean(
-    updateState.latest &&
-      updateState.latest.tag !== updateState.ignoredTag &&
-      compareVersions(updateState.latest.tag, updateState.currentVersion) > 0
-  )
+  let newer = false
+  if (updateState.latest && updateState.latest.tag !== updateState.ignoredTag) {
+    try {
+      newer = compareVersions(updateState.latest.tag, updateState.currentVersion) > 0
+    } catch {
+      newer = false
+    }
+  }
+  updateState.hasUpdate = newer
 }
 
 function parseRelease(data: any): ReleaseInfo | null {

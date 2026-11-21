@@ -90,6 +90,22 @@ try {
     'the mini cover should be visible after the collapse'
   )
 
+  await page.locator('.mini-play[aria-label="播放队列"]').click()
+  await page.waitForFunction(() => location.hash === '#/player')
+  await page.locator('.q-sheet').waitFor({ state: 'visible' })
+  await page.waitForTimeout(80)
+  await page.screenshot({ path: '../evidence/queue-no-morph.png' })
+  assert.equal(await page.locator('.player-morph-clone').count(), 0,
+    'opening the queue must not start the cover expand morph')
+  assert.notEqual(
+    await page.evaluate(() => getComputedStyle(document.querySelector('.p-art')).opacity),
+    '0',
+    'the queue entry must not leave the player cover hidden'
+  )
+  await page.waitForTimeout(400)
+  assert.equal(await page.locator('.player-morph-clone').count(), 0,
+    'no delayed cover clone may appear above the queue')
+
   const reduced = await browser.newContext({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
@@ -129,7 +145,7 @@ try {
   assert.equal(await reducedPage.locator('.player-morph-clone').count(), 0)
 
   assert.equal(errors.length, 0, `unexpected page errors: ${errors.join(' | ')}`)
-  console.log('PASS player morph: expand, collapse, reduced-motion fallback')
+  console.log('PASS player morph: expand, collapse, direct queue entry, reduced-motion fallback')
 } finally {
   await browser.close()
 }

@@ -38,7 +38,9 @@ function openPlayer(query?: Record<string, string>): void {
 }
 
 function openQueue(): void {
-  openPlayer({ panel: 'queue' })
+  if (!track.value) return
+  cancelPlayerMorph()
+  void router.push({ path: '/player', query: { panel: 'queue' } })
 }
 
 onMounted(() => {

@@ -140,12 +140,16 @@ await page.evaluate(async () => window.__ceruDebug.checkAllPluginUpdates({ force
 const metaUpdated = await descriptor('ceru.test.metaupdate')
 check('manifest 更新地址可完成自动更新', metaUpdated?.version === '1.1.0', JSON.stringify(metaUpdated))
 
-// 6) 刷新后更新地址仍保存在本地，且插件页能显示并进入修改状态。
+// 6) 服务器再次发布新版后，重启应用应直接安装安全更新，而不只是提示。
+served.set(SOURCE_URL, plugin('3.0.0'))
+await page.evaluate(() => localStorage.removeItem('ceru.pluginUpdate.lastChecked'))
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForTimeout(2500)
+await page.waitForTimeout(3000)
 local = await descriptor('ceru.test.localupdate')
+check('启动时自动安装无需确认的安全更新', local?.version === '3.0.0', JSON.stringify(local))
 check('刷新后更新地址仍然保留', local?.updateUrl === SOURCE_URL, JSON.stringify(local))
 
+// 7) 插件页仍能显示并进入更新地址修改状态。
 await page.goto(APP_URL + '/#/plugins', { waitUntil: 'networkidle' })
 await page.waitForTimeout(1200)
 await page.locator('.market-tabs').getByRole('button', { name: /^已安装/ }).click()

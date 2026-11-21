@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineOptions({ inheritAttrs: false })
 import { computed, ref } from 'vue'
 import TrackArtwork from '@/components/TrackArtwork.vue'
 import SongSourcesSheet from './SongSourcesSheet.vue'
@@ -83,6 +84,7 @@ function formatDuration(ms: number): string {
 
 <template>
   <div
+    v-bind="$attrs"
     class="songrow"
     :class="{ active, selecting, selected: selectable && selected }"
     :role="selectable ? 'checkbox' : 'button'"

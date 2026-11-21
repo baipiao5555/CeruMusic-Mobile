@@ -1128,15 +1128,15 @@ async function resetSettings(): Promise<void> {
           <div v-if="show('about:autoUpdate')" class="settingrow">
             <span class="ico"><Icon name="plugin" :size="15" /></span>
             <div class="body">
-              <div class="lab">自动检查音源更新</div>
-              <div class="sub">启动时检查已安装插件的新版本</div>
+              <div class="lab">自动更新音源</div>
+              <div class="sub">启动时自动更新有更新地址的已安装插件</div>
             </div>
             <button
               class="switch"
               :class="{ on: settingsState.pluginAutoUpdate }"
               role="switch"
               :aria-checked="settingsState.pluginAutoUpdate"
-              aria-label="自动检查音源更新"
+              aria-label="自动更新音源"
               @click="updateSettings({ pluginAutoUpdate: !settingsState.pluginAutoUpdate })"
             />
           </div>

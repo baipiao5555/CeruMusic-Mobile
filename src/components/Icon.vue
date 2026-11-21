@@ -65,7 +65,9 @@ const alias: Record<string, string> = {
   headphone: 'headphone',
   'wifi-off': 'wifi-off',
   fade: 'fade',
-  swap: 'swap'
+  swap: 'swap',
+  locate: 'locate',
+  up: 'up'
 }
 
 const cls = computed(() => `i-${alias[props.name] ?? 'dot'}`)

@@ -4,14 +4,20 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.ViewGroup;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebView;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.WebViewListener;
 
 public class MainActivity extends BridgeActivity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 1001;
+    private boolean recoveringWebView;
 
     @SuppressWarnings("deprecation")
     @Override
@@ -44,6 +50,14 @@ public class MainActivity extends BridgeActivity {
         if (getBridge() != null && getBridge().getWebView() != null) {
             getBridge().getWebView().getSettings().setMixedContentMode(
                     android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            getBridge().addWebViewListener(new WebViewListener() {
+                @Override
+                public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                    Log.w("CeruMusic", "WebView renderer exited; rebuilding the activity");
+                    recoverWebView(view);
+                    return true;
+                }
+            });
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -56,5 +70,16 @@ public class MainActivity extends BridgeActivity {
                 );
             }
         }
+    }
+
+    /** A dead renderer cannot be reused; keeping its WebView leaves a permanent blank screen. */
+    private void recoverWebView(WebView view) {
+        if (recoveringWebView || isFinishing() || isDestroyed()) return;
+        recoveringWebView = true;
+        if (view.getParent() instanceof ViewGroup) {
+            ((ViewGroup) view.getParent()).removeView(view);
+        }
+        view.destroy();
+        recreate();
     }
 }

@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import SongRow from '@/components/SongRow.vue'
-import { deletePlaylist, getPlaylist, renamePlaylist, updatePlaylistTracks } from '@/core/library'
+import TrackListNavigation from '@/components/TrackListNavigation.vue'
+import { deletePlaylist, getPlaylist, renamePlaylist, updatePlaylistFields, updatePlaylistTracks } from '@/core/library'
 import { addToQueue, playTracks, setMode } from '@/core/playback/player'
+import { trackKey } from '@/core/trackGrouping'
+import { matchesTrackQuery, orderedTracks, useTrackNavigation } from '@/core/ui/trackNavigation'
 import { downloadTracks } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
 import { confirmAction } from '@/core/confirm'
@@ -15,13 +18,15 @@ const route = useRoute()
 const router = useRouter()
 const playlist = computed(() => getPlaylist(String(route.params.id)))
 const playlistTracks = computed(() => playlist.value?.tracks ?? [])
-const {
-  items: visibleTracks,
-  hasMore,
-  remaining,
-  showMore
-} = useListWindow(playlistTracks)
+const keyword = ref('')
+const searchOpen = ref(false)
+const sortMode = ref<'saved' | 'name' | 'artist'>('saved')
+const searchFiltered = computed(() => playlistTracks.value.filter(track => matchesTrackQuery(track,keyword.value)))
+const displayTracks = computed(() => orderedTracks(searchFiltered.value,sortMode.value))
+const scrollEl = ref<HTMLElement | null>(null)
+const { items: visibleTracks, hasMore, remaining, showMore } = useListWindow(displayTracks)
 const showRename = ref(false)
+const descriptionValue = ref('')
 const renameValue = ref('')
 const selectionMode = ref(false)
 const selectedIndexes = ref<Set<number>>(new Set())
@@ -58,6 +63,7 @@ const statsLine = computed(() => {
 function openRename(): void {
   if (!playlist.value) return
   renameValue.value = playlist.value.name
+  descriptionValue.value = playlist.value.description || ''
   showRename.value = true
 }
 
@@ -66,23 +72,24 @@ function saveRename(): void {
   const name = renameValue.value.trim()
   if (!name) return
   renamePlaylist(playlist.value.id, name)
+  updatePlaylistFields(playlist.value.id,{description:descriptionValue.value.trim().slice(0,2000)})
   showRename.value = false
-  notify('歌单已重命名')
+  notify('歌单信息已保存')
 }
 
 function play(index: number): void {
-  const tracks = playlist.value?.tracks ?? []
+  const tracks = displayTracks.value
   if (tracks.length) void playTracks(tracks, index)
 }
 
 function playAll(): void {
-  const tracks = playlist.value?.tracks ?? []
+  const tracks = displayTracks.value
   if (tracks.length) void playTracks(tracks, 0)
 }
 
 /** 随机：把播放模式切到 shuffle，再从一个随机位次起播。 */
 function playShuffle(): void {
-  const tracks = playlist.value?.tracks ?? []
+  const tracks = displayTracks.value
   if (!tracks.length) return
   setMode('shuffle')
   void playTracks(tracks, Math.floor(Math.random() * tracks.length))
@@ -103,7 +110,7 @@ async function remove(): Promise<void> {
 }
 
 function downloadAll(): void {
-  const tracks = playlist.value?.tracks ?? []
+  const tracks = displayTracks.value
   const started = downloadTracks(tracks)
   notify(started ? `已加入下载队列：${started} 首` : '这个歌单里的歌曲都已下载')
 }
@@ -169,6 +176,17 @@ async function batchRemove(): Promise<void> {
   exitSelection()
 }
 
+const navigation = useTrackNavigation({
+  scrollTarget:scrollEl, tracks:()=>playlistTracks.value, visibleTracks:()=>displayTracks.value,
+  ensureVisible:async index=>{while(visibleTracks.value.length<=index && hasMore.value){showMore();await nextTick()}},
+  beforeLocate:()=>{keyword.value='';searchOpen.value=true}, label:()=>playlist.value?.name || '这个歌单',
+  disabled:()=>selectionMode.value
+})
+function openPlaylistSearch(): void { searchOpen.value=true; nextTick(()=>scrollEl.value?.querySelector<HTMLInputElement>('.track-search input')?.focus()) }
+function originalIndex(track: typeof playlistTracks.value[number]): number { return playlistTracks.value.indexOf(track) }
+watch([keyword,sortMode,()=>playlist.value?.id],()=>navigation.clearHighlight())
+onBeforeUnmount(()=>navigation.clearHighlight())
+
 onMounted(() => {
   // The routed view can reuse the previous page's scroll container.
   requestAnimationFrame(() => {
@@ -179,13 +197,13 @@ onMounted(() => {
 
 <template>
   <div class="screen detail-screen">
-    <div class="scroll playlist-page" :class="{ 'selection-active': selectionMode }">
+    <div ref="scrollEl" class="scroll playlist-page" :class="{ 'selection-active': selectionMode }" @scroll="navigation.onScroll">
       <div class="detail-header">
-        <div class="appbar">
+        <div class="appbar" @dblclick.self="navigation.toTop">
           <button class="iconbtn quiet" aria-label="返回" @click="router.back()"><Icon name="back" :size="22" /></button>
-          <span class="ttl">歌单</span>
+          <button class="ttl title-top" aria-label="回到歌单顶部" @dblclick="navigation.toTop">歌单</button>
           <button v-if="playlist" class="iconbtn quiet" aria-label="更多操作" @click="menuOpen = true"><Icon name="more" :size="23" /></button>
-          <span v-else class="header-spacer" />
+          <button v-if="playlist?.tracks.length" class="iconbtn quiet" :aria-label="selectionMode ? '歌单搜索' : '搜索歌单内歌曲'" @click="openPlaylistSearch"><Icon name="search" :size="21" /></button><span v-else class="header-spacer" />
         </div>
         <template v-if="playlist">
           <section class="hero">
@@ -208,22 +226,27 @@ onMounted(() => {
       </div>
 
       <template v-if="playlist">
-        <div class="pad actions">
+        <div class="list-sticky-tools"><div class="pad actions">
           <button class="play" :disabled="!playlist.tracks.length" @click="playAll"><span class="play-icon"><Icon name="play" :size="18" /></span><strong>播放全部</strong><small>({{ playlist.tracks.length }})</small></button>
-          <button class="iconbtn quiet" aria-label="随机播放" :disabled="!playlist.tracks.length" @click="playShuffle"><Icon name="shuffle" :size="21" /></button>
+          <button class="iconbtn quiet" :aria-label="sortMode==='saved'?'当前顺序；点击切换排序':sortMode==='name'?'按歌名排序；点击切换排序':'按歌手排序；点击切换排序'" :disabled="!playlist.tracks.length || selectionMode" @click="sortMode=sortMode==='saved'?'name':sortMode==='name'?'artist':'saved'"><Icon name="sort" :size="20" /></button><button class="iconbtn quiet" aria-label="随机播放" :disabled="!playlist.tracks.length" @click="playShuffle"><Icon name="shuffle" :size="21" /></button>
           <button class="iconbtn quiet" :aria-label="selectionMode ? '退出多选' : '多选'" :disabled="!playlist.tracks.length" @click="selectionMode ? exitSelection() : enterSelection()"><Icon :name="selectionMode ? 'close' : 'select'" :size="21" /></button>
         </div>
-        <div v-if="selectionMode" class="selection-head"><span>已选择 {{ selectedTracks.length }} 首</span><button @click="toggleSelectAll()">{{ allSelected ? '取消全选' : '全选' }}</button></div>
-        <div v-if="playlist.tracks.length" class="pad rows">
-          <SongRow v-for="(track, index) in visibleTracks" :key="`${track.providerId}:${track.id}:${index}`" :track="track" :index="index" :queue="playlist.tracks" :playlist-id="playlist.id" :selectable="selectionMode" :selected="selectedIndexes.has(index)" :show-cover="false" show-index @play="play(index)" @toggle-select="toggleSelect(index)" />
+        <label v-show="searchOpen && !selectionMode" class="track-search" role="search"><Icon name="search" :size="17" /><input v-model="keyword" type="search" aria-label="搜索歌单内歌曲" placeholder="搜索歌名、歌手或专辑" /><button v-if="keyword" type="button" aria-label="清空歌单搜索" @click="keyword=''"><Icon name="close" :size="15" /></button></label>
+        <p v-show="keyword && !selectionMode" class="search-count" aria-live="polite">找到 {{ displayTracks.length }} 首<template v-if="!displayTracks.length"> · 原歌单没有改变</template></p>
+        </div><div v-if="selectionMode" class="selection-head"><span>已选择 {{ selectedTracks.length }} 首</span><button @click="toggleSelectAll()">{{ allSelected ? '取消全选' : '全选' }}</button></div>
+        <div v-if="displayTracks.length" class="pad rows">
+          <SongRow v-for="(track, index) in visibleTracks" :key="`${track.providerId}:${track.id}:${index}`" :track="track" :index="index" :queue="displayTracks" :playlist-id="playlist.id" :selectable="selectionMode" :selected="selectedIndexes.has(originalIndex(track))" :show-index="!keyword.trim() && sortMode==='saved'" :query="keyword" :data-track-key="trackKey(track)" :aria-current="navigation.locatedKey.value===trackKey(track) ? 'true' : undefined" :class="{'located-track':navigation.locatedKey.value===trackKey(track)}" @play="play(index)" @toggle-select="toggleSelect(originalIndex(track))" />
           <button v-if="hasMore" class="btn btn-ghost btn-block list-more" @click="showMore">
             显示更多（剩余 {{ remaining }} 首）
           </button>
         </div>
+        <div v-else-if="playlist.tracks.length" class="empty"><div class="glyph"><Icon name="search" :size="30" /></div><h3>这个歌单里没有匹配的歌曲</h3><p>换个歌名、歌手或专辑关键词，原歌曲仍然保留。</p><button class="btn btn-ghost btn-sm" @click="keyword=''">清空搜索</button></div>
         <div v-else class="empty"><div class="glyph"><Icon name="library" :size="34" /></div><h3>歌单还是空的</h3><p>在歌曲更多菜单中，将喜欢的歌曲加入这个歌单。</p><button class="btn btn-ghost btn-sm" @click="openSearch(router)"><Icon name="search" :size="16" /> 去搜索音乐</button></div>
       </template>
       <div v-else class="empty"><div class="glyph"><Icon name="folder" :size="34" /></div><h3>歌单不存在</h3><p>它可能已经被删除了。</p><button class="btn btn-ghost btn-sm" @click="router.replace('/playlists')">返回歌单</button></div>
     </div>
+
+    <TrackListNavigation :visible="navigation.scrolled.value" :can-locate="navigation.playingHere.value" :disabled="selectionMode" @locate="navigation.toPlaying" @top="navigation.toTop" />
 
     <div v-if="selectionMode" class="selbar">
       <button class="selcancel" @click="exitSelection">取消</button>
@@ -277,6 +300,8 @@ onMounted(() => {
             <button class="iconbtn quiet" aria-label="关闭重命名" @click="showRename = false"><Icon name="close" :size="20" /></button>
           </div>
           <div class="pad mt8">
+            <label class="meta" for="playlist-name">歌单名称</label><input id="playlist-name" v-model="renameValue" class="nanofield mt12" maxlength="40" aria-label="歌单名称" />
+            <label class="description-label" for="playlist-description">简介</label><textarea id="playlist-description" v-model="descriptionValue" class="description-input" rows="3" maxlength="2000" placeholder="添加这个歌单的简介" />
             <p class="meta">修改后会立即保存到本地。</p>
             <input
               v-model="renameValue"
@@ -299,49 +324,15 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.playlist-page { padding-top: 0; }
-.detail-header { padding-top: var(--safe-top); background: linear-gradient(130deg, #d7e8f5, #eff6fb); color: #182b37; }
-.detail-header .appbar { height: 56px; padding: 0 12px; }
-.detail-header .ttl { color: inherit; font-size: 18px; font-weight: 500; letter-spacing: 0; }
-.detail-header .iconbtn { width: 44px; height: 44px; color: inherit; flex: none; }
-.header-spacer { width: 44px; }
-.hero { display: flex; align-items: center; gap: 18px; padding: 24px var(--pad) 18px; }
-.hero-cover { flex: 0 0 126px; width: 126px; height: 126px; border-radius: 11px; overflow: hidden; background: #bfd3e2; box-shadow: 0 8px 20px #345e7912; }
-.hero-cover img { width: 100%; height: 100%; object-fit: cover; }
-.hero-copy { flex: 1; min-width: 0; }
-.hero-title { margin: 0; font-family: inherit; font-size: 24px; font-weight: 750; line-height: 1.35; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.hero-source { margin-top: 14px; font-size: 12px; line-height: 1.5; color: #516c7c; }
-.hero-stats { margin-top: 7px; font-size: 12px; line-height: 1.5; color: #617c8b; }
-.playlist-description { padding: 0 var(--pad); margin: 0; font-size: 13px; line-height: 1.6; color: #546f80; overflow-wrap: anywhere; }
-.detail-tools { display: flex; align-items: center; justify-content: space-around; gap: 6px; padding: 10px var(--pad) 10px; }
-.detail-tools button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 48px; font-size: 13px; color: #43677b; }
-.detail-tools button:disabled { opacity: .4; }
-.actions { display: flex; align-items: center; gap: 5px; min-height: 70px; padding-top: 8px; padding-bottom: 8px; background: var(--porcelain); }
-.play { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; min-height: 48px; text-align: left; }
-.play strong { font-size: 16px; font-weight: 650; }
-.play small { font-size: 12px; color: var(--ink-3); }
-.play-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; background: var(--tint); color: #083c2d; }
-.actions .iconbtn { width: 44px; height: 44px; flex: none; color: var(--ink-3); }
-.actions button:disabled { opacity: .4; }
-.selection-head { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--pad); font-size: 13px; color: var(--ink-3); }
-.selection-head button { min-height: 44px; padding: 0 6px; color: var(--ink); }
-.rows { padding-bottom: 8px; }
-.rows :deep(.songrow) { padding-left: 0; padding-right: 0; }
-.list-more { margin: 14px 0 4px; }
-.playlist-page.selection-active { padding-bottom: calc(var(--dock-h) + 102px); }
-.selbar { position: fixed; left: 50%; bottom: calc(var(--dock-h) + 8px); z-index: 40; display: flex; align-items: center; gap: 6px; width: min(calc(100% - 24px), 600px); padding: 8px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); box-shadow: var(--sh-2); transform: translateX(-50%); }
-.selcancel { height: 44px; padding: 0 8px; font-size: 13px; color: var(--ink-2); }
-.selcount { display: flex; align-items: baseline; gap: 4px; margin-right: auto; font-size: 11px; color: var(--ink-3); }
-.selcount em { font-style: normal; font-size: 19px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
-.selacts { display: flex; gap: 2px; }
-.selacts button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 48px; min-height: 48px; border-radius: 8px; font-size: 11px; color: var(--ink-2); }
-.selacts button.danger { color: var(--cinnabar); }
-.selacts button:disabled { opacity: .35; }
-.nanofield { width: 100%; height: 48px; padding: 0 13px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-size: 15px; color: var(--ink); }
-.sheetbtns { display: flex; gap: 8px; padding: 14px var(--pad) 4px; }
-.sheetbtns .btn { flex: 1; justify-content: center; }
-.empty { min-height: 240px; padding: 30px var(--pad); gap: 12px; }
-:global([data-theme='dark'] .detail-screen .detail-header) { background: linear-gradient(130deg, #24384c, #17232e); color: #edf4fc; }
-:global([data-theme='dark'] .detail-screen .hero-source), :global([data-theme='dark'] .detail-screen .hero-stats), :global([data-theme='dark'] .detail-screen .playlist-description), :global([data-theme='dark'] .detail-screen .detail-tools button) { color: #b7ccdf; }
-@media (max-width: 375px) { .hero { gap: 14px; padding-top: 18px; } .hero-cover { flex-basis: 112px; width: 112px; height: 112px; } .hero-title { font-size: 22px; } .detail-tools { gap: 3px; } .detail-tools button { font-size: 12px; gap: 5px; } }
+.playlist-page{padding-top:0}.detail-header{padding-top:var(--safe-top);background:linear-gradient(130deg,var(--tint-softer),var(--porcelain-2));color:var(--ink);border-bottom:1px solid var(--line)}
+.detail-header .appbar{height:56px;padding:0 12px;display:flex;align-items:center;justify-content:space-between}.detail-header .appbar .ttl{font-size:17px;font-weight:600}.detail-header .iconbtn{width:44px;height:44px;color:inherit;flex:none}.header-spacer{width:44px}
+.hero{display:flex;align-items:center;gap:16px;padding:15px var(--pad) 13px}.hero-cover{flex:0 0 104px;width:104px;height:104px;border-radius:16px;overflow:hidden;background:var(--surface-2);box-shadow:0 8px 24px #173b2d16}.hero-cover img{width:100%;height:100%;object-fit:cover}.hero-copy{flex:1;min-width:0}.hero-title{margin:0;font-size:21px;font-weight:700;line-height:1.4;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.hero-source{margin-top:9px;font-size:12px;color:var(--ink-3)}.hero-stats{margin-top:5px;font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.playlist-description{padding:0 var(--pad);margin:0;font-size:12px;line-height:1.6;color:var(--ink-3);overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.detail-tools{display:flex;align-items:center;justify-content:space-around;gap:4px;padding:5px var(--pad) 8px}.detail-tools button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 8px;font-size:12px;color:var(--ink-2)}.detail-tools button:disabled{opacity:.4}
+.list-sticky-tools{padding:8px 0 5px;background:var(--surface)}.actions{display:flex;align-items:center;gap:3px;min-height:52px;margin:0 var(--pad);padding:4px 5px;background:var(--surface-2);border:1px solid var(--line);border-radius:15px}.play{display:flex;align-items:center;gap:9px;flex:1;min-width:0;min-height:44px;text-align:left}.play strong{font-size:15px;font-weight:600}.play small{font-size:11px;color:var(--ink-3)}.play-icon{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:50%;background:var(--brand-strong);color:var(--surface)}.actions .iconbtn{width:42px;height:44px;flex:none;color:var(--ink-3)}.actions button:disabled{opacity:.4}
+.track-search{background:var(--porcelain-2)}.selection-head{display:flex;align-items:center;justify-content:space-between;padding:0 var(--pad);font-size:13px;color:var(--ink-3)}.selection-head button{min-height:44px;padding:0 6px;color:var(--ink)}
+.rows{padding-top:10px;padding-bottom:8px}.rows :deep(.songrow){padding-left:0;padding-right:0}.list-more{margin:14px 0 4px}.playlist-page.selection-active{padding-bottom:calc(var(--dock-h) + 102px)}
+.selbar{position:fixed;left:50%;bottom:calc(var(--dock-h) + 8px);z-index:40;display:flex;align-items:center;gap:6px;width:min(calc(100% - 24px),600px);padding:8px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);box-shadow:var(--sh-2);transform:translateX(-50%)}.selcancel{height:44px;padding:0 8px;font-size:13px;color:var(--ink-2)}.selcount{display:flex;align-items:baseline;gap:4px;margin-right:auto;font-size:11px;color:var(--ink-3)}.selcount em{font-style:normal;font-size:19px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}.selacts{display:flex;gap:2px}.selacts button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:48px;min-height:48px;border-radius:8px;font-size:11px;color:var(--ink-2)}.selacts button.danger{color:var(--cinnabar)}.selacts button:disabled{opacity:.35}
+.nanofield{width:100%;height:48px;padding:0 13px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);font-size:15px;color:var(--ink)}.description-label{display:block;margin-top:14px;color:var(--ink-3);font-size:12px}.description-input{width:100%;padding:10px 13px;margin-top:7px;border-radius:10px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);font:inherit;resize:vertical;user-select:text}.sheetbtns{display:flex;gap:8px;padding:14px var(--pad) 4px}.sheetbtns .btn{flex:1;justify-content:center}.empty{min-height:240px;padding:30px var(--pad);gap:12px}
+@media(max-width:375px){.hero{gap:13px;padding-top:12px}.hero-cover{flex-basis:94px;width:94px;height:94px}.hero-title{font-size:19px}.detail-tools{gap:2px}.detail-tools button{font-size:11px;gap:4px;padding:0 6px}.actions .iconbtn{width:40px}.play{gap:7px}.play strong{font-size:14px}}
+@media(min-width:768px){.detail-header,.playlist-page>.list-sticky-tools,.playlist-page>.rows,.playlist-page>.empty{max-width:980px;margin-left:auto;margin-right:auto}.hero{gap:22px;padding-top:20px}.hero-cover{flex-basis:128px;width:128px;height:128px}.hero-title{font-size:24px}.hero-source{font-size:13px}.hero-stats{font-size:12px}}
 </style>

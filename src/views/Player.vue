@@ -386,6 +386,7 @@ watch(track, (value) => {
   }
 })
 watch(() => [showQueue.value, showQuality.value, showSettings.value], () => {
+  if (showQueue.value || showQuality.value || showSettings.value) cancelPlayerMorph()
   if (showLyrics.value) pokeLyrics()
 })
 watch(() => route.query.panel, (panel) => {
@@ -412,7 +413,8 @@ onMounted(() => {
     close()
     return true
   })
-  if (playerArt.value) void playPlayerMorph(playerArt.value)
+  if (showQueue.value) cancelPlayerMorph()
+  else if (playerArt.value) void playPlayerMorph(playerArt.value)
 })
 
 onBeforeUnmount(() => {

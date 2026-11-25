@@ -106,6 +106,7 @@ public class BackgroundAudioPlugin extends Plugin {
         intent.putExtra("artist", call.getString("artist", ""));
         intent.putExtra("artwork", call.getString("artwork", ""));
         intent.putExtra("pauseOnNoisy", call.getBoolean("pauseOnNoisy", true));
+        intent.putExtra("mixWithOthers", call.getBoolean("mixWithOthers", true));
         intent.putExtra("playing", call.getBoolean("playing", false));
         intent.putExtra("id", call.getString("id", ""));
         intent.putExtra("position", doubleToLong(call, "position"));

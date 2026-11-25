@@ -466,6 +466,8 @@ watch(() => currentTrack()?.artwork, () => {
   if (track) { attachMediaSession(track); syncBackgroundAudio(track, playerState.playing, playerState.currentTime * 1000, playerState.duration * 1000) }
 })
 
+watch(() => settingsState.allowAudioMix, refreshBackgroundMetadata)
+
 function attachMediaSession(track: Track): void {
   if (!('mediaSession' in navigator)) return
   try {

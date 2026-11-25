@@ -13,6 +13,8 @@ import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Icon;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.MediaMetadata;
 import android.media.session.MediaSession;
@@ -141,6 +143,8 @@ public class MediaPlaybackService extends Service {
     }
 
     private MediaSession mediaSession;
+    private AudioManager audioManager;
+    private AudioFocusRequest audioFocusRequest;
     private PowerManager.WakeLock wakeLock;
     private String title = "澜音";
     private String artist = "";
@@ -170,6 +174,9 @@ public class MediaPlaybackService extends Service {
     private String loadingArtworkUrl = "";
     private boolean playing = false;
     private boolean pauseOnNoisy = true;
+    private boolean mixWithOthers = true;
+    private boolean focusHeld = false;
+    private long focusRequestedAt = 0;
     private boolean foregroundStarted = false;
     private long position = 0;
     private long positionBaseRealtime = 0;
@@ -179,6 +186,26 @@ public class MediaPlaybackService extends Service {
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService artworkExecutor = Executors.newSingleThreadExecutor();
+
+    /** Mixing is the safe default. Early focus losses are ignored because some
+     * OEMs/WebView sessions report a loss immediately after requesting focus. */
+    private final AudioManager.OnAudioFocusChangeListener audioFocusListener = change -> {
+        if (mixWithOthers) return;
+        long elapsed = SystemClock.elapsedRealtime() - focusRequestedAt;
+        if (elapsed < 2500) {
+            recordDiagnostic("audioFocus", "ignore early loss " + change);
+            return;
+        }
+        if (change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
+            recordDiagnostic("audioFocus", "duck " + change);
+            return;
+        }
+        if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+            focusHeld = false;
+            recordDiagnostic("audioFocus", "lost " + change + ", pause");
+            if (playing) emit("pause");
+        }
+    };
 
     /** Wired/Bluetooth audio disconnected: pause when the user enabled it. */
     private final BroadcastReceiver noisyReceiver = new BroadcastReceiver() {
@@ -233,6 +260,7 @@ public class MediaPlaybackService extends Service {
     public void onCreate() {
         super.onCreate();
         createChannel();
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         islandNotifier = new IslandLyricNotifier(this);
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (powerManager != null) {
@@ -360,6 +388,7 @@ public class MediaPlaybackService extends Service {
             if (intent.hasExtra("duration")) duration = intent.getLongExtra("duration", duration);
             if (intent.hasExtra("artwork")) updateArtwork(intent.getStringExtra("artwork"));
             pauseOnNoisy = intent.getBooleanExtra("pauseOnNoisy", pauseOnNoisy);
+            mixWithOthers = intent.getBooleanExtra("mixWithOthers", mixWithOthers);
             boolean nextIslandCompat = intent.getBooleanExtra("islandCompat", islandCompat);
             if (nextIslandCompat != islandCompat) {
                 islandCompat = nextIslandCompat;
@@ -395,9 +424,9 @@ public class MediaPlaybackService extends Service {
             emit("next");
         }
 
-        if (ACTION_START.equals(action) || ACTION_UPDATE.equals(action)
-                || ACTION_TOGGLE.equals(action) || ACTION_PREVIOUS.equals(action)
-                || ACTION_NEXT.equals(action)) {
+        if (ACTION_START.equals(action) || ACTION_UPDATE.equals(action) || ACTION_TOGGLE.equals(action)
+                || ACTION_PREVIOUS.equals(action) || ACTION_NEXT.equals(action)) {
+            if (ACTION_START.equals(action) || ACTION_UPDATE.equals(action)) updateAudioFocus();
             startAsForeground();
             if (pendingLyrics != null) {
                 String payload = pendingLyrics;
@@ -1088,8 +1117,49 @@ public class MediaPlaybackService extends Service {
         }
     }
 
+    /** Request exclusive focus only when the user turns the mix switch off.
+     * A denied request never pauses playback; playback continues without focus. */
+    private void updateAudioFocus() {
+        if (playing && !mixWithOthers) {
+            if (focusHeld || audioManager == null) return;
+            focusRequestedAt = SystemClock.elapsedRealtime();
+            int result;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (audioFocusRequest == null) {
+                    AudioAttributes attributes = new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build();
+                    audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                            .setAudioAttributes(attributes)
+                            .setOnAudioFocusChangeListener(audioFocusListener)
+                            .build();
+                }
+                result = audioManager.requestAudioFocus(audioFocusRequest);
+            } else {
+                result = audioManager.requestAudioFocus(audioFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN);
+            }
+            focusHeld = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+            recordDiagnostic("audioFocus", "exclusive request " + result + (focusHeld ? "" : ", continue without focus"));
+        } else {
+            abandonAudioFocus();
+        }
+    }
+
+    private void abandonAudioFocus() {
+        if (audioManager != null && focusHeld) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
+                audioManager.abandonAudioFocusRequest(audioFocusRequest);
+            } else {
+                audioManager.abandonAudioFocus(audioFocusListener);
+            }
+        }
+        focusHeld = false;
+    }
+
     private void stopPlayback() {
         playing = false;
+        abandonAudioFocus();
         mainHandler.removeCallbacks(progressTicker);
         destroyLyricon();
         updateWakeLock();
@@ -1117,6 +1187,7 @@ public class MediaPlaybackService extends Service {
 
     @Override
     public void onDestroy() {
+        abandonAudioFocus();
         mainHandler.removeCallbacks(progressTicker);
         if (islandNotifier != null) islandNotifier.hide();
         destroyLyricon();

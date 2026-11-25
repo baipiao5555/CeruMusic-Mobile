@@ -12,6 +12,7 @@ interface BackgroundAudioOptions {
   artwork: string
   playing: boolean
   pauseOnNoisy: boolean
+  mixWithOthers: boolean
   /** 把当前歌词行写进媒体标题，给不读 Lyricon 的系统岛用。 */
   islandCompat: boolean
   position: number
@@ -63,6 +64,7 @@ function optionsFor(
     artwork: /^https?:\/\//i.test(track.artwork || '') ? track.artwork : '',
     playing,
     pauseOnNoisy: settingsState.playOnHeadset,
+    mixWithOthers: settingsState.allowAudioMix,
     islandCompat: settingsState.islandCompat,
     position: Math.max(0, Math.round(positionMs)),
     duration: Math.max(0, Math.round(durationMs))

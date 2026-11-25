@@ -28,6 +28,8 @@ export interface AppSettings {
   keepScreenOn: boolean
   /** Pause when wired headphones or Bluetooth audio disconnect. */
   playOnHeadset: boolean
+  /** Keep playing while other apps use audio; default on. */
+  allowAudioMix: boolean
   /** Try another enabled provider when the current one cannot play a track. */
   autoSourceFallback: boolean
   /** Swipe left/right on the player page to change tracks. */
@@ -71,6 +73,7 @@ export const settingsState = reactive<AppSettings>({
   cloudLyrics: true,
   keepScreenOn: true,
   playOnHeadset: true,
+  allowAudioMix: true,
   autoSourceFallback: true,
   swipePlayer: true,
   swipeTabs: true,
@@ -83,7 +86,7 @@ export const settingsState = reactive<AppSettings>({
   islandCompat: false,
   downloadQuality: '',
   downloadConcurrency: 2,
-  version: 2
+  version: 3
 })
 
 export function restoreSettings(): void {
@@ -91,10 +94,16 @@ export function restoreSettings(): void {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const saved = JSON.parse(raw)
-      if (saved && saved.version !== 2) {
+      if (saved && saved.version !== 2 && saved.version !== 3) {
         // v1 defaulted to 128k, which made plugins with higher tiers feel low.
         if (saved.quality === '128k') saved.quality = ''
         saved.version = 2
+      }
+      if (!saved || Number(saved.version) < 3) {
+        // v3 makes "play alongside other apps" the safe default. Older builds
+        // requested exclusive focus and could pause immediately when it was denied.
+        saved.allowAudioMix = true
+        saved.version = 3
       }
       // 旧版本只有歌词字体；升级后沿用为全局字体
       if (!saved.fontFamily && saved.lyricFont) {
@@ -278,6 +287,7 @@ export function registerSettingsHostHooks(): void {
         if (typeof patch.cloudLyrics === 'boolean') allowed.cloudLyrics = patch.cloudLyrics
         if (typeof patch.keepScreenOn === 'boolean') allowed.keepScreenOn = patch.keepScreenOn
         if (typeof patch.playOnHeadset === 'boolean') allowed.playOnHeadset = patch.playOnHeadset
+        if (typeof patch.allowAudioMix === 'boolean') allowed.allowAudioMix = patch.allowAudioMix
         if (typeof patch.autoSourceFallback === 'boolean') {
           allowed.autoSourceFallback = patch.autoSourceFallback
         }

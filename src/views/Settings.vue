@@ -121,6 +121,7 @@ const ROW_TERMS: Record<string, string> = {
   'playback:cacheClear': '清理播放缓存 缓存 清理 删除 占用',
   'playback:island': '岛歌词 歌词 岛 灵动 锁屏 车载 媒体标题 兼容',
   'playback:headset': '耳机拔出时暂停 耳机 暂停',
+  'playback:mix': '与其他应用同时播放 同时播放 混音 音频焦点 其他应用',
   'playback:fallback': '播放失败自动切换音源 音源 失败 切换',
   'playback:swipePlayer': '播放页左右滑动切歌 手势 滑动 切歌',
   'playback:swipeTabs': '主页面左右滑动切换 手势 滑动 页面',
@@ -527,6 +528,7 @@ async function resetSettings(): Promise<void> {
     cloudLyrics: true,
     keepScreenOn: true,
     playOnHeadset: true,
+    allowAudioMix: true,
     autoSourceFallback: true
   })
 }
@@ -803,6 +805,22 @@ async function resetSettings(): Promise<void> {
               :aria-checked="settingsState.playOnHeadset"
               aria-label="耳机拔出时暂停"
               @click="updateSettings({ playOnHeadset: !settingsState.playOnHeadset })"
+            />
+          </div>
+
+          <div v-if="show('playback:mix')" class="settingrow">
+            <span class="ico"><Icon name="volume" :size="15" /></span>
+            <div class="body">
+              <div class="lab">与其他应用同时播放</div>
+              <div class="sub">开启后，其他应用播放音乐或视频时，澜音不会被暂停</div>
+            </div>
+            <button
+              class="switch"
+              :class="{ on: settingsState.allowAudioMix }"
+              role="switch"
+              :aria-checked="settingsState.allowAudioMix"
+              aria-label="与其他应用同时播放"
+              @click="updateSettings({ allowAudioMix: !settingsState.allowAudioMix })"
             />
           </div>
 

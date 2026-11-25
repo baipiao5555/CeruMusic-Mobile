@@ -5,7 +5,7 @@ import { initialCatalog } from './catalogSeed'
 
 export interface CatalogItem {
   key: string; manifestId: string; name: string; version: string; author: string
-  description: string; category: string; format: 'ceru' | 'lx'; url: string
+  description: string; category: string; format: 'ceru' | 'lx' | 'musicfree'; url: string
 }
 const CACHE = 'ceru.market.catalog.v1'
 const common = new Set(['qq', 'kuwo', 'kugou', 'netease', 'migu', 'qishui'])

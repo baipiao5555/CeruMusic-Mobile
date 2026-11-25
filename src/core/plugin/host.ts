@@ -10,11 +10,13 @@ import { selectPlaybackQuality } from '../quality'
 import { secureStore } from '../native/secureStore'
 import { sha256Hex } from '../storage/idb'
 import { authState } from '../auth'
+import { refreshMusicFreeAdapter } from './musicfree'
 
 const LX_RPC_METHODS = new Set([
   'http.request', 'operations.cancel', 'ui.toast',
   'permissions.query', 'permissions.request', 'permissions.getGranted', 'permissions.requestGroup'
 ])
+const MUSICFREE_RPC_METHODS = new Set([...LX_RPC_METHODS, 'config.get','config.set','storage.get','storage.set','storage.delete'])
 let profileSeedPromise: Promise<string> | undefined
 
 export interface PermissionDeclaration {
@@ -169,7 +171,8 @@ export class PluginHost {
       this.lxReady = true
       return
     }
-    const parsed = readPluginArtifact(this.code)
+    const executionCode = await refreshMusicFreeAdapter(this.code, this.manifest)
+    const parsed = readPluginArtifact(executionCode)
     if (parsed.header.manifest.manifestVersion !== 2) throw new Error('只支持澜音 v2 插件')
     this.artifact = parsed.artifact
     this.manifest = parsed.header.manifest
@@ -178,7 +181,7 @@ export class PluginHost {
       (method, data) => this.rpc(method, data),
       (type, data) => this.handleSandboxEvent(type, data)
     )
-    this.core = await PluginCore.load(this.code, {
+    this.core = await PluginCore.load(executionCode, {
       host: {
         activate: async (artifact: any, context: any) => {
           this.artifact = artifact
@@ -206,6 +209,12 @@ export class PluginHost {
 
   private handleSandboxEvent(type: string, data: any): void {
     if (this.disposed) return
+    if (this.manifest.id?.startsWith('musicfree.')) {
+      if (!['log','notify','register','unregister'].includes(type)) return
+      if ((type==='register'||type==='unregister') &&
+          !((data?.kind==='provider'&&this.manifest.contributes.providers.some((p:any)=>p.id===data.id)) ||
+            (data?.kind==='playlist-importer'&&this.manifest.contributes.playlistImporters?.some((p:any)=>p.id===data.id)))) return
+    }
     if (this.manifest.format === 'lx' && !['lx-inited', 'log', 'notify'].includes(type)) return
     if (type === 'lx-inited' && this.manifest.format === 'lx') {
       if (this.lxReady) return
@@ -336,6 +345,7 @@ export class PluginHost {
 
   private async rpc(method: string, data: any = {}): Promise<any> {
     if (this.disposed) throw new Error('插件已停止')
+    if (this.manifest.id?.startsWith('musicfree.') && !MUSICFREE_RPC_METHODS.has(method)) throw new Error('MusicFree 插件无权调用宿主接口: '+method)
     if (this.manifest.format === 'lx' && !LX_RPC_METHODS.has(method)) {
       throw new Error('洛雪音源无权调用宿主接口: ' + method)
     }

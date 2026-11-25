@@ -120,7 +120,10 @@ function refreshHasUpdate(): void {
   let newer = false
   if (updateState.latest && updateState.latest.tag !== updateState.ignoredTag) {
     try {
-      newer = compareVersions(updateState.latest.tag, updateState.currentVersion) > 0
+      // -test.N is based on the already-published core version, not an upgrade target
+      // for that same old release; the next official core version should notify testers.
+      const baseline = updateState.currentVersion.replace(/-test\.\d+$/, '')
+      newer = compareVersions(updateState.latest.tag, baseline) > 0
     } catch {
       newer = false
     }

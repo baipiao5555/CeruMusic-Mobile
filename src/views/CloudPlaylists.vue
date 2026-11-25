@@ -182,7 +182,8 @@ watch([() => authState.authenticated, () => authState.user?.sub], ([loggedIn]) =
           <button class="btn btn-primary mt8" @click="startLogin">
             <Icon name="user" :size="16" /> 登录
           </button>
-          <p v-if="error" class="err">{{ error }}</p>
+          <p v-if="error || authState.error" class="err" role="alert">{{ error || authState.error }}</p>
+          <p v-if="authState.loading" role="status">正在完成登录，请稍候…</p>
           <p class="hint">登录会打开系统浏览器，完成后自动回到澜音。</p>
         </div>
       </template>

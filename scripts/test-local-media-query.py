@@ -29,6 +29,11 @@ stubs={
 'com/getcapacitor/annotation/Permission.java':'public @interface Permission {String alias();String[] strings();}',
 'com/getcapacitor/annotation/PermissionCallback.java':'public @interface PermissionCallback {}',
 }
+stubs['com/getcapacitor/Bridge.java']='public class Bridge {}'
+stubs['com/getcapacitor/Plugin.java']='public class Plugin {public static PermissionState permission=PermissionState.GRANTED;public android.content.Context getContext(){return new android.content.Context();}public Bridge getBridge(){return new Bridge();}public void load(){}protected void handleOnDestroy(){}public PermissionState getPermissionState(String s){return permission;}public void requestPermissionForAlias(String s,PluginCall c,String p){}}'
+stubs['com/getcapacitor/PluginCall.java']='public class PluginCall {public volatile JSObject result;public String getString(String s){return "all";}public void resolve(JSObject r){result=r;}public void reject(String s){throw new IllegalArgumentException(s);}}'
+stubs['com/ceru/music/mobile/MainFrameGuard.java']='public class MainFrameGuard {static MainFrameGuard forBridge(com.getcapacitor.Bridge b){return new MainFrameGuard();}void initialize(com.getcapacitor.PluginCall c){}void require(com.getcapacitor.PluginCall c){}}'
+stubs['com/ceru/music/mobile/LocalArtwork.java']='public class LocalArtwork {static android.net.Uri source(android.content.Context c,String i,String u,boolean g){return new android.net.Uri(u);}static java.io.File read(android.content.Context c,android.net.Uri u){return null;}}'
 stubs['android/provider/DocumentsContract.java']='public class DocumentsContract {public static String getTreeDocumentId(android.net.Uri u){return "";}}'
 stubs['com/ceru/music/mobile/MusicFoldersPlugin.java']='public class MusicFoldersPlugin {static void appendManaged(android.content.Context c,com.getcapacitor.JSArray a){}static java.util.List<android.net.Uri> scanFolders(android.content.Context c){return java.util.Collections.emptyList();}static boolean hasGrant(android.content.Context c,android.net.Uri u,boolean w){return true;}static String folderLabel(android.content.Context c,android.net.Uri u){return "test";}static void appendFolder(android.content.Context c,android.net.Uri u,com.getcapacitor.JSArray a,java.util.Set<String>s,int[]v,int d,String id){}}'
 for name,body in stubs.items():

@@ -33,7 +33,7 @@ stubs.update({
  return new android.database.Cursor(columns,rows);}
 }''',
 'android/media/MediaMetadataRetriever.java':'''public class MediaMetadataRetriever {public static final int METADATA_KEY_TITLE=1,METADATA_KEY_ARTIST=2,METADATA_KEY_ALBUM=3,METADATA_KEY_DURATION=4;public void setDataSource(String s){}public void setDataSource(android.content.Context c,android.net.Uri u){}public String extractMetadata(int k){return null;}public void release(){}}''',
-'com/getcapacitor/Plugin.java':'''public class Plugin {public static PermissionState permission=PermissionState.GRANTED;public android.content.Intent lastIntent;public android.content.Context getContext(){return new android.content.Context();}public PermissionState getPermissionState(String s){return permission;}public void requestPermissionForAlias(String s,PluginCall c,String p){}public void startActivityForResult(PluginCall c,android.content.Intent i,String method){lastIntent=i;}public void notifyListeners(String s,JSObject e){}protected void handleOnDestroy(){}}''',
+'com/getcapacitor/Plugin.java':'''public class Plugin {public com.getcapacitor.Bridge getBridge(){return new com.getcapacitor.Bridge();}public void load(){}public static PermissionState permission=PermissionState.GRANTED;public android.content.Intent lastIntent;public android.content.Context getContext(){return new android.content.Context();}public PermissionState getPermissionState(String s){return permission;}public void requestPermissionForAlias(String s,PluginCall c,String p){}public void startActivityForResult(PluginCall c,android.content.Intent i,String method){lastIntent=i;}public void notifyListeners(String s,JSObject e){}protected void handleOnDestroy(){}}''',
 'com/getcapacitor/PluginCall.java':'''public class PluginCall {public JSObject result;public String error;public java.util.Map<String,Object> args=new java.util.HashMap<>();public java.util.concurrent.CountDownLatch done=new java.util.concurrent.CountDownLatch(1);public String getString(String k){return (String)args.get(k);}public String getString(String k,String d){return (String)args.getOrDefault(k,d);}public JSObject getObject(String k,JSObject d){return (JSObject)args.getOrDefault(k,d);}public void resolve(JSObject r){result=r;done.countDown();}public void resolve(){resolve(new JSObject());}public void reject(String s){error=s;done.countDown();}}''',
 'com/getcapacitor/JSObject.java':'''public class JSObject extends java.util.HashMap<String,Object>{public String getString(String k){return (String)get(k);}public java.util.Iterator<String> keys(){return keySet().iterator();}}''',
 'com/getcapacitor/annotation/CapacitorPlugin.java':'''public @interface CapacitorPlugin {String name();Permission[] permissions() default {}; }''',
@@ -43,6 +43,10 @@ stubs.update({
 'android/net/Network.java':'''public class Network {}''',
 'android/net/NetworkCapabilities.java':'''public class NetworkCapabilities {public static final int TRANSPORT_VPN=4;public boolean hasTransport(int t){return false;}}'''
 })
+for assignment in tree.body:
+ if isinstance(assignment,ast.Assign) and len(assignment.targets)==1 and isinstance(assignment.targets[0],ast.Subscript) and isinstance(assignment.targets[0].value,ast.Name) and assignment.targets[0].value.id=='stubs':
+  key=ast.literal_eval(assignment.targets[0].slice)
+  if key in {'com/getcapacitor/Bridge.java','com/ceru/music/mobile/MainFrameGuard.java','com/ceru/music/mobile/LocalArtwork.java'}: stubs[key]=ast.literal_eval(assignment.value)
 for name,body in stubs.items():
  p=src/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('package '+str(Path(name).parent).replace('\\','.').replace('/','.')+';\n'+body,encoding='utf-8')
 for name in ['MusicFoldersPlugin.java','DownloaderPlugin.java','LocalMediaPlugin.java','LocalAudioFiles.java']:

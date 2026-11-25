@@ -16,7 +16,7 @@ export function selectCatalogLine(line: CatalogLine): void {
   distributionState.line = line
 }
 export function repositoryUrl(path: string, line: CatalogLine): string {
-  if (!/^(ceru-list\.json|ceru-plugins\/[\w.-]+\.ceru\.js|plugins\/five-source-lx\.plugin\.v1\.6\.0\.js)$/.test(path)) throw new Error('不支持的仓库文件路径')
+  if (!/^(ceru-list\.json|plugins\.json|ceru-plugins\/[\w.-]+\.ceru\.js|plugins\/[\w.-]+\.js)$/.test(path)) throw new Error('不支持的仓库文件路径')
   return repositoryLines.find(x => x.id === line)!.base + path
 }
 export function repositoryPath(url: string): string | null {

@@ -25,12 +25,23 @@ export function installRuntimeCompatibility(core: any): void {
     return register.call(this, id, copy)
   }
   const lowRequest = core.http.request
-  const requestCompatible = (input: any): Promise<any> => {
+  const requestCompatible = async (input: any): Promise<any> => {
     input={...input,headers:{...input.headers}}
     if (input.body === undefined && (input.json !== undefined || input.data !== undefined)) input.body=input.json ?? input.data
     if (input.body && typeof input.body === 'object') { input.body=JSON.stringify(input.body); if(!Object.keys(input.headers).some(k=>k.toLowerCase()==='content-type'))input.headers['Content-Type']='application/json' }
     if (!input.operation && active.size===1) input.operation=[...active][0]
-    return lowRequest(input)
+    const operations = !input.operation && active.size > 1 ? [...active] : []
+    const controller = operations.length ? new AbortController() : undefined
+    const abort = () => controller?.abort()
+    if (controller) {
+      // Match the existing legacy client: without a unique operation identity,
+      // cancellation is conservative per plugin, never detached from its calls.
+      for (const op of operations) { op.signal.addEventListener('abort', abort, {once:true}); if(op.signal.aborted) abort() }
+      const id = globalThis.crypto.randomUUID?.() || [...globalThis.crypto.getRandomValues(new Uint8Array(16))].map(b=>b.toString(16).padStart(2,'0')).join('')
+      input.operation = {id,deadlineAt:Date.now()+Math.min(20_000,Number(input.timeoutMs)||12_000),signal:controller.signal}
+    }
+    try { return await lowRequest(input) }
+    finally { for (const op of operations) op.signal.removeEventListener('abort', abort) }
   }
   core.http.request=requestCompatible
   if (core.io?.http?.request===lowRequest) core.io.http.request=requestCompatible

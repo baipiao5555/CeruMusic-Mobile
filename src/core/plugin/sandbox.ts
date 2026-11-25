@@ -124,7 +124,7 @@ function buildFrameDocument(entryCode: string): string {
 </body></html>`
 }
 
-function buildWorkerDocument(entryCode: string, runtime: string[]): string {
+function buildWorkerDocument(entryCode: string, runtime: string[], musicFreeLibraries = ''): string {
   const workerCode = `
 ${runtime[0]}
 (function () {
@@ -152,7 +152,8 @@ ${nodeGlobalsBootstrap}
 ${runtime[1]}
 globalThis.__restoreAssign();
 ${runtime[2]}
-globalThis.__ceruStart((0, eval)("(" + ${JSON.stringify(entryCode)} + ")"));
+${musicFreeLibraries}
+globalThis.__ceruStart(${musicFreeLibraries ? 'function(core){('+installRuntimeCompatibility.toString()+')(core);return ((0,eval)('+JSON.stringify('('+entryCode+')')+'))(core)}' : '(0, eval)('+JSON.stringify('('+entryCode+')')+')'});
 `
   const payload = encodeBase64Utf8(workerCode)
   // A Blob worker inherits its creator's CSP and has no navigable Window/DOM.
@@ -223,9 +224,17 @@ export class IframePluginSandbox {
     iframe.tabIndex = -1
     iframe.style.cssText =
       'position:fixed;left:-10000px;top:-10000px;width:2px;height:2px;border:0;opacity:0;pointer-events:none'
-    iframe.srcdoc = manifest.format === 'lx'
-      ? buildWorkerDocument(entryCode, await loadWorkerRuntime())
-      : buildFrameDocument(entryCode)
+    if (manifest.id?.startsWith('musicfree.')) {
+      const libraries = await fetch('/plugin-runtime/musicfree-libraries.js').then(response => {
+        if (!response.ok) throw new Error('MusicFree 兼容模块未准备')
+        return response.text()
+      })
+      iframe.srcdoc = buildWorkerDocument(entryCode, await loadWorkerRuntime(), libraries)
+    } else {
+      iframe.srcdoc = manifest.format === 'lx'
+        ? buildWorkerDocument(entryCode, await loadWorkerRuntime())
+        : buildFrameDocument(entryCode)
+    }
     this.iframe = iframe
 
     await new Promise<void>((resolve, reject) => {

@@ -54,6 +54,8 @@ export const authState = reactive({
 let session: StoredSession | null = null
 let refreshing: Promise<string> | null = null
 let sessionVersion = 0
+let callbackInFlight: { url: string; promise: Promise<AuthUser | null> } | null = null
+let completedCallback = ''
 
 /** Async cloud/login work must discard results when the account lifecycle changes. */
 export function getAuthSessionVersion(): number { return sessionVersion }
@@ -133,6 +135,9 @@ async function tokenRequest(params: Record<string, string>): Promise<TokenRespon
   })
   if (response.status < 200 || response.status >= 300) {
     throw new Error(errorMessage(response.data, '登录失败，请稍后重试'))
+  }
+  if (!response.data || typeof response.data.access_token !== 'string' || !response.data.access_token) {
+    throw new Error('登录服务没有返回有效凭据，请重新登录')
   }
   return response.data as TokenResponse
 }
@@ -246,6 +251,7 @@ export function buildAuthorizeUrl(challenge: string, state: string, nonce: strin
 
 /** Opens the Logto sign-in page in the system browser. */
 export async function login(): Promise<void> {
+  completedCallback = ''
   authState.error = ''
   const version = invalidateSession()
   const verifier = base64Url(randomBytes(48))
@@ -255,7 +261,10 @@ export async function login(): Promise<void> {
   assertSessionVersion(version)
   try {
     localStorage.setItem(PENDING_KEY, JSON.stringify({ verifier, state, nonce, createdAt: Date.now() }))
-  } catch {}
+  } catch {
+    authState.error = '无法保存登录请求，请释放本地存储后重试'
+    throw new Error(authState.error)
+  }
   const url = buildAuthorizeUrl(challenge, state, nonce)
   if (Capacitor.isNativePlatform()) {
     await External.open({ url })
@@ -265,7 +274,22 @@ export async function login(): Promise<void> {
 }
 
 /** Handles cerumusic://oauth/callback?code=... after the browser redirects back. */
-export async function handleAuthCallback(rawUrl: string): Promise<AuthUser | null> {
+export function handleAuthCallback(rawUrl: string): Promise<AuthUser | null> {
+  if (callbackInFlight?.url === rawUrl) return callbackInFlight.promise
+  if (completedCallback === rawUrl && authState.authenticated) return Promise.resolve(authState.user)
+  const operation = { url: rawUrl, promise: Promise.resolve(null) as Promise<AuthUser | null> }
+  operation.promise = exchangeAuthCallback(rawUrl).then(user => {
+    if (authState.authenticated) completedCallback = rawUrl
+    return user
+  }).catch(error => {
+    if (callbackInFlight === operation) authState.error = error?.message || '登录失败'
+    throw error
+  }).finally(() => { if (callbackInFlight === operation) callbackInFlight = null })
+  callbackInFlight = operation
+  return operation.promise
+}
+
+async function exchangeAuthCallback(rawUrl: string): Promise<AuthUser | null> {
   let parsed: URL
   try {
     parsed = new URL(rawUrl)
@@ -274,23 +298,27 @@ export async function handleAuthCallback(rawUrl: string): Promise<AuthUser | nul
   }
   if (parsed.protocol !== 'cerumusic:' || parsed.host !== 'oauth') return null
   const params = parsed.searchParams
-  const error = params.get('error')
+  const hashParams = new URLSearchParams(parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash)
+  const error = params.get('error') ?? hashParams.get('error')
   if (error) {
-    const description = params.get('error_description') || error
+    const description = params.get('error_description') || hashParams.get('error_description') || error
     authState.error = description
     throw new Error(description)
   }
-  const code = params.get('code')
+  const code = params.get('code') ?? hashParams.get('code')
   if (!code) return null
 
   let pending: { verifier: string; state: string; nonce: string; createdAt: number } | null = null
   try {
     pending = JSON.parse(localStorage.getItem(PENDING_KEY) ?? 'null')
   } catch {}
-  if (!pending || Date.now() - pending.createdAt > PENDING_TTL) {
+  // A recreated Activity can redeliver an already-consumed login intent.
+  // With no pending authorization, preserve the existing session without another token exchange.
+  if (!pending && authState.authenticated) return authState.user
+  if (!pending || !Number.isFinite(pending.createdAt) || Date.now() - pending.createdAt > PENDING_TTL) {
     throw new Error('登录请求已过期，请重新登录')
   }
-  const state = params.get('state') ?? ''
+  const state = params.get('state') ?? hashParams.get('state') ?? ''
   if (state !== pending.state) throw new Error('登录状态校验失败，请重新登录')
 
   const version = sessionVersion
@@ -322,6 +350,7 @@ export async function handleAuthCallback(rawUrl: string): Promise<AuthUser | nul
 }
 
 export function logout(): void {
+  completedCallback = ''
   clearSession()
   try {
     localStorage.removeItem(PENDING_KEY)

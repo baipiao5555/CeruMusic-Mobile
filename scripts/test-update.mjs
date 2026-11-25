@@ -4,7 +4,7 @@ import { chromium } from 'playwright-core'
 
 const base = process.env.CERU_TEST_URL || 'http://127.0.0.1:5180'
 const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'))
-const currentParts = packageJson.version.split('.').map(Number)
+const currentParts = packageJson.version.split('-')[0].split('.').map(Number)
 const latestTag = `v${currentParts[0]}.${currentParts[1]}.${currentParts[2] + 1}`
 const release = {
   tag_name: latestTag,

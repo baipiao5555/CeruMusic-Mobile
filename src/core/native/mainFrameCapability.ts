@@ -5,7 +5,7 @@ function protectNativeLogs(): void {
   const cap = (window as any).Capacitor
   if (!cap || guardedLoggers.has(cap) || typeof cap.logToNative !== 'function' || typeof cap.logFromNative !== 'function') return
   const toNative = cap.logToNative, fromNative = cap.logFromNative
-  const sensitive = (data: any): boolean => ['SecretStore', 'SyncHttp'].includes(data?.pluginId)
+  const sensitive = (data: any): boolean => ['SecretStore', 'SyncHttp', 'LocalMedia'].includes(data?.pluginId)
   cap.logToNative = (data: any): void => { if (!sensitive(data)) toNative.call(cap, data) }
   cap.logFromNative = (data: any): void => { if (!sensitive(data)) fromNative.call(cap, data) }
   guardedLoggers.add(cap)

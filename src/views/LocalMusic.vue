@@ -38,6 +38,33 @@ const webOnly = ref(false)
 const scanError = ref('')
 // Global enumeration is always an explicit action, including after upgrading from v6.
 const source = ref<'all' | 'folders'>('folders')
+const SNAPSHOT_KEY = 'ceru.localMusic.snapshot.v2'
+const SNAPSHOT_TTL = 5 * 60 * 1000
+let snapshotAt = 0
+let snapshotFingerprint = ''
+interface LocalSnapshot { source?: string; entries?: LocalEntry[]; savedAt?: number; fingerprint?: string }
+
+function fingerprint(): string {
+  return JSON.stringify([
+    musicFoldersState.folders.map(folder => [folder.uri, folder.available]).sort(),
+    musicFoldersState.download.uri,
+    musicFoldersState.download.available,
+    downloadState.tasks.filter(task => task.status === 'completed').map(task => [task.path, task.size]).sort()
+  ])
+}
+
+try {
+  const saved = JSON.parse(localStorage.getItem(SNAPSHOT_KEY) || 'null') as LocalSnapshot | null
+  if (Capacitor.isNativePlatform() && saved && Array.isArray(saved.entries) && saved.entries.length <= 10000 &&
+      saved.entries.every(entry => entry && typeof entry.id === 'string' && typeof entry.title === 'string' && typeof entry.artist === 'string') &&
+      Number.isFinite(saved.savedAt) && typeof saved.fingerprint === 'string') {
+    if (saved.source === 'all' || saved.source === 'folders') source.value = saved.source
+    rawEntries.value = saved.entries
+    snapshotAt = Number(saved.savedAt)
+    snapshotFingerprint = saved.fingerprint
+    scanned.value = true
+  }
+} catch {}
 const hasFolders = computed(() => musicFoldersState.folders.length > 0 || !musicFoldersState.download.isDefault)
 const legacyCount = computed(() => downloadState.tasks.filter(isLegacyDownload).length)
 let scanSeq = 0
@@ -71,14 +98,14 @@ function formatSize(bytes: number): string {
   return `${mb.toFixed(mb >= 100 ? 0 : 1)} MB`
 }
 
-async function scan(requestPermission = true): Promise<void> {
+async function scan(requestPermission = true, silent = false): Promise<void> {
   const seq = ++scanSeq
   if (!Capacitor.isNativePlatform()) {
     webOnly.value = true
     scanned.value = true
     return
   }
-  scanning.value = true
+  if (!silent) scanning.value = true
   denied.value = false
   scanError.value = ''
   try {
@@ -86,11 +113,19 @@ async function scan(requestPermission = true): Promise<void> {
     if (seq !== scanSeq) return
     denied.value = source.value === 'all' && !localScanState.granted
     scanError.value = localScanState.error
-    if (scanError.value && !found.length && tracks.value.length) return
+    if (scanError.value) return // partial/error results must not overwrite a known-good snapshot
+    snapshotAt = Date.now()
+    snapshotFingerprint = fingerprint()
     rawEntries.value = found
     rememberTracks(tracks.value)
+    try {
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({ source: source.value, entries: rawEntries.value, savedAt: snapshotAt, fingerprint: snapshotFingerprint }))
+    } catch {}
   } finally {
-    if (seq === scanSeq) { scanning.value = false; scanned.value = true }
+    if (seq === scanSeq) {
+      if (!silent) scanning.value = false
+      scanned.value = true
+    }
   }
 }
 
@@ -108,7 +143,15 @@ async function chooseSource(value: 'all' | 'folders'): Promise<void> {
 }
 function foldersChanged(): void { source.value = 'folders'; void scan(false) }
 async function chooseFolder(mode: 'scan' | 'download'): Promise<void> { if (await pickMusicFolder(mode)) { if(mode==='scan')foldersChanged();else if(source.value==='folders')void scan(false) } }
-onMounted(async () => { await refreshMusicFolders(); void scan(false) })
+onMounted(async () => {
+  await refreshMusicFolders()
+  if (!scanned.value || snapshotFingerprint !== fingerprint()) {
+    source.value = 'folders'
+    await scan(false, scanned.value)
+  } else if (source.value === 'folders' && Date.now() - snapshotAt > SNAPSHOT_TTL) {
+    await scan(false, true)
+  }
+})
 onBeforeUnmount(() => { scanSeq++ })
 </script>
 
@@ -201,7 +244,7 @@ onBeforeUnmount(() => { scanSeq++ })
 <style scoped>
 .local-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px var(--pad) 3px}.local-actions button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;padding:0 12px;background:var(--tint-soft);color:var(--brand-strong);border-radius:14px;font-size:13px;font-weight:600}.local-actions button:last-child{background:var(--surface-2);color:var(--ink-2)}
 .local-control{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 var(--pad) 4px;color:var(--ink-3);font-size:10px;line-height:1.6}.local-control>span{flex:1;min-width:0}.local-control button{display:flex;align-items:center;gap:4px;min-height:44px;white-space:nowrap;color:var(--ink-3)}.filter-count{margin-left:auto;font-size:10px!important;white-space:nowrap}
-.local-settings{max-height:85vh;max-height:85dvh;overflow:auto;padding-bottom:calc(18px + env(safe-area-inset-bottom))}.local-settings>.btn{margin:8px var(--pad);width:calc(100% - var(--pad)*2)}.filter-help{margin:8px var(--pad);font-size:11px;line-height:1.7;color:var(--ink-3)}.filter-mode{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:12px var(--pad);padding:4px;border-radius:12px;background:var(--surface-2)}.filter-mode button{min-height:44px;font-size:12px;border-radius:9px;color:var(--ink-3)}.filter-mode .on{background:var(--surface);color:var(--brand-strong);font-weight:650}.filter-option{display:flex;align-items:center;justify-content:space-between;width:calc(100% - var(--pad)*2);margin:0 var(--pad);gap:12px;min-height:62px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}.filter-option small{display:block;font-size:10px;color:var(--ink-3);margin-top:5px}.filter-check{display:grid;place-items:center;width:22px;height:22px;flex:none;border:1px solid var(--line-2);border-radius:6px}.filter-check.on{color:var(--surface);background:var(--brand-strong);border-color:var(--brand-strong)}.duration-options{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:12px var(--pad);font-size:11px}.duration-options>span{margin-right:auto}.duration-options button{min-height:44px;padding:0 8px;border-radius:9px;color:var(--ink-3)}.duration-options .on{background:var(--tint-soft);color:var(--brand-strong)}
+.local-settings{max-height:85vh;max-height:85dvh;overflow:auto;padding-bottom:calc(18px + env(safe-area-inset-bottom))}.local-settings>.btn{margin:8px var(--pad);width:calc(100% - var(--pad)*2)}.filter-help{margin:0 var(--pad) 16px;font-size:12px;line-height:1.65;color:var(--ink-3)}.filter-mode{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 var(--pad) 16px;padding:4px;border-radius:12px;background:var(--surface-2)}.filter-mode button{display:flex;align-items:center;justify-content:center;min-height:44px;padding:10px 8px;text-align:center;line-height:1.4;font-size:13px;border-radius:9px;color:var(--ink-3)}.filter-mode .on{background:var(--surface);color:var(--brand-strong);font-weight:650}.filter-option{display:flex;align-items:center;justify-content:space-between;width:calc(100% - var(--pad)*2);margin:0 var(--pad);gap:12px;min-height:62px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}.filter-option small{display:block;font-size:10px;color:var(--ink-3);margin-top:5px}.filter-check{display:grid;place-items:center;width:22px;height:22px;flex:none;border:1px solid var(--line-2);border-radius:6px}.filter-check.on{color:var(--surface);background:var(--brand-strong);border-color:var(--brand-strong)}.duration-options{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:12px var(--pad);font-size:11px}.duration-options>span{margin-right:auto}.duration-options button{min-height:44px;padding:0 8px;border-radius:9px;color:var(--ink-3)}.duration-options .on{background:var(--tint-soft);color:var(--brand-strong)}
 
 .local-head{display:flex;align-items:center;gap:8px;padding:4px 12px 0;min-height:52px}.local-head h1{flex:1;font:700 22px/1.3 var(--sans);margin:0}.local-head .iconbtn{width:44px;height:44px;flex:none}
 .local-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px var(--pad) 0;color:var(--ink-3);font-size:12px}.local-summary .btn{min-height:44px;padding:0 15px;font-size:12px}

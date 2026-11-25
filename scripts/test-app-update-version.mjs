@@ -69,6 +69,13 @@ await updater.checkForUpdate({ force: true, silent: true })
 assert.equal(updater.updateState.hasUpdate, false)
 assert.equal(updater.canAutoPromptUpdate(), false)
 
+updater = await loadUpdater('2.7.6-test.1', 'v2.7.6')
+await updater.checkForUpdate({force:true,silent:true})
+assert.equal(updater.updateState.hasUpdate, false, 'do not downgrade a baseline test build to its old public base')
+updater = await loadUpdater('2.7.6-test.1', 'v2.7.7')
+await updater.checkForUpdate({force:true,silent:true})
+assert.equal(updater.updateState.hasUpdate, true, 'the next public version still notifies testers')
+
 updater = await loadUpdater('2.3.1-mobile.16', 'v2.3.1-mobile.17')
 await updater.checkForUpdate({ force: true, silent: true })
 assert.equal(updater.updateState.hasUpdate, true, 'legacy mobile prerelease ordering must remain valid')

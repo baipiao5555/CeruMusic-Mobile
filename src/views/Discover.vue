@@ -2,6 +2,7 @@
 import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
+import PullRefreshIndicator from '@/components/PullRefreshIndicator.vue'
 import SongRow from '@/components/SongRow.vue'
 import {
   allProviders,
@@ -17,6 +18,7 @@ import {
 } from '@/core/playback/player'
 import { libraryState } from '@/core/library'
 import { openSearch } from '@/core/searchEntry'
+import { usePullToRefresh } from '@/core/ui/pullToRefresh'
 
 const router = useRouter()
 const dailyDate = ref(new Date())
@@ -138,7 +140,7 @@ async function fetchAll(provider: ProviderHandle, seq: number): Promise<void> {
   } catch (err: any) {
     if (seq !== requestSeq) return
     console.warn('加载榜单失败:', err)
-    if (!charts.value.length) error.value = '榜单没能加载出来'
+    error.value = '榜单没能加载出来'
   }
   if (seq !== requestSeq) return
   try {
@@ -196,12 +198,14 @@ async function load(force = false): Promise<void> {
     return
   }
 
-  charts.value = []
-  playlists.value = []
-  categories.value = []
-  activeCategory.value = 0
+  if (!force) {
+    charts.value = []
+    playlists.value = []
+    categories.value = []
+    activeCategory.value = 0
+  }
   error.value = ''
-  loading.value = true
+  loading.value = !charts.value.length && !playlists.value.length
   loadingProviderKey = key
   await fetchAll(provider, seq)
   if (seq !== requestSeq) return
@@ -281,11 +285,17 @@ onBeforeUnmount(() => {
 })
 
 watch(providerKey, () => void load())
+const pull = usePullToRefresh(async () => {
+  if (!selected.value || !supportsHome(selected.value)) throw new Error('当前音源不提供首页内容')
+  await load(true)
+  if (error.value) throw new Error(error.value)
+})
 </script>
 
 <template>
   <div class="screen discover-page">
-    <div class="scroll safe-t" ref="scrollEl" @scroll.passive="onScroll">
+    <div class="scroll safe-t" ref="scrollEl" @scroll.passive="onScroll" @touchstart="pull.onTouchStart" @touchmove="pull.onTouchMove" @touchend="pull.onTouchEnd" @touchcancel="pull.onTouchCancel">
+      <PullRefreshIndicator :visible="pull.visible.value" :refreshing="pull.refreshing.value" :distance="pull.distance.value" :result="pull.result.value" :message="pull.message.value" />
       <header class="home-head">
         <nav class="home-channels" aria-label="音乐频道">
           <button class="on" aria-current="page">推荐</button>

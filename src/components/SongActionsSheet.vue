@@ -19,10 +19,10 @@ import {
 } from '@/core/downloads'
 import { notify } from '@/core/plugin/manager'
 
-const props = defineProps<{ track: Track; playlistId?: string }>()
+const props = defineProps<{ track: Track; playlistId?: string; initialView?: 'menu' | 'playlist' }>()
 const emit = defineEmits<{ close: [] }>()
 
-const view = ref<'menu' | 'playlist'>('menu')
+const view = ref<'menu' | 'playlist'>(props.initialView ?? 'menu')
 const newName = ref('')
 
 const downloaded = computed(() => isDownloaded(props.track))
@@ -84,9 +84,9 @@ function createAndAdd(): void {
 </script>
 
 <template>
-  <div class="sheet-mask" @click.self="emit('close')">
+  <div class="sheet-mask" @click.self="emit('close')" @keydown.esc="emit('close')">
     <div class="scrim" @click="emit('close')" />
-    <div class="sheet" role="dialog" aria-modal="true" aria-label="歌曲操作">
+    <div class="sheet" role="dialog" aria-modal="true" :aria-label="view === 'playlist' ? '添加到歌单' : '歌曲操作'">
       <div class="grab" />
 
       <template v-if="view === 'menu'">
@@ -146,7 +146,7 @@ function createAndAdd(): void {
       <template v-else>
         <div class="sh-head">
           <div class="hdrow">
-            <button class="iconbtn quiet" aria-label="返回" @click="view = 'menu'">
+            <button class="iconbtn quiet" aria-label="返回" @click="initialView === 'playlist' ? emit('close') : view = 'menu'">
               <Icon name="back" :size="18" />
             </button>
             <div class="sh-title">添加到歌单</div>
@@ -155,6 +155,8 @@ function createAndAdd(): void {
             <Icon name="close" :size="18" />
           </button>
         </div>
+
+        <p class="hint truncate">{{ track.title }} · {{ track.artist }}</p>
 
         <div v-if="playlists.length" class="sh-list">
           <button

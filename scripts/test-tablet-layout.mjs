@@ -233,7 +233,7 @@ async function readMetrics() {
       tabDirection: styleOf('.tabbar .tab')?.flexDirection ?? null,
       navLabel: tabbar?.getAttribute('aria-label') ?? null,
       tabLabels: [...document.querySelectorAll('.tabbar .tab')].map((tab) => tab.textContent?.trim() ?? ''),
-      settingsGridColumns: gridColumns('#settings-appearance')
+      settingsGridColumns: gridColumns('.settings-directory .directory-grid')
         ?? (activeScrollStyle?.display === 'grid' ? activeGridColumns : null),
       settingsScrollDisplay: activeScrollStyle?.display ?? null,
       settingsJumpBottom: rectOf(activeScreen?.querySelector('.jump'))?.bottom ?? null,
@@ -449,18 +449,22 @@ async function runSize(size) {
   metrics = await readMetrics()
   await screenshot(size, '05-settings')
   noOverflow(size, metrics, 'settings')
-  check(`${size.name} settings rows visible`, (await page.locator('.settingrow').count()) >= 20, await page.locator('.settingrow').count())
+  check(`${size.name} settings directory rows visible`, (await page.locator('.settings-directory .settingrow').count()) === 7, await page.locator('.settings-directory .settingrow').count())
   check(
     `${size.name} settings uses ${size.tablet ? 'two columns' : 'one column'}`,
     size.tablet ? metrics.settingsGridColumns === 2 : metrics.settingsScrollDisplay !== 'grid',
     { columns: metrics.settingsGridColumns, display: metrics.settingsScrollDisplay }
   )
   if (size.tablet) {
+    await page.locator('[data-section="playback"]').click()
+    await page.locator('#settings-playback').waitFor({ state: 'visible' })
+    await page.waitForTimeout(150)
     check(
-      `${size.name} settings section nav does not overlap the first section`,
-      metrics.settingsFirstSectionTop >= metrics.settingsJumpBottom - 1,
-      { jumpBottom: metrics.settingsJumpBottom, firstSectionTop: metrics.settingsFirstSectionTop }
+      `${size.name} settings detail shows one bounded section`,
+      (await page.locator('.scroll > section:visible').count()) === 1 &&
+        (await page.locator('#settings-playback').evaluate(element => element.getBoundingClientRect().width)) <= 762
     )
+    await page.goBack()
   }
   dockChecks(size, metrics, 'settings')
 

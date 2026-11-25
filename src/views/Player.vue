@@ -5,6 +5,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import { StatusBar } from '@capacitor/status-bar'
 import TrackArtwork from '@/components/TrackArtwork.vue'
+import SongActionsSheet from '@/components/SongActionsSheet.vue'
+import type { Track } from '@/core/track'
 import { sourceLabel } from '@/core/trackGrouping'
 import Icon from '@/components/Icon.vue'
 import {
@@ -52,6 +54,11 @@ watch(showLyrics, value => { themeBackgroundScene.value = value ? 'lyrics' : 'pl
 const lyricUi = ref(true)
 let lyricUiTimer: ReturnType<typeof setTimeout> | undefined
 const showQuality = ref(false)
+const playlistTrack = ref<Track | null>(null)
+function addCurrentToPlaylist(): void {
+  if (!track.value) return
+  playlistTrack.value = track.value
+}
 const queueFilter = ref<'next' | 'played' | 'all'>('next')
 
 const activeLineCharCount = computed(() => {
@@ -268,7 +275,7 @@ function setStatusBarVisible(visible: boolean): void {
 
 /** 隐藏顶部/底部控件和状态栏，只留歌词。 */
 function putLyricsToSleep(): void {
-  if (!showLyrics.value || showQueue.value || showQuality.value || showSettings.value) return
+  if (!showLyrics.value || showQueue.value || showQuality.value || showSettings.value || playlistTrack.value) return
   lyricUi.value = false
   setStatusBarVisible(false)
 }
@@ -385,8 +392,8 @@ watch(track, (value) => {
     void router.replace('/')
   }
 })
-watch(() => [showQueue.value, showQuality.value, showSettings.value], () => {
-  if (showQueue.value || showQuality.value || showSettings.value) cancelPlayerMorph()
+watch(() => [showQueue.value, showQuality.value, showSettings.value, playlistTrack.value], () => {
+  if (showQueue.value || showQuality.value || showSettings.value || playlistTrack.value) cancelPlayerMorph()
   if (showLyrics.value) pokeLyrics()
 })
 watch(() => route.query.panel, (panel) => {
@@ -406,6 +413,10 @@ onMounted(() => {
   setTimeout(scrollActiveLyric, 300)
   // 返回键先收歌词浮层，再交给 App.vue 处理路由/退出。
   setBackGuard(() => {
+    if (playlistTrack.value) {
+      playlistTrack.value = null
+      return true
+    }
     if (showLyrics.value) {
       closeLyrics()
       return true
@@ -516,7 +527,7 @@ onUnmounted(() => {
           <button class="p-tool" :class="{ on: sleepShort !== '定时' }" :aria-label="'定时停止：' + sleepShort" @click="openSettings">
             <Icon name="timer" :size="21" /><span v-if="sleepShort !== '定时'">{{ sleepShort }}</span>
           </button>
-          <button class="p-tool" aria-label="更多播放设置" @click="openSettings"><Icon name="more" :size="23" /></button>
+          <button class="p-tool" aria-label="加入歌单" @click="addCurrentToPlaylist"><Icon name="folder" :size="21" /><span>歌单</span></button>
         </div>
 
         <div class="p-seek">
@@ -538,6 +549,10 @@ onUnmounted(() => {
     </div>
 
     <!-- 音质不再展开挤走主播放控制；仍使用原有 setQuality 与实际可选档位。 -->
+    <Teleport to="body"><transition name="sheet-pop">
+      <SongActionsSheet v-if="playlistTrack" :track="playlistTrack" initial-view="playlist" @close="playlistTrack = null" />
+    </transition></Teleport>
+
     <transition name="sheet-pop">
       <div v-if="showQuality" class="sheet-mask" @click.self="showQuality = false">
         <div class="scrim" @click="showQuality = false" />
@@ -866,9 +881,11 @@ onUnmounted(() => {
 .p-bg, .ly-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .p-bg img, .ly-bg img { position: absolute; width: 100%; height: 100%; object-fit: cover; filter: blur(48px) saturate(.8); transform: scale(1.25); opacity: .65; }
 .p-veil, .ly-veil { position: absolute; inset: 0; background: linear-gradient(180deg, #10182155, #10182180 55%, #0b121dcc); }
-.p-top { position: relative; z-index: 3; display: flex; align-items: center; gap: 8px; flex: none; padding: calc(var(--safe-top) + 6px) 18px 0; }
+.p-top { position: relative; z-index: 3; display: grid; grid-template-columns: 88px minmax(0, 1fr) 88px; align-items: center; gap: 0; flex: none; padding: calc(var(--safe-top) + 6px) 18px 0; }
+.p-top > .iconbtn:first-child { justify-self: start; }
+.p-top > .iconbtn:last-child, .p-top > .row { justify-self: end; }
 .p-top .iconbtn { width: 44px; height: 44px; color: #f0f5ff; border: 0; background: transparent; box-shadow: none; }
-.p-head { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; text-align: center; }
+.p-head { min-width: 0; min-height: 44px; display: flex; flex-direction: column; justify-content: center; gap: 3px; text-align: center; padding-top: 1px; }
 .p-head-k { font-size: 14px; font-weight: 600; color: #f1f6ff; }
 .p-head-s { font-size: 12px; color: #c0d0e7; }
 .p-tabs { position: relative; z-index: 2; flex: none; display: flex; justify-content: center; gap: 26px; min-height: 44px; }

@@ -142,6 +142,42 @@ await check('A new authorization does not inherit the prior account refresh toke
   assert.equal(stored.user, null)
   return { previousAccountFieldsDiscarded: true }
 })
+await check('OAuth callback also accepts fragment parameters used by some Android browsers', async () => {
+  const env = environment(() => Promise.resolve({ status: 200, data: tokens('B') }))
+  const pending = JSON.parse(env.storage.get('ceru.auth.pending.v1') || 'null') || { verifier: 'synthetic-verifier', state: 'synthetic-state', nonce: 'synthetic-nonce', createdAt: Date.now() }
+  env.storage.set('ceru.auth.pending.v1', JSON.stringify(pending))
+  const user = await env.auth.handleAuthCallback(`cerumusic://oauth/callback#code=B&state=${pending.state}`)
+  assert.equal(env.auth.authState.user?.sub, 'B')
+  assert.equal(user?.sub, 'B')
+  return { fragmentCallbackAccepted: true, user: 'B' }
+})
+await check('Cold-launch plus appUrlOpen delivers one callback without spending the authorization code twice', async () => {
+  const response = deferred(), env = environment(() => response.promise)
+  const pending = { verifier: 'synthetic-verifier', state: 'synthetic-state', nonce: 'synthetic-nonce', createdAt: Date.now() }
+  env.storage.set('ceru.auth.pending.v1', JSON.stringify(pending))
+  const url = 'cerumusic://oauth/callback?code=duplicate&state=synthetic-state'
+  const first = settled(env.auth.handleAuthCallback(url)), second = settled(env.auth.handleAuthCallback(url))
+  assert.equal(env.requests.length, 1)
+  response.resolve({ status: 200, data: tokens('B') })
+  assert.equal((await first).ok, true); assert.equal((await second).ok, true)
+  assert.equal((await env.auth.handleAuthCallback(url))?.sub, 'B')
+  assert.equal(env.requests.length, 1)
+  return { oneExchange: true, duplicateCallbackIgnored: true }
+})
+await check('Successful HTTP with missing credentials is rejected and exposes a persistent login error', async () => {
+  const env = environment(() => Promise.resolve({status: 200, data: {}}))
+  const result = await settled(callback(env, 'invalid'))
+  assert.equal(result.ok, false)
+  assert.match(env.auth.authState.error, /有效凭据/)
+  return { malformedTokenRejected: true, errorVisible: true }
+})
+await check('Recreated Activity can redeliver a consumed callback without replacing the restored session', async () => {
+  const env = environment(() => { throw new Error('No exchange expected') })
+  const user = await env.auth.handleAuthCallback('cerumusic://oauth/callback?code=old-code&state=old-state')
+  assert.equal(user?.sub, 'A')
+  assert.equal(env.requests.length, 0)
+  return { restoredAccountPreserved: true, noExchange: true }
+})
 await nextTurn()
 const exitCode = checks.some(item => !item.pass) ? 1 : 0
 const result = { command: 'node scripts/test-account-session.mjs', sourceRoot: root, exitCode,

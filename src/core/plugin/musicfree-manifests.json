@@ -1,0 +1,2521 @@
+{
+  "93db7f4103798e6521044c55d2c8c4913cbc14d70d0ac0df161c49ab568ba541": {
+    "file": "172mix-source.plugin.v1.2.1.js",
+    "platform": "172Mix",
+    "name": "172Mix",
+    "description": "支持音质：64k",
+    "version": "1.2.1",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "hints",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "70d47b77b432f2f4483cc7b11232b6f6ea3defbbcade69bb34e7a97902df3cc0": {
+    "file": "1ting-source.plugin.v1.0.2.js",
+    "platform": "1ting",
+    "name": "一听音乐",
+    "description": "支持音质：128k",
+    "version": "1.0.2",
+    "author": "研发3号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k"
+    ],
+    "userVariables": [],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "defaultSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "d4741a59671257381fc3a0651d56d2267a360688ae92de22a07cd0e1f86878db": {
+    "file": "36dj-source.plugin.v1.2.2.js",
+    "platform": "36DJ",
+    "name": "36DJ",
+    "description": "支持音质：64k",
+    "version": "1.2.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "765d7da6dd12addfd2b81ded28485b63ff90ef2e3fb9d12f5f563622df80a19d": {
+    "file": "54dj-source.plugin.v1.1.2.js",
+    "platform": "我是DJ",
+    "name": "我是DJ",
+    "description": "支持音质：64k",
+    "version": "1.1.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "f2de0168bfe0b345455e6c1bb47d203b0ee1b13a989794c1bc1ddb57a9453cf3": {
+    "file": "5sing-source.plugin.v1.0.2.js",
+    "platform": "5sing",
+    "name": "5sing",
+    "description": "支持音质：128k/192k/320k",
+    "version": "1.0.2",
+    "author": "研发2号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "192k",
+      "320k"
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "primaryKey",
+      "description",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "getMusicSheetInfo",
+      "importMusicItem",
+      "importMusicSheet",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "0942e5e1b3f9510cf0c429619bafecdfedbbd54e4f8ce7bdddb8b1418b001c79": {
+    "file": "73dj-source.plugin.v1.0.1.js",
+    "platform": "73DJ",
+    "name": "73DJ",
+    "description": "73DJ",
+    "version": "1.0.1",
+    "author": "hebijunge",
+    "keys": [
+      "name",
+      "cacheControl",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "search",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "719f32277d5b7777d45b94f436fdd8e307a8e52638539cde20acc05eb09bcf46": {
+    "file": "82dj-source.plugin.v1.2.2.js",
+    "platform": "82DJ",
+    "name": "82DJ舞曲网",
+    "description": "支持音质：64k/320k",
+    "version": "1.2.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k",
+      "320k"
+    ],
+    "userVariables": [],
+    "keys": [
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "cacheControl",
+      "supportedQualities",
+      "supportedSearchType",
+      "hints",
+      "userVariables",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getMusicInfo",
+      "getLyric",
+      "getArtistWorks"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "660955d4a4f08f6511d85d437f8aab42bc83c4337c68c2cc0c6c2505ea2551c6": {
+    "file": "agg-source.plugin.v1.9.19.js",
+    "platform": "agg",
+    "name": "聚合",
+    "description": "支持音质：128k/192k/320k/flac/flac24bit/hires/atmos/atmos_plus/master/dolby",
+    "version": "1.9.19",
+    "author": "yinliu agg-plugin",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "192k",
+      "320k",
+      "flac",
+      "flac24bit",
+      "hires",
+      "atmos",
+      "atmos_plus",
+      "master",
+      "dolby"
+    ],
+    "userVariables": [
+      {
+        "key": "qqAuthst",
+        "name": "QQ音乐 authst 凭证",
+        "hint": "qm_keyst 或 authst 值；未配置时 QQ 源不参与取链"
+      },
+      {
+        "key": "qqUin",
+        "name": "QQ 号 (uin)",
+        "hint": "与 authst 配套的 uin；Cookie 含 (wx)uin 时可留空"
+      },
+      {
+        "key": "qqCookie",
+        "name": "QQ音乐完整 Cookie",
+        "hint": "可自动解析 qm_keyst/uin；与 authst 二选一"
+      },
+      {
+        "key": "qqEvkey",
+        "name": "QQ EVkey 备源密钥",
+        "hint": "EVkey 备源通道凭据（可选）"
+      },
+      {
+        "key": "kugouCookie",
+        "name": "酷狗 Cookie",
+        "hint": "匿名取链有风控风险(status=2)，配置后走 KG 备通道"
+      },
+      {
+        "key": "hywCardKey",
+        "name": "HYW 卡密(酷狗备源)",
+        "hint": "覆盖酷狗 HYWmusic 通道默认卡密（可选）"
+      },
+      {
+        "key": "neteaseCookie",
+        "name": "网易云 Cookie",
+        "hint": "网易云/汽水共用：VIP 档与部分歌需登录态"
+      },
+      {
+        "key": "allowHaitangRelay",
+        "name": "允许海棠中继(咪咕)",
+        "hint": "填 false 关闭咪咕取链失败后的海棠接力，默认开"
+      },
+      {
+        "key": "enableKuwo",
+        "name": "启用酷我源",
+        "hint": "填 false 关闭酷我（默认开）"
+      },
+      {
+        "key": "enableMigu",
+        "name": "启用咪咕源",
+        "hint": "填 false 关闭咪咕（默认开）"
+      },
+      {
+        "key": "enableNetease",
+        "name": "启用网易云源",
+        "hint": "填 false 关闭网易云（默认开）"
+      },
+      {
+        "key": "enableQishui",
+        "name": "启用汽水源",
+        "hint": "填 false 关闭汽水（默认开）"
+      },
+      {
+        "key": "enableKugou",
+        "name": "启用酷狗源",
+        "hint": "填 false 关闭酷狗（默认开）"
+      },
+      {
+        "key": "enableQq",
+        "name": "启用QQ源",
+        "hint": "填 false 关闭 QQ（默认开；QQ 还需凭据就绪才参与取链）"
+      },
+      {
+        "key": "defaultQuality",
+        "name": "默认音质档位",
+        "hint": "宿主未指定档位时的回退值；有效值：128k/192k/320k/flac/flac24bit/hires/atmos/atmos_plus/master/dolby"
+      },
+      {
+        "key": "downloadQuality",
+        "name": "下载音质档位",
+        "hint": "getDownloadUrl 未指定 quality 时的默认档；非法值回退 320k"
+      },
+      {
+        "key": "downloadPath",
+        "name": "下载目录(参考)",
+        "hint": "插件仅透出参考路径（getUserConfig 读视图），实际下载目录由宿主下载器决定"
+      },
+      {
+        "key": "downloadPreferredSource",
+        "name": "下载首选源",
+        "hint": "getDownloadUrl 未显式指定 source 时优先该源（该源关闭或条目无此源快照则回退竞速链）；有效值：kuwo/migu/netease/qishui/kugou/qq"
+      },
+      {
+        "key": "searchBudgetMs",
+        "name": "单源搜索预算(ms)",
+        "hint": "聚合搜索单源总预算，默认 2800，有效范围 800-8000；超时源按缺席处理"
+      },
+      {
+        "key": "searchMaxPages",
+        "name": "单源搜索页数上限",
+        "hint": "聚合搜索单源首轮最多页数，默认 3，有效范围 1-40；页1先行、页2..N 并发"
+      },
+      {
+        "key": "versionSortWeight",
+        "name": "版本排序权重",
+        "hint": "原版/现场/翻唱/伴奏/其他排序权重 0-0.6，默认 0.3；填 0 恢复旧排序"
+      }
+    ],
+    "keys": [
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "defaultSearchType",
+      "hints",
+      "supportedQualities",
+      "supportedVideoQualities",
+      "primaryKey",
+      "supportedSearchType",
+      "cacheControl",
+      "userVariables",
+      "search",
+      "getMediaSource",
+      "getMvSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "getCurrentLyricLine",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "getMusicComments",
+      "importMusicSheet",
+      "importMusicItem",
+      "getDownloadMatrix",
+      "getDownloadUrl",
+      "suggestDownloadFilename",
+      "getUserConfig",
+      "setUserConfig",
+      "agg_doctor",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicSheetInfo",
+      "getAlbumInfo",
+      "getArtistWorks"
+    ],
+    "requires": [
+      "axios",
+      "axios",
+      "crypto-js",
+      "axios",
+      "axios",
+      "axios",
+      "axios",
+      "axios"
+    ]
+  },
+  "d69d4a27c339da25adf690ba5d9dab41f897d6dad977062b8d4d75b2b38c3eb1": {
+    "file": "apple-music-v1.0.2.js",
+    "platform": "apple-music",
+    "name": "Apple Music",
+    "description": "支持音质：128k/320k/flac",
+    "version": "1.0.2",
+    "author": "研发1号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "320k",
+      "flac"
+    ],
+    "userVariables": [
+      {
+        "key": "appleStorefront",
+        "name": "Storefront（默认 us）",
+        "hint": "Apple Music 区服：us / cn / hk / jp / tw 等；分类歌单固定 cn 不受此项影响"
+      },
+      {
+        "key": "appleMediaUserToken",
+        "name": "media-user-token（可选，歌词用）",
+        "hint": "选填；网页版登录后 Cookie 中的 media-user-token，填写后支持歌词（TTML 转 LRC），不填不支持歌词"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getAlbumInfo",
+      "getMusicSheetInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "importMusicSheet",
+      "importMusicItem",
+      "getLyric",
+      "getMusicDetailPageUrl",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "510574a350cdd468118d7627c09d9ac43fd5918b884b4bb63c6400673328dbec": {
+    "file": "bibdj-source.plugin.v1.2.1.js",
+    "platform": "宝贝DJ",
+    "name": "宝贝DJ",
+    "description": "支持音质：128k/320k",
+    "version": "1.2.1",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "128k",
+      "320k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "df09a42f98b08bbfab77c7c04feba84432be008ef8fad11df5e530961db0adb2": {
+    "file": "bilibili-source.plugin.v1.1.4.js",
+    "platform": "bilibili",
+    "name": "B站",
+    "description": "B站",
+    "version": "1.1.4",
+    "author": "研发2号",
+    "primaryKey": [
+      "bvid"
+    ],
+    "supportedQualities": [
+      "96k",
+      "192k"
+    ],
+    "userVariables": [
+      {
+        "key": "biliCookie",
+        "name": "B站 Cookie（可选）",
+        "hint": "浏览器登录 bilibili.com 后，F12 → 网络 → 任一 api.bilibili.com 请求 → 复制完整 Cookie 请求头（需含 SESSDATA、bili_jct）。配置且为大会员账号后可解锁 Hi-Res/Dolby 音质；同时启用 AI 字幕歌词（v1.1.1：B 站视频无官方歌词，AI 字幕为降级方案，仅覆盖开启 AI 字幕的视频）；不配置仅免费档（96k/192k）且无 AI 字幕歌词。注意：音质档位选项在插件加载时评估，配置 Cookie 后需重载插件（重启 App）才会刷新档位选项。"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "appVersion",
+      "description",
+      "cacheControl",
+      "supportedSearchType",
+      "defaultSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "supportedVideoQualities",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "getAlbumInfo",
+      "importMusicItem",
+      "importMusicSheet",
+      "getMusicComments",
+      "getTopLists",
+      "getTopListDetail",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "crypto-js",
+      "he"
+    ]
+  },
+  "ad8759a1e5de57dc7f1a6d8e6a27d252b284bd35d0a8a5e17fe8141d29fa2ad8": {
+    "file": "bobidj-source.plugin.v1.0.1.js",
+    "platform": "波比DJ",
+    "name": "波比DJ",
+    "description": "波比DJ",
+    "version": "1.0.1",
+    "author": "hebijunge",
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio",
+      "crypto-js"
+    ]
+  },
+  "50043828ec27a69dbea1cd94e1eb76141a322c5fb4baf3803f393da5515c6bfa": {
+    "file": "bokantingshu-source.plugin.v1.0.2.js",
+    "platform": "bookan",
+    "name": "博看听书",
+    "description": "支持音质：64k",
+    "version": "1.0.2",
+    "author": "研发1号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k"
+    ],
+    "userVariables": [],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "defaultSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getAlbumInfo",
+      "getMusicSheetInfo",
+      "importMusicSheet",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "ee14ec8916be8b56054b4842116fcd9ecda44b59aa062d493f0d3d986abc7f3c": {
+    "file": "cctv-source.plugin.v1.0.2.js",
+    "platform": "cctv",
+    "name": "CCTV听音",
+    "description": "支持音质：64k/128k",
+    "version": "1.0.2",
+    "author": "研发2号",
+    "supportedQualities": [
+      "64k",
+      "128k"
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getTopLists",
+      "getTopListDetail",
+      "getLyric",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicSheetInfo",
+      "getAlbumInfo",
+      "importMusicSheet"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "3e75d7cc8002398e6a3b7aa5805a7648221c60f54b7e71112d9227b0ea5f74df": {
+    "file": "ddddj-source.plugin.v1.2.2.js",
+    "platform": "清风DJ",
+    "name": "清风DJ",
+    "description": "支持音质：96k/320k",
+    "version": "1.2.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "96k",
+      "320k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "cb3b70bb44384d2e37b63a7c4d221bee0751668c69d001d1fbeea8b444387289": {
+    "file": "dianyinge-source.plugin.v1.1.2.js",
+    "platform": "电音阁",
+    "name": "电音阁",
+    "description": "支持音质：64k",
+    "version": "1.1.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail",
+      "getMusicSheetInfo"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "30a5c786e8bd8fd8fe8173b06c29f0b0529bbecf3f51cd2ba8c137a5b3ebaacb": {
+    "file": "dj14-source.plugin.v1.2.2.js",
+    "platform": "水晶舞曲",
+    "name": "水晶舞曲",
+    "description": "支持音质：128k",
+    "version": "1.2.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "128k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getMediaSource",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "e4ca2e0c25474b2c40302593770468a7d682a229ffcc9c90426707cad1e9c7bf": {
+    "file": "dj6-source.plugin.v1.0.2.js",
+    "platform": "DJ6",
+    "name": "DJ6",
+    "description": "支持音质：64k",
+    "version": "1.0.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "ca9d720221dd6739b9b30fc1f9eada043579cedd9100c4df373070ea21819639": {
+    "file": "dj766-source.plugin.v1.4.1.js",
+    "platform": "DJ766",
+    "name": "DJ766",
+    "description": "支持音质：96k/320k",
+    "version": "1.4.1",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "96k",
+      "320k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "hints",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "7c93339070b1822c28c2a3aad705115ac80c30bb1889a8cf4df9000575d6295f": {
+    "file": "djcsj-source.plugin.v1.0.1.js",
+    "platform": "djcsj",
+    "name": "DJ串烧集",
+    "description": "支持音质：64k/320k",
+    "version": "1.0.1",
+    "author": "研发3号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k",
+      "320k"
+    ],
+    "userVariables": [],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicSheetInfo",
+      "importMusicSheet",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "f25f70750bc8258086f29445eddf3a56d943a24908b7e27dd0c7b49a0dbd48fd": {
+    "file": "djduoduo-source.plugin.v1.0.2.js",
+    "platform": "djduoduo",
+    "name": "DJ多多",
+    "description": "支持音质：64k/128k/320k/flac",
+    "version": "1.0.2",
+    "author": "研发1号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k",
+      "128k",
+      "320k",
+      "flac"
+    ],
+    "userVariables": [
+      {
+        "key": "ddUid",
+        "name": "formats 高音质账号 Uid（可选）",
+        "hint": "默认使用文档内置可用登录态 Uid=12626571；若内置登录态失效（Q1~Q3 报 401/403），改填自己的 Uid"
+      },
+      {
+        "key": "ddOpenId",
+        "name": "formats 高音质账号 OpenId（可选）",
+        "hint": "与 ddUid 成对填写；为空或与 Uid 不匹配会被 formats 接口拒绝（401 参数错误 / 403 Access deny）"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "defaultSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicSheetInfo",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "bbbdbcab35fd3794fe801e16de79c4cdf239a3a4a36c49750d4b4468019539e4": {
+    "file": "djkk-source.plugin.v1.1.2.js",
+    "platform": "DJKK",
+    "name": "DJKK",
+    "description": "支持音质：64k",
+    "version": "1.1.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "922e34d5e81cd6c44333a9542ca0ca9fe088ba6a6a78db26cbd4899d976d8350": {
+    "file": "djmei-source.plugin.v1.0.1.js",
+    "platform": "魅力DJ",
+    "name": "魅力DJ",
+    "description": "魅力DJ",
+    "version": "1.0.1",
+    "author": "hebijunge",
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "ca891cb6acf55d7eb6b0c41e5e6882fa4cf34391bb6e62ac07a4dcbdf273a2a4": {
+    "file": "djshow.plugin.v1.0.4.js",
+    "platform": "DJ秀",
+    "name": "DJ秀",
+    "description": "支持音质：64k/192k/320k/flac",
+    "version": "1.0.4",
+    "author": "研发2号",
+    "supportedQualities": [
+      "64k",
+      "192k",
+      "320k",
+      "flac"
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicSheetInfo",
+      "getMusicComments",
+      "_internal"
+    ],
+    "requires": [
+      "axios",
+      "crypto-js"
+    ]
+  },
+  "67c2b423d1c4424fd1a71570b85990ed7dcf01be062baed95775a9d6bdb9a4f1": {
+    "file": "djuu-source.plugin.v1.1.2.js",
+    "platform": "djuu",
+    "name": "djuu DJ",
+    "description": "支持音质：64k",
+    "version": "1.1.2",
+    "author": "研发3号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "supportedQualities",
+      "defaultSearchType",
+      "primaryKey",
+      "hints",
+      "cacheControl",
+      "search",
+      "getMusicInfo",
+      "getMediaSource",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheets",
+      "getRecommendSheetById",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "bbd2b5413831333f23f4a0c7ef497f8bfcae0690b89e7dbf53bb0a1abfb159dd": {
+    "file": "djyule-source.plugin.v1.2.1.js",
+    "platform": "DJ娱乐",
+    "name": "DJ娱乐",
+    "description": "DJ娱乐",
+    "version": "1.2.1",
+    "author": "hebijunge",
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "520e74f629546e3148c8f7312206a0201f22af7166b92742fba7994e6a257d43": {
+    "file": "djyyy-source.plugin.v1.1.2.js",
+    "platform": "DJ耶耶耶",
+    "name": "DJ耶耶耶",
+    "description": "支持音质：64k",
+    "version": "1.1.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getMediaSource",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "221ca77a572eba086f31460803f6d8c2ab39566041cba311afef6ff6ac59e61f": {
+    "file": "fanqie-source.plugin.v1.3.1.js",
+    "platform": "fanqie",
+    "name": "番茄畅听",
+    "description": "支持音质：64k / 128k / 192k / flac",
+    "version": "1.3.1",
+    "author": "研发2号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k",
+      "128k",
+      "192k",
+      "flac"
+    ],
+    "userVariables": [],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "defaultSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "supportedVideoQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "getTopLists",
+      "getTopListDetail",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "importMusicItem",
+      "getAlbumInfo",
+      "getMusicSheetInfo",
+      "getArtistWorks",
+      "importMusicSheet",
+      "getMusicComments",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "42c59297baca0c0dcc83490e8ee9cfceecdcd326336f679cf4507b2fec84f38a": {
+    "file": "htqyy-source.plugin.v1.2.3.js",
+    "platform": "好听轻音乐",
+    "name": "好听轻音乐",
+    "description": "支持音质：128k",
+    "version": "1.2.3",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "128k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "dd2eafda16dc0d9e15979e250cf6b4130f879fd5ee5502ff87ef137e6c14c7c7": {
+    "file": "huolongdj-source.plugin.v1.0.4.js",
+    "platform": "huole",
+    "name": "火龙DJ",
+    "description": "支持音质：64k/320k/flac",
+    "version": "1.0.4",
+    "author": "研发3号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k",
+      "320k",
+      "flac"
+    ],
+    "userVariables": [
+      {
+        "key": "hlReport",
+        "name": "播放统计上报（CountPlay，默认开）",
+        "hint": "取链成功后向火龙DJ上报播放进度（未登录可用）；设为 off 关闭"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "defaultSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "importMusicSheet",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "b7fad73d24f56920ce0daf716666a60d8a70c6ba506748c897d140c217d75468": {
+    "file": "hwmusic-source.plugin.v1.0.3.js",
+    "platform": "华为音乐",
+    "name": "华为音乐",
+    "description": "支持音质：128k/320k/flac",
+    "version": "1.0.3",
+    "author": "研发1号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "320k",
+      "flac"
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "importMusicItem",
+      "getTopLists",
+      "getTopListDetail",
+      "getSheetInfo",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "1f2c755673c911a34795fad594867b48d0cc62b5a9da86cd4db3ec7ce6a7b78e": {
+    "file": "hy57-source.plugin.v1.1.2.js",
+    "platform": "黑色音频",
+    "name": "黑色音频",
+    "description": "支持音质：64k",
+    "version": "1.1.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "3c2bd77b2bfbf924dbc82004425e302bedfe3407ef7931b4851b519d53595455": {
+    "file": "jamendo-source.plugin.v1.0.2.js",
+    "platform": "jamendo",
+    "name": "Jamendo",
+    "description": "Jamendo",
+    "version": "1.0.2",
+    "author": "研发2号",
+    "userVariables": [
+      {
+        "key": "clientId",
+        "name": "Jamendo",
+        "hint": "在 https://developer.jamendo.com 注册并在 My Apps 创建应用获取（免费）"
+      }
+    ],
+    "keys": [
+      "name",
+      "srcUrl",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "cacheControl",
+      "supportedSearchType",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getAlbumInfo",
+      "getMusicSheetInfo",
+      "getArtistWorks",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "importMusicItem",
+      "importMusicSheet",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "7ae5de170a980fa64d21c8b800382acf7eddea9afa47b7aa0f65ffcd5c3e24cc": {
+    "file": "joox-source.plugin.v1.1.3.js",
+    "platform": "joox",
+    "name": "JOOX音乐",
+    "description": "支持音质：128k/320k/flac/hires/master/atmos",
+    "version": "1.1.3",
+    "author": "研发1号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "320k",
+      "flac",
+      "hires",
+      "master",
+      "atmos"
+    ],
+    "userVariables": [
+      {
+        "key": "jooxToken",
+        "name": "apicx JOOX API Token（默认调研实测 token）",
+        "hint": "apicx.asia 第三方接口令牌，默认填 2026-09-26 调研实测可用 token（f84ao9lMF_q7husBWRfgUw）；失效时替换为最新 token。设为 off 可停用 apicx 主通道（只回落官方直连：免费歌完整 MP3、VIP 曲目 30s 试听；无损/Hi-Res/母带/全景声档将不可用）"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "defaultSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "importMusicItem",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "0ad1db7760a7eb66931c5b14d5a9a9e279fc6fd4edeb09ebac39b04a6dde97cc": {
+    "file": "kuaiyin-source.plugin.v1.0.2.js",
+    "platform": "快音",
+    "name": "快音",
+    "description": "支持音质：128k",
+    "version": "1.0.2",
+    "author": "研发2号",
+    "supportedQualities": [
+      "128k"
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicSheetInfo",
+      "getArtistWorks",
+      "importMusicItem",
+      "importMusicSheet",
+      "getMusicComments",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "40fe2ad33e93db5f82f8f4fb47819fe4e6f9c95ef036ded57e6a8995a1ba0a5b": {
+    "file": "kugou-source.plugin.v1.9.24.js",
+    "platform": "kugou",
+    "name": "酷狗音乐",
+    "description": "支持音质：128k/320k/flac/flac24bit/hires/master/atmos",
+    "version": "1.9.24",
+    "author": "研发2号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "320k",
+      "flac",
+      "flac24bit",
+      "hires",
+      "master",
+      "atmos"
+    ],
+    "userVariables": [
+      {
+        "key": "kugouCookie",
+        "name": "酷狗 Cookie（可选）",
+        "hint": "选填；填写后酷狗取链带登录态，可提升 VIP 曲目官方直链成功率，不填走第三方备源"
+      },
+      {
+        "key": "hywCardKey",
+        "name": "HYWmusic 卡密（可选）",
+        "hint": "留空使用默认值"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "importMusicItem",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "getTopLists",
+      "getTopListDetail",
+      "importMusicSheet",
+      "getAlbumInfo",
+      "getArtistInfo",
+      "getArtistWorks",
+      "getMusicSheetInfo",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicComments",
+      "getMvSource",
+      "supportedVideoQualities",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "a8209759bcec10f766df52abc83cc367c0ff3a5ed7266ee3f878134694fe7a35": {
+    "file": "kuwo-source.plugin.v1.9.24.js",
+    "platform": "kuwo",
+    "name": "酷我音乐",
+    "description": "支持音质：128k/320k/flac/hires/master/atmos",
+    "version": "1.9.24",
+    "author": "研发2号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "320k",
+      "flac",
+      "hires",
+      "master",
+      "atmos"
+    ],
+    "userVariables": [
+      {
+        "key": "kwCihedai",
+        "name": "次合代第三方通道（v1.9.0 新增，默认开）",
+        "hint": "设为 off 关闭；BakaMusic 实测真实无损（lossless≈1647kbps fLaC），加入 standard/high/super 竞速池（错峰 700ms），校验不过自动静默让路"
+      },
+      {
+        "key": "kwIkun",
+        "name": "ikun 第三方通道（v1.9.0 新增，默认开）",
+        "hint": "设为 off 关闭；BakaMusic 实测酷我真无损（X-API-Key 免卡密，仅酷我/网易云通道真实），加入竞速池（错峰 850ms），10 秒占位假链由严格校验过滤"
+      },
+      {
+        "key": "kwXinghai",
+        "name": "星海通道（v1.9.16 复活，默认开）",
+        "hint": "设为 off 关闭；yy.zddyr.top/lx/api/ 于 2026-09-11 判死（503 需授权），2026-09-29 实测恢复出链（super 档 car-er.kuwo.cn 真 fLaC 52.83MB），已回到竞速池原 550ms 位次。仅 standard/high/super 三档（hires/master 实测与 flac 同文件，属静默降级不接入）；成功率约 3/8，失败让路"
+      },
+      {
+        "key": "kwHyw",
+        "name": "HYWmusic 酷我通道（v1.9.16 新增，默认开）",
+        "hint": "设为 off 关闭；103.79.184.97/api/music/url，2026-09-29 实测与星海互补（星海取链失败的曲目本源可出 18~38MB 真 FLAC）。注意本源会用 48kbps AAC 冒充无损并回 code=200，故置于竞速链尾（1000ms）且声明档一律交严格校验复核，不过即拒收"
+      },
+      {
+        "key": "hywCardKey",
+        "name": "HYWmusic 卡密（可选）",
+        "hint": "留空使用默认值。实测该端点不校验卡密（留空同样出链），仅作来源标识；与酷狗/网易源的 hywCardKey 共用同一字段名"
+      },
+      {
+        "key": "kwFlacHi",
+        "name": "flac.music.hi.cn 第三方后端通道（v1.9.19 新增，默认开）",
+        "hint": "设为 off 关闭；免酷我 WAF 的第三方酷我后端（个人二级域），兜底链尾位。凭据过期自动重搜一次；匹配不到原唱（宁缺毋假）或音质校验不过即拒收"
+      },
+      {
+        "key": "kwBuguyy",
+        "name": "buguyy.top 兜底通道（v1.9.19 新增，默认开）",
+        "hint": "设为 off 关闭；零凭据，上游仅单一 320k 实档故仅 320k 档接入，兜底链最末位"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "defaultSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getWordByWordLyric",
+      "getMusicComments",
+      "getMusicDetailPageUrl",
+      "getLyric",
+      "importMusicItem",
+      "getMusicInfo",
+      "getArtistWorks",
+      "getArtistDetail",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "importMusicSheet",
+      "getAlbumInfo",
+      "getMusicSheetInfo",
+      "getMvSource",
+      "supportedVideoQualities",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "3f3ed02143048d646a3c02b2d6b87616fea3255b250d9b0e9933314aabb6c137": {
+    "file": "lizhi-source.plugin.v1.0.2.js",
+    "platform": "lizhi",
+    "name": "荔枝FM",
+    "description": "支持音质：64k/128k",
+    "version": "1.0.2",
+    "author": "研发2号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k",
+      "128k"
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getLyric",
+      "getArtistWorks",
+      "importMusicItem",
+      "getMusicDetailPageUrl",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "a64a022402ec390d4101f33cb076f886285e903ccda54bf097e723253b7072eb": {
+    "file": "lrts-source.plugin.v1.0.3.js",
+    "platform": "lrts",
+    "name": "懒人听书",
+    "description": "支持音质：64k",
+    "version": "1.0.3",
+    "author": "研发3号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k"
+    ],
+    "userVariables": [],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "defaultSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "getAlbumInfo",
+      "getMusicSheetInfo",
+      "importMusicSheet",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "8fb943a98655a1b5ee14f1dd896190e907a11eb0e82ae54d3703676474def241": {
+    "file": "migu-source.plugin.v1.9.20.js",
+    "platform": "migu",
+    "name": "咪咕音乐",
+    "description": "咪咕音乐独立源插件 v1.9.8（v1.9.8 版本号统一版：各源版本号对齐，无代码增量；v1.9.5 全页面音质标识核查 + VIP 标识移除版：全接口停写 fee（VIP 角标）与 getMusicInfo/取链 fee 回填，miguFeeOf/miguIsVip 移除；音质标识各入口此前已全覆盖、本轮核查无缺口；上一版 v1.9.3 WebView 短链跟随修复版：followRedirects 非 3xx 分支新增 responseURL 自动跟随检测——真机 WebView 下 XHR 自动跟随 302（axios maxRedirects:0 仅 Node 生效），短链解析拿到最终 URL 而非原始短链，修复真机导入 SHEET_URL_UNRECOGNIZED，详见头部 changelog；上一版 v1.9.2 为分享链接文本自动提取 URL 版；v1.9.1 随包升版：歌单对象补 author 别名字段，详见头部 v1.9.1 changelog；v1.9.0 BakaMusic 高价值音源接入版：零代码增量随包升版——P2 共享咪咕对比评估判定无吸收项（BakaMusic 共享咪咕为 PQ 探测降级形态，本插件官方 PQ 派生 HQ/SQ/ZQ24/Z3D 全档+跨源兜底覆盖之），详见头部 v1.9.0 changelog；v1.8.4 歌单导入元数据版：复核确认 importMusicSheet 返回完整 IMusicSheetItem 歌单对象，歌单介绍 description（取 playlist/v2.0 summary 字段）随对象回传，字段名对齐宿主 v1.0.0 契约；v1.8.3 质检遗留优化版：错误前缀与 code 口径复核确认已符合统一标准，随包升版；歌单解析修复版：v1.8.2 修歌单元数据接口——query_playlist_by_id_tag 实测返回 HTML 登录壳失效，改走 MIGUM3.0 playlist/v2.0 App 通道（旧接口降为兜底，失败不再静默），歌单标题/封面/作者/描述恢复；歌单对象与音乐条目补 platform/isImported；错误统一携带结构化 code；v1.8.0 MV 参数对齐基线（getMvSourceImpl 顶层守卫字段兜底 + P1 字段齐备）；v1.6.1 修复跨源兜底歌词同步——酷我无损兜底胜出时歌词/逐字歌词自动切酷我源；v1.6.0 主链 MIGUM2.0/v2.0 明文 listen-url，PQ 直链派生全音质并探测验真——SQ 派生失败/产物<5MB 自动触发酷我官方接口无损兜底；h5v2.4 加密接口保留为副取链，另有 v2.1/302/pc-v2.0/海棠 mg 多通道接力）/歌词（v2.0 songItem 富字段 lrcUrl/mrcUrl/trcUrl 直供，翻译歌词+逐字歌词 TEA 解密后 QRC 原文直出宿主 rawLrc）/VIP 角标 fee/别名 alias/主键 primaryKey 齐备/官方榜单 14 个/歌单导入与广场/专辑/歌手作品/MV 四档画质/官方评论（海棠兜底）；无损档可接力海棠 mg 备源（可在设置中关闭）。",
+    "version": "1.9.20",
+    "author": "研发2号",
+    "primaryKey": [
+      "copyrightId"
+    ],
+    "supportedQualities": [
+      "128k",
+      "320k",
+      "flac",
+      "flac24bit",
+      "atmos"
+    ],
+    "userVariables": [
+      {
+        "key": "allowHaitangRelay",
+        "name": "无损档海棠备源接力",
+        "hint": "超清/24bit 档在咪咕官方通道失败后接力海棠 mg 备源（第三方中转 musicserver.haitangw.cc，非咪咕官方域名）。关闭后仅走咪咕官方通道，无损档可能部分不可用。"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "supportedQualities",
+      "primaryKey",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "importMusicItem",
+      "getMusicInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "importMusicSheet",
+      "getAlbumInfo",
+      "getArtistWorks",
+      "getMusicSheetInfo",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicComments",
+      "getMvSource",
+      "getMusicDetailPageUrl",
+      "supportedVideoQualities",
+      "_internal"
+    ],
+    "requires": [
+      "axios",
+      "crypto-js"
+    ]
+  },
+  "eea5723ced2ca939240e901ea58e9d4678f5fadc672dcf563c3486e146d083f3": {
+    "file": "missevan-source.plugin.v1.0.3.js",
+    "platform": "猫耳FM",
+    "name": "猫耳FM",
+    "description": "支持音质：128k/192k",
+    "version": "1.0.3",
+    "author": "研发2号",
+    "supportedQualities": [
+      "128k",
+      "192k"
+    ],
+    "userVariables": [
+      {
+        "key": "cookie",
+        "name": "猫耳FM Cookie",
+        "hint": "浏览器登录 www.missevan.com 后，F12 → 网络 → 复制任意请求的 Cookie 粘贴到这里。仅搜索与广播剧剧集列表需要；免费音频播放/榜单/主播作品免登录可用。"
+      }
+    ],
+    "keys": [
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "cacheControl",
+      "supportedSearchType",
+      "supportedQualities",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "getArtistWorks",
+      "importMusicItem",
+      "importMusicSheet",
+      "getMusicSheetInfo",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "a5aaf4ee1254649c17d470ade2cb35a7bf12aaab0797cd9d672c35429d854646": {
+    "file": "mixdj-source.plugin.v1.0.2.js",
+    "platform": "MixDJ",
+    "name": "MixDJ",
+    "description": "MixDJ",
+    "version": "1.0.2",
+    "author": "hebijunge",
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "70fdc9f0dcf9ccc1de636f1277963b25005dfb39f64494507f8fae32a9a1d0bd": {
+    "file": "netease-source.plugin.v1.9.27.js",
+    "platform": "netease",
+    "name": "网易云音乐",
+    "description": "支持音质：128k/192k/320k/flac/flac24bit/hires/atmos/master",
+    "version": "1.9.27",
+    "author": "研发2号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "192k",
+      "320k",
+      "flac",
+      "flac24bit",
+      "hires",
+      "atmos",
+      "master"
+    ],
+    "userVariables": [
+      {
+        "key": "neteaseCookie",
+        "name": "网易云 Cookie（可选）",
+        "hint": "选填；官方 eapi 高码率取链需有效 VIP Cookie，不填走第三方备源（海棠/GD Studio/SE 云音/oiapi/bugpk/7boe）。⚠️ Cookie 属敏感凭据，请仅填入自己账号的、来源可信的 Cookie，勿与他人共享"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "importMusicItem",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "getTopLists",
+      "getTopListDetail",
+      "importMusicSheet",
+      "getAlbumInfo",
+      "getArtistWorks",
+      "getMusicSheetInfo",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicComments",
+      "getMvSource",
+      "supportedVideoQualities",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "653fddde16ced9e43128ea986639b8f2b4470267d5c11c65cf4928b962050ce5": {
+    "file": "neteaseradio-source.plugin.v1.1.3.js",
+    "platform": "neteaseradio",
+    "name": "网易云电台",
+    "description": "支持音质：128k",
+    "version": "1.1.3",
+    "author": "研发1号",
+    "supportedQualities": [
+      "128k"
+    ],
+    "keys": [
+      "platform",
+      "version",
+      "name",
+      "author",
+      "description",
+      "srcUrl",
+      "cacheControl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getAlbumInfo",
+      "getMusicSheetInfo",
+      "getArtistWorks",
+      "getLyric",
+      "getMediaSource"
+    ],
+    "requires": [
+      "axios",
+      "crypto-js",
+      "qs",
+      "big-integer"
+    ]
+  },
+  "7f204cd3248da48b2b3e0e285c6aa2d9e0d3c244d403789333353a7c20d35df6": {
+    "file": "pgdjz-source.plugin.v1.1.2.js",
+    "platform": "皮狗DJ",
+    "name": "皮狗DJ",
+    "description": "支持音质：64k",
+    "version": "1.1.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "478f50ee870088ebeae470b7bcfd89a44a9f78503c8fe936b7c912bd82514a84": {
+    "file": "qianqian-source.plugin.v1.0.4.js",
+    "platform": "qianqian",
+    "name": "千千音乐",
+    "description": "支持音质：64k/128k/320k/flac",
+    "version": "1.0.4",
+    "author": "研发3号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k",
+      "128k",
+      "320k",
+      "flac"
+    ],
+    "userVariables": [
+      {
+        "key": "qqyyKuwoFallback",
+        "name": "酷我兜底（可选）",
+        "hint": "千千取链全败时按歌名+歌手经酷我通道兜底取链；默认开启，填 false/0/off 关闭"
+      },
+      {
+        "key": "qqyyKwOfficial",
+        "name": "酷我官方通道（可选）",
+        "hint": "兜底竞速中的酷我官方 mobi.s 通道开关；默认开启，填 false/0/off 关闭"
+      },
+      {
+        "key": "kwOiapiKey",
+        "name": "oiapi 酷我 Key（可选）",
+        "hint": "兜底 oiapi 通道 Key，留空使用内置默认值"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "defaultSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getMusicDetailPageUrl",
+      "getTopLists",
+      "getTopListDetail",
+      "importMusicSheet",
+      "getAlbumInfo",
+      "getMusicSheetInfo",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "6f683fea370f5ea844c97bd54f78ef03a3b9b6f603d3f9da00a29b80dac44419": {
+    "file": "qingting-source.plugin.v1.0.3.js",
+    "platform": "qingting",
+    "name": "蜻蜓FM",
+    "description": "支持音质：128k/64k/24k",
+    "version": "1.0.3",
+    "author": "研发1号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "64k",
+      "24k"
+    ],
+    "userVariables": [],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "defaultSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "supportedVideoQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "getMusicInfo",
+      "getAlbumInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "getMusicSheetInfo",
+      "getArtistWorks",
+      "importMusicItem",
+      "importMusicSheet",
+      "getMusicComments",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "aa9ac79f0bb5ff0b62c3d7db9fa4cc3a01a7ca010532d8495c9173b5df05aff9": {
+    "file": "qishui-source.plugin.v1.9.23.js",
+    "platform": "qishui",
+    "name": "汽水音乐",
+    "description": "支持音质：128k/192k/320k/flac",
+    "version": "1.9.23",
+    "author": "研发2号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "192k",
+      "320k",
+      "flac"
+    ],
+    "userVariables": [
+      {
+        "key": "neteaseCookie",
+        "name": "网易云 Cookie（可选）",
+        "hint": "用于 eapi 兜底取链，留空则跳过"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMvSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "importMusicItem",
+      "getMusicInfo",
+      "getAlbumInfo",
+      "getArtistWorks",
+      "getMusicDetailPageUrl",
+      "getTopLists",
+      "getTopListDetail",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "importMusicSheet",
+      "getMusicSheetInfo",
+      "getMusicComments",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "70d7d731b0073c6bcdbc413edf849c5996ac2b3901cdc565a60cea00a0b19807": {
+    "file": "qq-source.plugin.v1.9.26.js",
+    "platform": "qq",
+    "name": "QQ音乐",
+    "description": "支持音质：128k/192k/320k/flac/flac24bit/hires/master",
+    "version": "1.9.26",
+    "author": "研发2号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "128k",
+      "192k",
+      "320k",
+      "flac",
+      "flac24bit",
+      "hires",
+      "master"
+    ],
+    "userVariables": [
+      {
+        "key": "qqEvkey",
+        "name": "QQ 加密档取链 GetEVkey（默认开）",
+        "hint": "设为 off 关闭；开启后无损档优先走 QQ GetEVkey 加密通道（需家宽/真机 IP，数据中心 IP 下该接口大概率风控，失败自动接力明文备源）"
+      },
+      {
+        "key": "qqCookie",
+        "name": "QQ Cookie（可选）",
+        "hint": "选填；填写后可提升取链成功率并解锁 VIP 档 MV（1080p/4k，无 Cookie 时由接口 code 过滤自动降档）。含 qm_keyst 时自动作为登录态注入取链 comm 体，无需再填 qqAuthst"
+      },
+      {
+        "key": "qqAuthst",
+        "name": "QQ 登录凭据 qm_keyst（可选·v1.6.1 新增）",
+        "hint": "选填；即 Cookie 里的 qm_keyst/musickey 值（网页版 y.qq.com 登录后 F12 → Application → Cookies 复制），与 qqUin 搭配注入取链请求 comm 体（HotDownloader 同款形态），提升无损/母带档 purl 签发率。优先级高于 Cookie 内 qm_keyst；凭据过期（取链连续 104003）后需重新复制"
+      },
+      {
+        "key": "qqUin",
+        "name": "QQ 数字 uin（可选·v1.6.1 新增）",
+        "hint": "选填；与 qqAuthst 搭配使用（Cookie 含 uin 时可自动解析，无需填写）"
+      },
+      {
+        "key": "qqS01sMid",
+        "name": "次合代第三方通道（v1.9.0 新增，默认开）",
+        "hint": "设为 off 关闭；s01s mid 直查形态（免搜索精确命中，sq 档实测真 FLAC ~1647kbps），加入第三方竞速池，校验不过自动静默让路"
+      },
+      {
+        "key": "qqAaaCab",
+        "name": "a.aa.cab 搜索型通道（v1.9.12 新增，默认开）",
+        "hint": "设为 off 关闭；a.aa.cab/qq.music 搜索型取链（替换 v1.9.4 已禁用旧 HelloWorld 通道）；v1.9.13 起按方案A 拒绝虚标：仅 ≤320k 档参与竞速（128k/192k/320k/exhigh），flac 及以上音质入口即拒绝由其他通道承担；路径前缀+tips 双守门 fail-closed，校验不过自动静默让路"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "primaryKey",
+      "author",
+      "description",
+      "supportedSearchType",
+      "defaultSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "importMusicItem",
+      "getMusicInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "importMusicSheet",
+      "getAlbumInfo",
+      "getArtistWorks",
+      "getMusicSheetInfo",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getMusicComments",
+      "getMvSource",
+      "getMusicDetailPageUrl",
+      "supportedVideoQualities",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "9b8bc2d5aa20454ee8c11ae61fb93b0a859b307d0e844459b9986ad5e6b31e8a": {
+    "file": "qqdjs-source.plugin.v1.2.2.js",
+    "platform": "QQDJ",
+    "name": "QQDJ",
+    "description": "支持音质：96k/320k",
+    "version": "1.2.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "96k",
+      "320k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "c89765be4a8616cb882fc123965bf189662d937debe3b50f4823fad7c223b967": {
+    "file": "spacedj-source.plugin.v1.1.2.js",
+    "platform": "SpaceDJ",
+    "name": "SpaceDJ",
+    "description": "支持音质：96k",
+    "version": "1.1.2",
+    "author": "hebijunge",
+    "supportedQualities": [
+      "96k"
+    ],
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getTopLists",
+      "getTopListDetail"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "2c776d02b6318ee511b96bfbf1338792e85fe90c973e16870cbdc1469db06aaf": {
+    "file": "streetvoice-source.plugin.v1.0.1.js",
+    "platform": "streetvoice",
+    "name": "街声",
+    "description": "支持音质：96k",
+    "version": "1.0.1",
+    "author": "研发1号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "96k"
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getMusicInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "1b97c3e65661c833c66535edb1d750e8962fbdf5ee88f10c659c44bcf24e497e": {
+    "file": "xiangsheng-pingshu-source.plugin.v1.0.3.js",
+    "platform": "相声评书",
+    "name": "相声评书",
+    "description": "支持音质：64k",
+    "version": "1.0.3",
+    "author": "音流研发",
+    "supportedQualities": [
+      "64k"
+    ],
+    "keys": [
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "hints",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getAlbumInfo",
+      "getMediaSource",
+      "getLyric",
+      "importMusicItem"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "162f5f8aeaab069f7639c706f83d5371a1232ffb2175e798be586634b403279a": {
+    "file": "ximalaya-source.plugin.v1.2.1.js",
+    "platform": "ximalaya",
+    "name": "喜马拉雅",
+    "description": "支持音质：64k",
+    "version": "1.2.1",
+    "author": "研发1号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k"
+    ],
+    "userVariables": [],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "supportedSearchType",
+      "defaultSearchType",
+      "primaryKey",
+      "supportedQualities",
+      "supportedVideoQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getLyric",
+      "getWordByWordLyric",
+      "getMusicInfo",
+      "getAlbumInfo",
+      "getTopLists",
+      "getTopListDetail",
+      "getMusicSheetInfo",
+      "getRecommendSheetTags",
+      "getRecommendSheetsByTag",
+      "getArtistWorks",
+      "getMusicComments",
+      "getMvSource",
+      "importMusicItem",
+      "importMusicSheet",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  },
+  "2fdf1ccbe1267a31430dbe67384f85c6d9d27ed081e439114ac1080adf044581": {
+    "file": "xsdj123-source.plugin.v1.1.1.js",
+    "platform": "先上DJ",
+    "name": "先上DJ",
+    "description": "先上DJ",
+    "version": "1.1.1",
+    "author": "hebijunge",
+    "keys": [
+      "cacheControl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "search",
+      "getTopLists",
+      "getTopListDetail",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "9c5971cee9af5c2086db9bc54d00afe0532375655a899b7a26e5fca060d85f90": {
+    "file": "xxedm-source.plugin.v1.0.2.js",
+    "platform": "小熊电音",
+    "name": "小熊电音",
+    "description": "小熊电音",
+    "version": "1.0.2",
+    "author": "hebijunge",
+    "keys": [
+      "name",
+      "cacheControl",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "srcUrl",
+      "supportedSearchType",
+      "search",
+      "getMediaSource",
+      "getLyric"
+    ],
+    "requires": [
+      "axios",
+      "cheerio"
+    ]
+  },
+  "8d96aecccd425d2a555f54da14e0201002f7a4d9f3fe63d9f2fa2e9ea884e34f": {
+    "file": "y2002-source.plugin.v1.0.2.js",
+    "platform": "y2002",
+    "name": "Y2002电音",
+    "description": "支持音质：64k/320k/flac",
+    "version": "1.0.2",
+    "author": "研发3号",
+    "primaryKey": [
+      "id"
+    ],
+    "supportedQualities": [
+      "64k",
+      "320k",
+      "flac"
+    ],
+    "userVariables": [
+      {
+        "key": "y2002DeviceId",
+        "name": "deviceId（可选）",
+        "hint": "PC API 设备号，固定 UUID；留空使用内置默认值。频繁变更可能触发风控"
+      }
+    ],
+    "keys": [
+      "srcUrl",
+      "name",
+      "platform",
+      "version",
+      "author",
+      "description",
+      "primaryKey",
+      "supportedSearchType",
+      "defaultSearchType",
+      "supportedQualities",
+      "cacheControl",
+      "userVariables",
+      "hints",
+      "search",
+      "getMediaSource",
+      "getMusicInfo",
+      "getLyric",
+      "getMusicDetailPageUrl",
+      "getTopLists",
+      "getTopListDetail",
+      "_internal"
+    ],
+    "requires": [
+      "axios"
+    ]
+  }
+}

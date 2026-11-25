@@ -79,16 +79,21 @@ async function fetchWithHeaders(url: string, headers: Record<string, string>, si
   if (response.status < 200 || response.status >= 300) {
     throw new Error('音频下载失败: HTTP ' + response.status)
   }
+  const suppliedType = String(Object.entries(response.headers ?? {}).find(([key]) => key.toLowerCase() === 'content-type')?.[1] || '').split(';')[0].trim().toLowerCase()
+  const mime = ({'audio/x-flac':'audio/flac','audio/x-wav':'audio/wav','audio/x-m4a':'audio/mp4','audio/m4a':'audio/mp4'} as Record<string,string>)[suppliedType] || (/^(audio\/|video\/(mp4|webm))/.test(suppliedType) ? suppliedType : 'application/octet-stream')
   let blob: Blob
   if (response.data instanceof ArrayBuffer) {
-    blob = new Blob([response.data], { type: 'audio/mpeg' })
+    blob = new Blob([response.data], { type: mime })
+  } else if (ArrayBuffer.isView(response.data)) {
+    const bytes = new Uint8Array(response.data.buffer, response.data.byteOffset, response.data.byteLength).slice()
+    blob = new Blob([bytes], { type: mime })
   } else if (typeof response.data === 'string') {
     const binary = atob(response.data)
     const bytes = new Uint8Array(binary.length)
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-    blob = new Blob([bytes], { type: 'audio/mpeg' })
+    blob = new Blob([bytes], { type: mime })
   } else {
-    blob = new Blob([JSON.stringify(response.data)], { type: 'audio/mpeg' })
+    throw new Error('原生音频响应不是有效的二进制数据')
   }
   signal?.throwIfAborted()
   return URL.createObjectURL(blob)

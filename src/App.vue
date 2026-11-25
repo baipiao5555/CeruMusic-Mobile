@@ -20,7 +20,7 @@ import { getPluginAccountSurface, invalidatePluginAccountCache } from '@/core/pl
 import type { AccountSurfaceSpec } from '@/core/plugin/accountSurface'
 import { backgroundAppliesToRoute, themeBackgroundScene, themeBackgroundState } from '@/core/themeBackground'
 import { pluginToasts, permissionRequest, answerPermission, initPlugins, pluginState, selectProvider, installDemoPlugin, checkAllPluginUpdates, navigationRequest, notify } from '@/core/plugin/manager'
-import { handleAuthCallback, initAuth } from '@/core/auth'
+import { authState, handleAuthCallback, initAuth } from '@/core/auth'
 import { initDownloads } from '@/core/downloads'
 import { registerDownloadHostHooks } from '@/core/downloadHost'
 import { canAutoPromptUpdate, checkForUpdate, markAutoUpdatePromptShown, updateState } from '@/core/updater'
@@ -340,12 +340,14 @@ function handleBackNavigation(): void {
 async function handleDeepLink(url: string): Promise<void> {
   if (!url.startsWith('cerumusic://oauth')) return
   try {
+    logEvent('info', 'AUTH', '收到登录回调')
     const user = await handleAuthCallback(url)
-    if (user) {
+    if (user || authState.authenticated) {
       notify('登录成功，正在读取云歌单')
       router.replace('/cloud')
     }
   } catch (error: any) {
+    logEvent('error', 'AUTH', '登录回调处理失败', error?.message ?? error)
     notify(error?.message ?? '登录失败', 'error')
   }
 }

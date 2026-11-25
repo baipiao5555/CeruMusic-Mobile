@@ -52,7 +52,7 @@ export interface PluginDescriptor {
   catalogKey?: string
   artifactSha256?: string
   hasRollback?: boolean
-  format?: 'lx'
+  format?: 'lx' | 'musicfree'
 }
 
 interface PluginRecord {
@@ -229,7 +229,7 @@ function descriptorFor(record: PluginRecord, host?: PluginHost): PluginDescripto
     catalogKey: record.catalogKey,
     artifactSha256: record.artifactSha256,
     hasRollback: Boolean(record.previous),
-    format: manifest.format
+    format: manifest.id?.startsWith('musicfree.') ? 'musicfree' : manifest.format
   }
 }
 
@@ -265,7 +265,8 @@ async function getConfig(pluginId: string): Promise<Record<string, any>> {
 }
 
 async function saveConfig(pluginId: string, config: Record<string, any>): Promise<void> {
-  await idb.set('pluginConfig', pluginId, config)
+  // Config is JSON data; Vue reactive proxies cannot be cloned by IndexedDB.
+  await idb.set('pluginConfig', pluginId, JSON.parse(JSON.stringify(config)))
 }
 
 export interface ProviderHandle {
@@ -779,6 +780,20 @@ function stableScope(value: any): string {
   )
 }
 
+function normalizePluginFileUrl(value: string): string {
+  try {
+    const url = new URL(value)
+    if (url.hostname === 'github.com') {
+      const parts = url.pathname.split('/').filter(Boolean)
+      if (parts.length >= 5 && (parts[2] === 'blob' || parts[2] === 'raw')) {
+        url.hostname = 'raw.githubusercontent.com'
+        url.pathname = '/' + parts[0] + '/' + parts[1] + '/' + parts.slice(3).join('/')
+      }
+    }
+    return url.href
+  } catch { return value }
+}
+
 export async function fetchPluginCode(url: string, options: { signal?: AbortSignal; onAttempt?: (message: string) => void } = {}): Promise<string> {
   let response: { status: number; body?: unknown }
   try {
@@ -786,7 +801,7 @@ export async function fetchPluginCode(url: string, options: { signal?: AbortSign
     if (path) response = await requestRepository(path, options)
     else {
       options.onAttempt?.('正在获取在线插件文件…')
-      response = await requestRemote({ url, raw: true, timeoutMs: 20_000, signal: options.signal })
+      response = await requestRemote({ url: normalizePluginFileUrl(url), raw: true, timeoutMs: 20_000, signal: options.signal })
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -805,7 +820,7 @@ export async function fetchPluginCode(url: string, options: { signal?: AbortSign
   const code = String(response.body ?? '').trim()
   if (!code) throw new Error('插件文件内容为空')
   if (new TextEncoder().encode(code).byteLength > 16 * 1024 * 1024) throw new Error('插件文件过大')
-  return normalizeKnownPluginCode(code)
+  return normalizeKnownPluginCode(code, url)
 }
 
 export function inspectPlugin(code: string): any {
@@ -919,7 +934,7 @@ export async function savePluginConfig(
   pluginId: string,
   config: Record<string, any>
 ): Promise<void> {
-  await idb.set('pluginConfig', pluginId, config)
+  await saveConfig(pluginId, config)
 }
 
 export async function invokeProvider(
@@ -940,6 +955,16 @@ export function selectProvider(providerId: string, pluginId?: string): void {
     localStorage.setItem('ceru.selectedProvider', providerId)
     localStorage.setItem('ceru.selectedSourcePlugin', JSON.stringify(pluginState.selectedSourcePlugin))
   } catch {}
+}
+
+/** Set a source owner without changing the homepage's current platform. */
+export function preferProvider(providerId: string, pluginId: string): void {
+  if (!allProviders(true).some(p => p.providerId === providerId && p.pluginId === pluginId)) throw new Error('请选择已启用的来源')
+  const next = { ...pluginState.selectedSourcePlugin }
+  delete next[providerId]
+  next[providerId] = pluginId
+  localStorage.setItem('ceru.selectedSourcePlugin', JSON.stringify(next))
+  pluginState.selectedSourcePlugin = next
 }
 
 function accountHost(pluginId: string, accountId: string): { host: PluginHost; item: any } {

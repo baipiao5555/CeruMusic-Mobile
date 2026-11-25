@@ -5,6 +5,8 @@ const KNOWN_ORDER = [
   'standard',
   'high',
   'lossless',
+  '64k',
+  '96k',
   '128k',
   '192k',
   '320k',
@@ -98,7 +100,7 @@ export function highestQuality(qualities: string[] | null | undefined): string {
  */
 /** Normalize known qualities regardless of provider/list ordering; preserve custom tier order. */
 export function sortedQualities(values: string[], declaredOrder = values): string[] {
-  const rank: Record<string, number> = { low:0, '128k':0, standard:1, '192k':1, high:2, '320k':2, lossless:3, flac:3, flac24bit:4, hires:5, atmos:6, atmos_plus:7, master:8 }
+  const rank: Record<string, number> = { '64k':-2, '96k':-1, low:0, '128k':0, standard:1, '192k':1, high:2, '320k':2, lossless:3, flac:3, flac24bit:4, hires:5, atmos:6, atmos_plus:7, master:8 }
   const score = (q: string) => rank[q] ?? (9 + Math.max(0, declaredOrder.indexOf(q)))
   return [...new Set(values.filter(q => typeof q === 'string' && q))].sort((a, b) => score(a) - score(b))
 }

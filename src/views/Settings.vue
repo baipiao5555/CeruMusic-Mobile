@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import OptionSheet from '@/components/OptionSheet.vue'
 import { settingsState, updateSettings } from '@/core/settings'
@@ -24,6 +24,7 @@ import { confirmAction } from '@/core/confirm'
 import { audioCacheSize, clearAudioCache } from '@/core/cache/audioCache'
 
 const router = useRouter()
+const route = useRoute()
 const appVersion = __APP_VERSION__
 const REPO_URL = 'https://github.com/baipiao5555/CeruMusic-Mobile'
 const UPSTREAM_URL = 'https://github.com/timeshiftsauce/CeruMusic'
@@ -55,20 +56,41 @@ async function signOut(): Promise<void> {
 }
 
 const sections = [
-  { id: 'account', label: '账号' },
-  { id: 'appearance', label: '外观' },
-  { id: 'playback', label: '播放' },
-  { id: 'lyrics', label: '歌词' },
-  { id: 'download', label: '下载' },
-  { id: 'data', label: '数据' },
-  { id: 'about', label: '关于' }
+  { id: 'account', label: '账号', icon: 'user', description: '澜音账号与云端歌单' },
+  { id: 'appearance', label: '外观', icon: 'image', description: '主题、背景、主题色与字体' },
+  { id: 'playback', label: '播放', icon: 'volume', description: '音质、播放行为与混音' },
+  { id: 'lyrics', label: '歌词', icon: 'lyrics', description: '字号、偏移、匹配与共享' },
+  { id: 'download', label: '下载', icon: 'download', description: '音质、文件名与并发数量' },
+  { id: 'data', label: '数据', icon: 'cloud', description: '音源、同步、下载与日志' },
+  { id: 'about', label: '关于', icon: 'info', description: '版本、更新与开源信息' }
 ]
 
-const activeSection = ref('account')
+const activeSection = computed(() => {
+  const value = String(route.query.section ?? '')
+  return sections.some(section => section.id === value) ? value : ''
+})
+const activeLabel = computed(() => sections.find(section => section.id === activeSection.value)?.label ?? '设置')
+const directoryHome = computed(() => !activeSection.value)
+const searching = computed(() => Boolean(settingsQuery.value.trim()))
 
 function jumpTo(id: string): void {
-  activeSection.value = id
-  document.getElementById(`settings-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  settingsQuery.value = ''
+  searchOpen.value = false
+  void router.push({ path: '/settings', query: { section: id } })
+}
+
+function goBack(): void {
+  if (activeSection.value) {
+    if (window.history.state?.back) router.back()
+    else void router.replace('/settings')
+  } else {
+    router.back()
+  }
+}
+
+function sectionVisible(id: string): boolean {
+  if (searching.value) return groupVisible(id)
+  return activeSection.value === id
 }
 
 const searchOpen = ref(false)
@@ -264,6 +286,16 @@ const lyricOffsetLabel = computed(() =>
 )
 const concurrencyLabel = computed(() => `${settingsState.downloadConcurrency} 个`)
 const runningPlugins = computed(() => pluginState.plugins.filter((plugin) => plugin.running).length)
+
+function sectionValue(id: string): string {
+  if (id === 'account') return authState.authenticated ? displayName() : '未登录'
+  if (id === 'appearance') return themeLabel.value
+  if (id === 'playback') return '12 项'
+  if (id === 'lyrics') return '6 项'
+  if (id === 'download') return '3 项'
+  if (id === 'data') return `${pluginState.plugins.length} 个音源`
+  return `v${appVersion}`
+}
 
 /* ---------- 选择器 ---------- */
 type PickOption = { value: string | number; label: string; desc?: string }
@@ -502,19 +534,20 @@ async function resetSettings(): Promise<void> {
 
 <template>
   <div class="screen">
-    <div class="scroll safe-t-lg">
+    <div class="scroll safe-t-lg" :class="{ 'detail-view': !directoryHome || searching }">
       <div class="navrow">
-        <button class="iconbtn quiet" aria-label="返回" @click="router.back()">
+        <button class="iconbtn quiet" aria-label="返回" @click="goBack">
           <Icon name="back" :size="20" />
         </button>
       </div>
 
       <header class="page-head phead">
         <div>
-          <div class="eyebrow">CERU MUSIC · 本机</div>
-          <h1 class="headline">设置</h1>
+          <div class="eyebrow">{{ searching ? '设置 · 全局搜索' : directoryHome ? 'CERU MUSIC · 本机' : `设置 / ${activeLabel}` }}</div>
+          <h1 class="headline">{{ searching ? '搜索设置' : directoryHome ? '设置' : activeLabel }}</h1>
         </div>
         <div class="page-actions">
+          <span v-if="directoryHome && !searching" class="ver">v{{ appVersion }}</span>
           <button
             class="iconbtn soft"
             :aria-label="searchOpen ? '关闭设置搜索' : '搜索设置项'"
@@ -524,14 +557,6 @@ async function resetSettings(): Promise<void> {
           </button>
         </div>
       </header>
-
-      <div class="metal">
-        <span class="live" />
-        <span>{{ runningPlugins }} 个插件运行中</span>
-        <span class="dot">·</span>
-        <span>{{ qualities.length }} 档音质</span>
-        <span class="ver">v{{ appVersion }}</span>
-      </div>
 
       <div v-if="searchOpen" class="searchfield">
         <Icon name="search" :size="16" />
@@ -547,19 +572,19 @@ async function resetSettings(): Promise<void> {
         </button>
       </div>
 
-      <div class="chip-row jump">
-        <button
-          v-for="section in sections"
-          :key="section.id"
-          class="chip"
-          :class="{ active: activeSection === section.id }"
-          @click="jumpTo(section.id)"
-        >
-          {{ section.label }}
-        </button>
-      </div>
+      <section v-if="directoryHome && !searching" class="settings-directory" aria-label="设置分类">
+        <div class="pgrp directory-grid">
+          <button v-for="section in sections" :key="section.id" class="settingrow tap directory-row" :data-section="section.id" @click="jumpTo(section.id)">
+            <span class="ico"><Icon :name="section.icon" :size="16" /></span>
+            <div class="body"><div class="lab">{{ section.label }}</div><div class="sub">{{ section.description }}</div></div>
+            <span class="val">{{ sectionValue(section.id) }}</span>
+            <Icon name="chevron" :size="15" />
+          </button>
+        </div>
+        <p class="directory-note">进入某个类别后，只显示这一类设置。</p>
+      </section>
 
-      <section id="settings-account" v-if="groupVisible('account')">
+      <section id="settings-account" v-if="sectionVisible('account')">
         <div class="group-title">
           <span class="cn">账号</span>
           <span class="en">Account</span>
@@ -582,7 +607,7 @@ async function resetSettings(): Promise<void> {
         </div>
       </section>
 
-      <section id="settings-appearance" v-if="groupVisible('appearance')">
+      <section id="settings-appearance" v-if="sectionVisible('appearance')">
         <div class="group-title">
           <span class="cn">外观</span>
           <span class="en">Appearance</span>
@@ -648,7 +673,7 @@ async function resetSettings(): Promise<void> {
         </div>
       </section>
 
-      <section id="settings-playback" v-if="groupVisible('playback')">
+      <section id="settings-playback" v-if="sectionVisible('playback')">
         <div class="group-title">
           <span class="cn">播放</span>
           <span class="en">Playback</span>
@@ -831,7 +856,7 @@ async function resetSettings(): Promise<void> {
         </div>
       </section>
 
-      <section id="settings-lyrics" v-if="groupVisible('lyrics')">
+      <section id="settings-lyrics" v-if="sectionVisible('lyrics')">
         <div class="group-title">
           <span class="cn">歌词</span>
           <span class="en">Lyrics</span>
@@ -944,7 +969,7 @@ async function resetSettings(): Promise<void> {
         </div>
       </section>
 
-      <section id="settings-download" v-if="groupVisible('download')">
+      <section id="settings-download" v-if="sectionVisible('download')">
         <div class="group-title">
           <span class="cn">下载</span>
           <span class="en">Download</span>
@@ -1007,7 +1032,7 @@ async function resetSettings(): Promise<void> {
         </div>
       </section>
 
-      <section id="settings-data" v-if="groupVisible('data')">
+      <section id="settings-data" v-if="sectionVisible('data')">
         <div class="group-title">
           <span class="cn">数据与存储</span>
           <span class="en">Data</span>
@@ -1110,7 +1135,7 @@ async function resetSettings(): Promise<void> {
         </div>
       </section>
 
-      <section id="settings-about" v-if="groupVisible('about')">
+      <section id="settings-about" v-if="sectionVisible('about')">
         <div class="group-title">
           <span class="cn">关于</span>
           <span class="en">About</span>
@@ -1159,22 +1184,22 @@ async function resetSettings(): Promise<void> {
         </div>
       </section>
 
-      <div v-if="!hasVisibleRows" class="empty result-empty">
+      <div v-if="searching && !hasVisibleRows" class="empty result-empty">
         <div class="glyph"><Icon name="search" :size="28" /></div>
         <h3>没有匹配的设置</h3>
         <p>换个关键词试试，比如「音质」「歌词」或「日志」。</p>
         <button class="btn btn-ghost" @click="settingsQuery = ''">清空搜索</button>
       </div>
 
-      <div class="flinks">
+      <div v-if="sectionVisible('about')" class="flinks">
         <a :href="REPO_URL" target="_blank" rel="noreferrer">查看源码</a>
         <span>·</span>
         <a :href="UPSTREAM_URL" target="_blank" rel="noreferrer">上游项目</a>
         <span>·</span>
         <a :href="LICENSE_URL" target="_blank" rel="noreferrer">AGPL-3.0</a>
       </div>
-      <p class="fnote">设置只保存在本机，改动即时生效，不上传服务器。</p>
-      <p class="fnote">
+      <p v-if="sectionVisible('about')" class="fnote">设置只保存在本机，改动即时生效，不上传服务器。</p>
+      <p v-if="sectionVisible('about')" class="fnote">
         本应用仅提供插件运行框架与播放功能，不存储、不提供任何音乐源文件。音乐信息由你自行安装的合规插件提供。
       </p>
     </div>
@@ -1204,29 +1229,18 @@ async function resetSettings(): Promise<void> {
 .headline {
   margin-top: 7px;
 }
-.metal {
+.page-actions {
   display: flex;
   align-items: center;
-  gap: 7px;
-  margin: 12px var(--pad) 0;
-  font-size: 11px;
+  gap: 8px;
+}
+.page-actions .ver {
+  padding: 5px 8px;
+  border-radius: 12px;
+  background: var(--surface-2);
   color: var(--ink-4);
-  letter-spacing: 0.02em;
-}
-.metal .live {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--tint);
-  box-shadow: 0 0 0 3px var(--tint-soft);
-}
-.metal .dot {
-  opacity: 0.6;
-}
-.metal .ver {
-  margin-left: auto;
   font-family: var(--mono);
-  letter-spacing: 0.04em;
+  font-size: 11px;
 }
 .searchfield {
   margin: 14px var(--pad) 0;
@@ -1253,25 +1267,6 @@ async function resetSettings(): Promise<void> {
   align-items: center;
   justify-content: center;
   color: var(--ink-4);
-}
-.jump {
-  padding: 16px var(--pad) 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.jump::-webkit-scrollbar {
-  display: none;
-}
-.jump .chip {
-  flex: none;
-  height: 32px;
-  padding: 0 13px;
-  position: relative;
-}
-.jump .chip::after {
-  content: '';
-  position: absolute;
-  inset: -6px 0;
 }
 .acc {
   display: flex;
@@ -1495,6 +1490,31 @@ async function resetSettings(): Promise<void> {
 .result-empty {
   padding-top: 24px;
 }
+.settings-directory {
+  margin-top: 16px;
+}
+.directory-row {
+  min-height: 70px;
+}
+.directory-row .ico {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+}
+.directory-row .val {
+  max-width: 92px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+}
+.directory-note {
+  margin: 12px var(--pad) 0;
+  color: var(--ink-4);
+  font-size: 11px;
+  line-height: 1.7;
+  text-align: center;
+}
 .result-empty .btn {
   margin-top: 4px;
 }
@@ -1510,20 +1530,13 @@ async function resetSettings(): Promise<void> {
   }
   .navrow,
   .phead,
-  .metal,
   .searchfield,
-  .jump,
   .result-empty,
   .flinks,
   .fnote {
     grid-column: 1 / -1;
   }
   .navrow { padding-top: 12px; }
-  .metal { margin-top: 10px; }
-  .jump {
-    min-height: 50px;
-    padding-top: 18px;
-  }
   .scroll > section { min-width: 0; }
   .scroll > section .group-title {
     padding-left: 0;
@@ -1534,6 +1547,27 @@ async function resetSettings(): Promise<void> {
   .scroll > section .acc {
     margin-left: 0;
     margin-right: 0;
+  }
+  .settings-directory {
+    grid-column: 1 / -1;
+  }
+  .directory-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 20px;
+    background: transparent;
+    border: 0;
+    overflow: visible;
+  }
+  .directory-grid .directory-row {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+  }
+  .scroll.detail-view > section:not(.settings-directory) {
+    grid-column: 1 / -1;
+    width: min(100%, 760px);
+    margin: 0 auto;
   }
   .result-empty {
     width: min(100%, 560px);

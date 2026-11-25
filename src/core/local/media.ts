@@ -3,6 +3,7 @@ import { reactive } from 'vue'
 import type { Track } from '../track'
 import { localAudioUrl } from '../cache/audioCache'
 import { downloadState } from '../downloads'
+import { mainFrameCapability } from '../native/mainFrameCapability'
 
 /**
  * 本机音乐（Android）。
@@ -31,6 +32,8 @@ export interface LocalEntry {
 }
 
 interface LocalMediaNative {
+  initialize(): Promise<void>
+  artwork(options: { id: string; uri?: string; capability: string }): Promise<{ uri: string }>
   check(): Promise<{ granted: boolean }>
   request(): Promise<{ granted: boolean }>
   scan(options?: { source?: 'all' | 'folders' }): Promise<{ tracks: LocalEntry[]; granted?: boolean; error?: string }>
@@ -46,6 +49,30 @@ export const LOCAL_PROVIDER_NAME = '本机音乐'
 
 export function isLocalTrack(track: Track | undefined): boolean {
   return Boolean(track && track.pluginId === LOCAL_PLUGIN_ID)
+}
+
+const artworkRequests = new Map<string, Promise<string>>()
+/** Visible local rows share thumbnail requests; no tag reading during a full scan. */
+export function localTrackArtwork(track: Track, force = false): Promise<string> {
+  if (!Capacitor.isNativePlatform() || !isLocalTrack(track)) return Promise.resolve('')
+  const key = track.localPath || track.id
+  if (force) artworkRequests.delete(key)
+  if (!artworkRequests.has(key)) {
+    const request = (async () => {
+      const capability = await mainFrameCapability(NativeLocalMedia)
+      const result = await NativeLocalMedia.artwork({ id: track.id, uri: track.localPath, capability })
+      if (!result.uri?.startsWith('file:')) return ''
+      const url = new URL(Capacitor.convertFileSrc(result.uri))
+      if (!url.pathname.startsWith('/_capacitor_file_') || !url.pathname.includes('/local-artwork/')) return ''
+      return url.pathname // app-owned relative image; never relax remote private-address checks
+    })().catch(() => '').then(url => {
+      if (!url && artworkRequests.get(key) === request) artworkRequests.delete(key)
+      return url
+    })
+    artworkRequests.set(key, request)
+    if (artworkRequests.size > 256) artworkRequests.delete(artworkRequests.keys().next().value!)
+  }
+  return artworkRequests.get(key)!
 }
 
 export async function localPermissionGranted(): Promise<boolean> {

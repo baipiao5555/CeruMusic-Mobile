@@ -2,12 +2,14 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
+import PullRefreshIndicator from '@/components/PullRefreshIndicator.vue'
 import SongRow from '@/components/SongRow.vue'
 import { allProviders, invokeProvider, pluginState, selectProvider, type ProviderHandle } from '@/core/plugin/manager'
 import { playTracks, toTrack, type Track } from '@/core/playback/player'
 import { rememberTracks } from '@/core/search'
 import { resourceContext } from '@/core/resourceNavigation'
 import { openSearch } from '@/core/searchEntry'
+import { usePullToRefresh } from '@/core/ui/pullToRefresh'
 
 const route = useRoute()
 const router = useRouter()
@@ -71,18 +73,20 @@ function openItem(item: any): void {
   void router.push({ path: '/browse', query: { provider: item.ref.providerId || provider.value.providerId, plugin: provider.value.pluginId, kind: item.ref.kind, id: item.ref.id, title: item.title, artwork: artworkOf(item) } })
 }
 
-async function loadCatalog(): Promise<void> {
+async function loadCatalog(refresh = false): Promise<void> {
   const seq = ++requestSeq
   categorySeq += 1
   const owner = provider.value
-  charts.value = []
-  playlists.value = []
-  categories.value = []
-  categoryIndex.value = 0
+  if (!refresh) {
+    charts.value = []
+    playlists.value = []
+    categories.value = []
+    categoryIndex.value = 0
+  }
   categoryLoading.value = false
   loadingMore.value = false
   error.value = ''
-  loading.value = Boolean(owner)
+  loading.value = Boolean(owner) && (!refresh || !charts.value.length && !playlists.value.length)
   if (!owner) return
   const failures: string[] = []
   if (owner.methods.includes('charts.list')) {
@@ -100,7 +104,8 @@ async function loadCatalog(): Promise<void> {
       const page = await invokeProvider(owner, 'playlists.categories', [])
       if (seq !== requestSeq) return
       categories.value = page?.items ?? []
-      const first = categories.value[0]
+      if (!categories.value[categoryIndex.value]) categoryIndex.value = 0
+      const first = categories.value[categoryIndex.value]
       if (first?.ref) {
         const list = await invokeProvider(owner, 'playlists.list', [first.ref, undefined])
         if (seq !== requestSeq) return
@@ -137,7 +142,7 @@ async function chooseCategory(index: number): Promise<void> {
     if (seq === categorySeq && key === providerKey.value) categoryLoading.value = false
   }
 }
-async function load(more = false): Promise<void> {
+async function load(more = false, refresh = false): Promise<void> {
   if (contextExpired.value) { requestSeq++; error.value = '歌单上下文已过期，请返回搜索重新打开'; tracks.value = []; loading.value = false; loadingMore.value = false; return }
   const owner = provider.value
   if (!owner) {
@@ -153,9 +158,9 @@ async function load(more = false): Promise<void> {
   if (more) loadingMore.value = true
   else {
     categorySeq += 1
-    loading.value = true
+    loading.value = !refresh || !tracks.value.length
     loadingMore.value = false
-    tracks.value = []
+    if (!refresh) tracks.value = []
     cursor.value = undefined
     ended.value = false
   }
@@ -201,12 +206,19 @@ watch(() => route.path === '/browse', (active) => {
   if (catalogMode.value) void loadCatalog()
   else void load()
 })
+const pull = usePullToRefresh(async () => {
+  if (!provider.value) throw new Error('音源插件未启用')
+  if (catalogMode.value) await loadCatalog(true)
+  else await load(false, true)
+  if (error.value && !noTracks.value) throw new Error(error.value)
+})
 onBeforeUnmount(() => { requestSeq += 1; categorySeq += 1 })
 </script>
 
 <template>
   <div class="screen browse-page">
-    <div class="scroll safe-t">
+    <div class="scroll safe-t" @touchstart="pull.onTouchStart" @touchmove="pull.onTouchMove" @touchend="pull.onTouchEnd" @touchcancel="pull.onTouchCancel">
+      <PullRefreshIndicator :visible="pull.visible.value" :refreshing="pull.refreshing.value" :distance="pull.distance.value" :result="pull.result.value" :message="pull.message.value" />
       <header class="browse-top"><button class="iconbtn quiet" aria-label="返回" @click="goBack"><Icon name="back" :size="21" /></button><h1>{{ catalogMode ? '音乐馆' : kindLabel }}</h1><button class="iconbtn quiet" aria-label="搜索" @click="openSearch(router)"><Icon name="search" :size="21" /></button></header>
       <template v-if="catalogMode">
         <div class="catalog-tabs pad" aria-label="音乐馆分类"><button :class="{ on: catalogTab === 'playlists' }" @click="catalogTab = 'playlists'">歌单精选</button><button :class="{ on: catalogTab === 'charts' }" @click="catalogTab = 'charts'">排行榜</button></div>

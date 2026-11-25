@@ -42,6 +42,24 @@ import com.getcapacitor.annotation.PermissionCallback;
         }
 )
 public class LocalMediaPlugin extends Plugin {
+    private MainFrameGuard guard;
+    private final java.util.concurrent.ExecutorService artworkReader = java.util.concurrent.Executors.newSingleThreadExecutor();
+    @Override public void load() { guard = MainFrameGuard.forBridge(getBridge()); }
+    @PluginMethod public void initialize(PluginCall call) { guard.initialize(call); }
+    @PluginMethod public void artwork(PluginCall call) {
+        try { guard.require(call); }
+        catch (SecurityException error) { call.reject("本地封面仅允许应用主界面读取"); return; }
+        artworkReader.execute(() -> {
+            try {
+                Uri source = LocalArtwork.source(getContext(), call.getString("id"), call.getString("uri"), granted());
+                File cover = LocalArtwork.read(getContext(), source);
+                JSObject result = new JSObject();
+                result.put("uri", cover == null ? "" : Uri.fromFile(cover).toString());
+                call.resolve(result);
+            } catch (Exception error) { call.reject(error.getMessage() == null ? "无法读取本地封面" : error.getMessage()); }
+        });
+    }
+    @Override protected void handleOnDestroy() { artworkReader.shutdownNow(); scanner.shutdownNow(); }
     private final java.util.concurrent.ExecutorService scanner = java.util.concurrent.Executors.newSingleThreadExecutor(r -> { Thread t=new Thread(r,"ceru-local-scan");t.setDaemon(true);return t; });
 
     private void appendAppDownloads(JSArray tracks) {

@@ -64,6 +64,7 @@ export const updateState = reactive({
   lastAutoPromptDay: '',
   error: '',
   downloadedFileName: '',
+  downloadedPath: '',
   needsPermission: false,
   /** 下载加速：主用 / 备用线路 id（见 update-mirror.ts 的 MIRRORS）。 */
   mirrorPrimary: DEFAULT_PRIMARY,
@@ -273,11 +274,11 @@ function bindProgress(): void {
 }
 
 export async function installDownloadedUpdate(): Promise<void> {
-  if (!updateState.downloadedFileName) return
+  if (!updateState.downloadedFileName && !updateState.downloadedPath) return
   updateState.installing = true
   updateState.error = ''
   try {
-    const result = await External.installApk({ fileName: updateState.downloadedFileName })
+    const result = await External.installApk({ fileName: updateState.downloadedFileName, path: updateState.downloadedPath || undefined })
     if (result?.needsPermission) {
       updateState.needsPermission = true
       notify('请允许本应用安装未知应用，然后回来再点一次安装')
@@ -361,7 +362,7 @@ export async function downloadUpdate(force = false): Promise<void> {
     await installDownloadedUpdate()
     return
   }
-  if (force) updateState.downloadedFileName = ''
+  if (force) { updateState.downloadedFileName = ''; updateState.downloadedPath = '' }
   updateState.downloading = true
   updateState.progress = 0
   updateState.error = ''
@@ -379,7 +380,7 @@ export async function downloadUpdate(force = false): Promise<void> {
     try {
       updateState.activeMirror = mirrorLabel(mirror.id)
       updateState.progress = 0
-      const result = await Downloader.download({
+      const result = await Downloader.downloadUpdate({
         id: 'update:' + release.tag,
         url: mirrorUrl(mirror.prefix, release.apkUrl),
         fileName: release.apkName
@@ -390,12 +391,13 @@ export async function downloadUpdate(force = false): Promise<void> {
         if (diff > release.apkSize * 0.02) {
           lastError = `${mirror.label} 返回的文件不完整，已换线路`
           try {
-            await Downloader.delete({ fileName: result.fileName })
+            await Downloader.deleteUpdate({ path: result.path })
           } catch {}
           continue
         }
       }
       updateState.downloadedFileName = result.fileName
+      updateState.downloadedPath = result.path
       updateState.progress = 1
       lastError = ''
       break

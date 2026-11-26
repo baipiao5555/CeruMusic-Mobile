@@ -25,6 +25,8 @@ export interface DownloaderPlugin {
   cancel(options: { id: string }): Promise<void>
   delete(options: { fileName: string; path?: string }): Promise<void>
   stat(options: { path: string }): Promise<{ size: number }>
+  downloadUpdate(options: { id: string; url: string; fileName: string; headers?: Record<string, string> }): Promise<DownloadResult>
+  deleteUpdate(options: { path: string }): Promise<void>
   exportLegacy(options: { path: string; fileName: string }): Promise<DownloadResult>
   addListener(
     event: 'progress',
@@ -35,7 +37,7 @@ export interface DownloaderPlugin {
 export interface ExternalPlugin {
   open(options: { url: string }): Promise<void>
   openAuth(options: { url: string }): Promise<{ url?: string; cancelled?: boolean }>
-  installApk(options: { fileName: string }): Promise<{ needsPermission?: boolean; started?: boolean }>
+  installApk(options: { fileName?: string; path?: string }): Promise<{ needsPermission?: boolean; started?: boolean }>
   notifyUpdate(options: { title: string; body: string }): Promise<void>
 }
 

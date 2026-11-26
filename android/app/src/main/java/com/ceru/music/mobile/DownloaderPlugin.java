@@ -14,6 +14,7 @@ import android.os.Environment;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.OutputStream;
 import android.net.Uri;
 import java.io.InputStream;
@@ -80,6 +81,53 @@ public class DownloaderPlugin extends Plugin {
         });
     }
 
+    /** Update APKs must never go through MediaStore audio; write to app-private Downloads. */
+    @PluginMethod
+    public void downloadUpdate(PluginCall call) {
+        String id = call.getString("id");
+        String url = call.getString("url");
+        String fileName = call.getString("fileName", "CeruMusic-update.apk");
+        JSObject headers = call.getObject("headers", new JSObject());
+        if (id == null || id.isEmpty() || url == null || url.isEmpty()) {
+            call.reject("更新下载缺少标识或地址");
+            return;
+        }
+        Job job = new Job();
+        jobs.put(id, job);
+        final String safeName = sanitizeFileName(fileName);
+        executor.execute(() -> {
+            File target = new File(updateDir(), safeName);
+            try {
+                if (target.exists() && !target.delete()) throw new Exception("无法替换旧更新包");
+                if (target.getParentFile() != null && !target.getParentFile().exists() && !target.getParentFile().mkdirs()) {
+                    throw new Exception("无法创建更新目录");
+                }
+                long size = performToFile(id, url, headers, target, job);
+                if (job.cancelled) throw new Exception("已取消");
+                JSObject result = new JSObject();
+                result.put("id", id);
+                result.put("path", target.getAbsolutePath());
+                result.put("fileName", target.getName());
+                result.put("size", size);
+                call.resolve(result);
+            } catch (Exception error) {
+                if (target.exists()) target.delete();
+                call.reject(messageOf(error));
+            } finally {
+                jobs.remove(id);
+            }
+        });
+    }
+
+    @PluginMethod public void deleteUpdate(PluginCall call) {
+        String path = call.getString("path", "");
+        try {
+            File file = new File(path);
+            if (file.exists() && !file.delete()) throw new Exception("删除更新包失败");
+            call.resolve();
+        } catch (Exception error) { call.reject(messageOf(error)); }
+    }
+
     @PluginMethod
     public void cancel(PluginCall call) {
         String id = call.getString("id");
@@ -131,6 +179,72 @@ public class DownloaderPlugin extends Plugin {
                 call.resolve(target.finish(copied));
             }catch(Exception error){if(target!=null)target.abort();call.reject(messageOf(error));}
         });
+    }
+
+    private File updateDir() {
+        File base = getContext().getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        File dir = base == null ? new File(getContext().getFilesDir(), "updates") : new File(base, "updates");
+        if (!dir.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            dir.mkdirs();
+        }
+        return dir;
+    }
+
+    private long performToFile(String id, String initialUrl, JSObject initialHeaders, File target, Job job) throws Exception {
+        String currentUrl = initialUrl;
+        JSObject headers = initialHeaders;
+        for (int redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+            if (job.cancelled) throw new Exception("已取消");
+            URL url = new URL(currentUrl);
+            validateUrl(url);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(30_000);
+            connection.setReadTimeout(60_000);
+            connection.setRequestMethod("GET");
+            applyHeaders(connection, headers);
+            int status = connection.getResponseCode();
+            if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
+                String location = connection.getHeaderField("Location");
+                connection.disconnect();
+                if (location == null || location.isEmpty()) throw new Exception("重定向缺少目标地址");
+                if (redirects == MAX_REDIRECTS) throw new Exception("重定向次数过多");
+                URL next = new URL(url, location);
+                if (!sameOrigin(url, next)) headers = stripSensitiveHeaders(headers);
+                currentUrl = next.toString();
+                continue;
+            }
+            if (status < 200 || status >= 300) {
+                connection.disconnect();
+                throw new Exception("下载失败: HTTP " + status);
+            }
+            long total = contentLength(connection);
+            long received = 0;
+            long lastSent = 0L;
+            byte[] buffer = new byte[16 * 1024];
+            try (InputStream input = connection.getInputStream();
+                 OutputStream output = new FileOutputStream(target)) {
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    if (job.cancelled) throw new Exception("已取消");
+                    output.write(buffer, 0, read);
+                    received += read;
+                    long now = System.currentTimeMillis();
+                    if (now - lastSent >= PROGRESS_INTERVAL_MS) {
+                        lastSent = now;
+                        emitProgress(id, received, total);
+                    }
+                }
+            } finally {
+                connection.disconnect();
+            }
+            emitProgress(id, received, total);
+            if (received == 0) throw new Exception("下载内容为空");
+            if (total > 0 && received != total) throw new Exception("下载文件不完整");
+            return received;
+        }
+        throw new Exception("重定向次数过多");
     }
 
     private long perform(String id, String initialUrl, JSObject initialHeaders, MusicFoldersPlugin.Target target, Job job)

@@ -93,17 +93,30 @@ public class ExternalPlugin extends Plugin {
     @PluginMethod
     public void installApk(PluginCall call) {
         String fileName = call.getString("fileName");
-        if (fileName == null || fileName.isEmpty()) {
-            call.reject("安装包文件名不能为空");
+        String path = call.getString("path");
+        if ((fileName == null || fileName.isEmpty()) && (path == null || path.isEmpty())) {
+            call.reject("安装包文件名或路径不能为空");
             return;
         }
         try {
-            File dir = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_MUSIC), "");
-            File file = new File(dir, fileName);
-            String root = dir.getCanonicalPath() + File.separator;
-            if (!file.getCanonicalPath().startsWith(root)) {
-                call.reject("安装包不在下载目录内");
-                return;
+            File file;
+            if (path != null && !path.isEmpty()) {
+                file = new File(path);
+                String external = getContext().getExternalFilesDir(null).getCanonicalPath() + File.separator;
+                String internal = getContext().getFilesDir().getCanonicalPath() + File.separator;
+                String resolved = file.getCanonicalPath();
+                if (!resolved.startsWith(external) && !resolved.startsWith(internal)) {
+                    call.reject("安装包不在应用更新目录内");
+                    return;
+                }
+            } else {
+                File dir = new File(getContext().getExternalFilesDir(Environment.DIRECTORY_MUSIC), "");
+                file = new File(dir, fileName);
+                String root = dir.getCanonicalPath() + File.separator;
+                if (!file.getCanonicalPath().startsWith(root)) {
+                    call.reject("安装包不在下载目录内");
+                    return;
+                }
             }
             if (!file.exists()) {
                 call.reject("安装包不存在，请重新下载");

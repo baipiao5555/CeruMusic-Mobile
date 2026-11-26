@@ -77,6 +77,9 @@ let startPending = false
 let awaitingLoad = false
 let pendingStartSeek = 0
 let reloadRequired = false
+let intentionalPause = false
+let autoResumeAttempts = 0
+let autoResumeTimer: ReturnType<typeof setTimeout> | null = null
 let blobUrl: string | null = null
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let wakeLock: any = null
@@ -93,6 +96,7 @@ function clearLoadTimer(): void {
 /** Stops the shared audio element and drops its current source. */
 function detachAudioSource(): void {
   if (!audio) return
+  intentionalPause = true
   awaitingLoad = false
   audio.pause()
   audio.removeAttribute('src')
@@ -100,8 +104,21 @@ function detachAudioSource(): void {
 }
 
 /** Cancels an in-flight start when the user presses pause before it begins. */
+function scheduleMixResume(): void {
+  if (!settingsState.allowAudioMix || autoResumeAttempts >= 2 || !audio) return
+  if (autoResumeTimer) clearTimeout(autoResumeTimer)
+  autoResumeAttempts += 1
+  autoResumeTimer = setTimeout(() => {
+    autoResumeTimer = null
+    if (!settingsState.allowAudioMix || intentionalPause || !audio || audio.ended || !audio.paused) return
+    logEvent('warn', 'PLAYER', '混音模式：系统暂停了音频，尝试恢复', `第 ${autoResumeAttempts} 次`)
+    void audio.play().catch(() => undefined)
+  }, 350)
+}
+
 function cancelPendingStart(): boolean {
   if (!startPending) return false
+  intentionalPause = true
   startPending = false
   resolveToken += 1
   playbackController?.abort(); playbackController = null
@@ -222,6 +239,7 @@ export function restorePlayer(): void {
     playerState.loading = false
     playerState.playing = false
     playerState.error = ''
+    intentionalPause = true
     audio!.volume = playerState.volume
     // The previous audio source does not survive a restart; make sure an old
     // play() cannot leave the UI spinning on an empty element.
@@ -333,6 +351,7 @@ export function initPlayer(): void {
     }
   })
   audio.addEventListener('pause', () => {
+    const wasPlaying = playerState.playing
     playerState.playing = false
     if (Number.isFinite(audio!.currentTime)) playerState.currentTime = audio!.currentTime
     stopClock()
@@ -343,6 +362,8 @@ export function initPlayer(): void {
       const position = Number.isFinite(audio!.currentTime) ? audio!.currentTime : playerState.currentTime
       syncBackgroundAudio(track, false, position * 1000, playerState.duration * 1000)
     }
+    if (wasPlaying && !intentionalPause && settingsState.allowAudioMix && !audio!.ended &&
+        !startPending && !awaitingLoad && audio!.getAttribute('src')) scheduleMixResume()
   })
   audio.addEventListener('timeupdate', () => {
     // Ignore progress from the previous track while a new source is loading.
@@ -547,6 +568,8 @@ async function startPlayback(
   searched = new Set<string>()
 ): Promise<void> {
   if (!audio) initPlayer()
+  intentionalPause = false
+  autoResumeAttempts = 0
   attempted.add(sourceKey(track))
   playbackController?.abort()
   const token = ++resolveToken
@@ -731,6 +754,8 @@ export async function togglePlay(): Promise<void> {
     return
   }
   if (audio.paused) {
+    intentionalPause = false
+    autoResumeAttempts = 0
     try {
       await audio.play()
     } catch (error: any) {
@@ -738,6 +763,7 @@ export async function togglePlay(): Promise<void> {
       logEvent('error', 'PLAYER', '继续播放失败', error?.stack || error?.message || error)
     }
   } else {
+    intentionalPause = true
     audio.pause()
   }
   updatePositionState()
@@ -758,6 +784,8 @@ export async function resume(): Promise<void> {
     return
   }
   if (audio && audio.paused) {
+    intentionalPause = false
+    autoResumeAttempts = 0
     try {
       await audio.play()
     } catch {}
@@ -765,6 +793,7 @@ export async function resume(): Promise<void> {
 }
 
 export function pause(): void {
+  intentionalPause = true
   cancelPendingStart()
   audio?.pause()
 }

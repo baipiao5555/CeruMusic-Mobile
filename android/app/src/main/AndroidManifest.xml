@@ -47,6 +47,11 @@
 
         </activity>
 
+        <activity
+            android:name=".OAuthActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme.NoActionBar" />
+
         <service
             android:name=".MediaPlaybackService"
             android:exported="false"

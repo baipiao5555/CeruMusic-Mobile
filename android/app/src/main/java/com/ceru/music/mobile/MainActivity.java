@@ -128,6 +128,12 @@ public class MainActivity extends BridgeActivity {
         if (getBridge() != null && getBridge().getWebView() != null) {
             getBridge().getWebView().getSettings().setMixedContentMode(
                     android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Keep the renderer alive while another app is in front; some OEMs
+                // otherwise freeze WebView audio after a short background period.
+                getBridge().getWebView().setRendererPriorityPolicy(
+                        WebView.RENDERER_PRIORITY_IMPORTANT, false);
+            }
             getBridge().addWebViewListener(new WebViewListener() {
                 @Override
                 public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {

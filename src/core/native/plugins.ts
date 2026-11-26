@@ -34,6 +34,7 @@ export interface DownloaderPlugin {
 
 export interface ExternalPlugin {
   open(options: { url: string }): Promise<void>
+  openAuth(options: { url: string }): Promise<{ url?: string; cancelled?: boolean }>
   installApk(options: { fileName: string }): Promise<{ needsPermission?: boolean; started?: boolean }>
   notifyUpdate(options: { title: string; body: string }): Promise<void>
 }

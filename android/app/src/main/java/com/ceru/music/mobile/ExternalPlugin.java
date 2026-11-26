@@ -1,6 +1,7 @@
 package com.ceru.music.mobile;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -20,7 +21,9 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import androidx.activity.result.ActivityResult;
 
 import java.io.File;
 import java.net.URI;
@@ -51,6 +54,40 @@ public class ExternalPlugin extends Plugin {
         } catch (Exception error) {
             call.reject(error.getMessage() == null ? "无法打开浏览器" : error.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void openAuth(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null || url.isEmpty()) {
+            call.reject("登录地址为空");
+            return;
+        }
+        try {
+            URI uri = new URI(url);
+            String scheme = uri.getScheme();
+            if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
+                call.reject("只支持 HTTP/HTTPS 登录页");
+                return;
+            }
+            Intent intent = new Intent(getActivity(), OAuthActivity.class).putExtra("url", url);
+            startActivityForResult(call, intent, "oauthResult");
+        } catch (Exception error) {
+            call.reject(error.getMessage() == null ? "无法打开登录页" : error.getMessage());
+        }
+    }
+
+    @ActivityCallback
+    public void oauthResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        JSObject ret = new JSObject();
+        Intent data = result.getResultCode() == Activity.RESULT_OK ? result.getData() : null;
+        if (data != null && data.getData() != null) {
+            ret.put("url", data.getData().toString());
+        } else {
+            ret.put("cancelled", true);
+        }
+        call.resolve(ret);
     }
 
     @PluginMethod

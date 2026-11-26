@@ -267,7 +267,19 @@ export async function login(): Promise<void> {
   }
   const url = buildAuthorizeUrl(challenge, state, nonce)
   if (Capacitor.isNativePlatform()) {
-    await External.open({ url })
+    let authResult: { url?: string; cancelled?: boolean } | null = null
+    try {
+      authResult = await External.openAuth({ url })
+    } catch {
+      authResult = null
+    }
+    if (!authResult) {
+      // Older native builds have no in-app OAuth activity; keep the browser fallback.
+      await External.open({ url })
+      return
+    }
+    if (authResult.cancelled) return
+    if (authResult.url) await exchangeAuthCallback(authResult.url)
   } else {
     window.location.href = url
   }

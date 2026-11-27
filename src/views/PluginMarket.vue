@@ -9,7 +9,7 @@ import PullRefreshIndicator from '@/components/PullRefreshIndicator.vue'
 import CatalogLineChoices from '@/components/CatalogLineChoices.vue'
 import { confirmAction } from '@/core/confirm'
 import { settingsState, updateSettings } from '@/core/settings'
-import { catalogCategories, catalogState, refreshCatalog, type CatalogItem } from '@/core/plugin/catalog'
+import { catalogCategories, catalogState, reconcileCatalogVersion, refreshCatalog, type CatalogItem } from '@/core/plugin/catalog'
 import { usePullToRefresh } from '@/core/ui/pullToRefresh'
 import { musicFreeCatalogState, refreshMusicFreeCatalog, musicFreeCatalogManifest } from '@/core/plugin/musicfree-catalog'
 import { allProviders, applyPluginUpdate, comparePluginVersions, disablePlugin, enablePlugin, fetchPluginCode, getPluginConfig,
@@ -233,7 +233,18 @@ async function prepare(raw: string, origin: Pending['origin'], sourceUrl?: strin
     if (item?.format === 'ceru' && /Expected exports\.manifest/.test(e.message || '')) throw new Error('这个仓库文件采用未匹配的混淆声明，已安全停止；请规范导出声明或更新本版兼容数据')
     throw new Error('无法识别插件文件；仅支持澜音 v2 或 LX：' + (e.message || '格式不兼容'))
   }
-  if (item && (manifest.id !== item.manifestId || (item.format !== 'lx' && manifest.version !== item.version))) throw new Error('目录和文件 ID / 版本不一致，请刷新目录后重试')
+  if (item && manifest.id !== item.manifestId) throw new Error('目录和文件 ID 不一致，请刷新目录后重试')
+  if (item && item.format !== 'lx' && manifest.version !== item.version) {
+    let order = 0
+    try {
+      order = comparePluginVersions(manifest.version, item.version)
+    } catch {}
+    if (order < 0) {
+      throw new Error(`下载线路返回的 v${manifest.version} 低于目录中的 v${item.version}，可能是线路缓存；请切换线路或稍后重试`)
+    }
+    reconcileCatalogVersion(item, manifest.version, manifest.description)
+    info.value = `目录缓存已较旧，已按文件实际版本 v${manifest.version} 继续`
+  }
   const existing = installed.value.find(p => p.manifestId === manifest.id)
   if (existing && comparePluginVersions(manifest.version, existing.version) < 0) throw new Error('文件版本低于当前版本；不直接降级，请使用恢复上一版')
   if (epoch !== sequence) return

@@ -16,7 +16,7 @@ try {
  page.on('pageerror',e=>errors.push(e.message))
  await page.addInitScript(()=>{
   if(window.top!==window)return
-  if(!localStorage.getItem('ceru.auth.v1'))localStorage.setItem('ceru.auth.v1',JSON.stringify({accessToken:'synthetic-browser-test',expiresAt:Date.now()+3600000,user:{sub:'fixture-A',name:'离线测试账号'}}))
+  if(!localStorage.getItem('ceru.auth.oidc.v2'))localStorage.setItem('ceru.auth.oidc.v2',JSON.stringify({accessToken:'synthetic-browser-test',expiresAt:Date.now()+3600000,user:{sub:'fixture-A',name:'离线测试账号'}}))
   localStorage.setItem('ceru.update.v1',JSON.stringify({autoCheck:false}))
  })
  await page.route('**/*',async route=>{

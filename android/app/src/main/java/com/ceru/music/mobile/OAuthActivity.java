@@ -62,7 +62,8 @@ public class OAuthActivity extends AppCompatActivity {
         webView.setWebViewClient(new WebViewClient() {
             private boolean handle(Uri uri) {
                 if (uri != null && "cerumusic".equalsIgnoreCase(uri.getScheme())
-                        && "oauth".equalsIgnoreCase(uri.getHost())) {
+                        && ("login".equalsIgnoreCase(uri.getHost()) || "logout".equalsIgnoreCase(uri.getHost()))
+                        && "/callback".equals(uri.getPath())) {
                     setResult(RESULT_OK, new Intent().setData(uri));
                     finish();
                     return true;

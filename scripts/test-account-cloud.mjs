@@ -39,6 +39,7 @@ function environment(handler, directory, options = {}) {
         httpRequest: async options => {
           const url = new URL(options.url); requests.push(url)
           if (url.pathname.endsWith('/oidc/token')) return { status: 200, data: { access_token: 'synthetic-access-only', expires_in: 3600 } }
+          if (url.pathname.endsWith('/oidc/me')) return { status: 200, data: { sub: 'fixture-A', preferred_username: 'Fixture A' } }
           if (url.pathname.endsWith('/user-songlist')) return directory
             ? directory(url, ++directoryRequests)
             : {status:200,data:[playlist]}
@@ -203,15 +204,18 @@ for (const [name,handler] of [
   assert.ok(pages<=10000)
   return {unchanged:true,pages}
 })
-await check('actual auth access-token-only callback stays signed in but cannot write cloud library',async()=>{
+await check('actual auth access-token-only callback resolves identity through OIDC UserInfo',async()=>{
   const e=environment(()=>response([song('new')],1),undefined,{actualAuth:true}),before=e.seed()
-  e.storage.set('ceru.auth.pending.v1',JSON.stringify({verifier:'synthetic-verifier',state:'synthetic-state',nonce:'synthetic-nonce',createdAt:Date.now()}))
-  await e.auth.handleAuthCallback('cerumusic://oauth/callback?code=synthetic-code&state=synthetic-state')
-  assert.equal(e.auth.authState.authenticated,true);assert.equal(e.auth.authState.user,null)
-  await assert.rejects(e.cloud.importCloudPlaylist(playlist,{replaceLocalChanges:true}),/身份/)
-  assert.equal(JSON.stringify(e.library.libraryState),before);assert.equal(e.storage.get('ceru.library.v1'),before)
-  assert.equal(e.requests.filter(u=>u.pathname.includes('/user-songlist')).length,0)
-  return {actualAuth:true,authenticated:true,user:null,cloudRequests:0,unchanged:true}
+  e.storage.set('ceru.auth.pending.oidc.v2',JSON.stringify({verifier:'synthetic-verifier',state:'synthetic-state',nonce:'synthetic-nonce',createdAt:Date.now()}))
+  await e.auth.handleAuthCallback('cerumusic://login/callback?code=synthetic-code&state=synthetic-state')
+  assert.equal(e.auth.authState.authenticated,true)
+  assert.equal(e.auth.authState.user?.sub,'fixture-A')
+  assert.equal(e.auth.authState.user?.username,'Fixture A')
+  const result=await e.cloud.importCloudPlaylist(playlist,{replaceLocalChanges:true})
+  assert.equal(result.total,1)
+  assert.notEqual(JSON.stringify(e.library.libraryState),before)
+  assert.ok(e.requests.some(u=>u.pathname.endsWith('/oidc/me')))
+  return {actualAuth:true,authenticated:true,user:'fixture-A',userInfo:true,imported:true}
 })
 await check('owner disappearance during cloud read refuses a late write',async()=>{
   const e=environment(()=>{e.auth.authState.user=null;return response([song('new')],1)}),before=e.seed()

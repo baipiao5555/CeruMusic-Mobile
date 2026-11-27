@@ -338,7 +338,7 @@ function handleBackNavigation(): void {
 }
 
 async function handleDeepLink(url: string): Promise<void> {
-  if (!url.startsWith('cerumusic://oauth')) return
+  if (!url.startsWith('cerumusic://login')) return
   try {
     logEvent('info', 'AUTH', '收到登录回调')
     const user = await handleAuthCallback(url)

@@ -37,12 +37,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 澜音账号登录回调：cerumusic://oauth/callback -->
+            <!-- 澜音账号 OIDC 登录回调：cerumusic://login/callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="cerumusic" android:host="oauth" />
+                <data android:scheme="cerumusic" android:host="login" android:path="/callback" />
+            </intent-filter>
+
+            <!-- OIDC 退出登录回调：cerumusic://logout/callback -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="cerumusic" android:host="logout" android:path="/callback" />
             </intent-filter>
 
         </activity>

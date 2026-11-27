@@ -20,19 +20,27 @@ assert.equal(catalog.catalogState.items,valid);assert.equal(catalog.catalogState
 quota=true;reply=seed;await catalog.refreshCatalog(true)
 assert.equal(catalog.catalogState.items,valid);assert.match(catalog.catalogState.error,/quota/)
 console.log('PASS actual catalog adapter: real count, protocol split, path/duplicate validation, bad response and storage failure preserve valid cache')
-const snapshots=load('src/core/plugin/catalogManifests.ts',{}).knownCatalogManifests
-const compat=load('src/core/plugin/compat.ts',{'../storage/idb':{sha256Hex:async s=>crypto.createHash('sha256').update(s).digest('hex')},'./catalogManifests':{knownCatalogManifests:snapshots}})
-const raw=fs.readFileSync(path.join(root,'../evidence/catalog-raw/qq.ceru.js'),'utf8')
-const wrapped=await compat.normalizeKnownPluginCode(raw)
+const knownRaw='var knownPlugin = true;\nexports.activate = function(){ return knownPlugin }'
+const knownHash=crypto.createHash('sha256').update(knownRaw).digest('hex')
+let adapted=0
+const compat=load('src/core/plugin/compat.ts',{
+  '../storage/idb':{sha256Hex:async s=>crypto.createHash('sha256').update(s).digest('hex')},
+  './catalogManifests':{knownCatalogManifests:{[knownHash]:{manifestVersion:2,id:'ceru.known',name:'Known',version:'1.0.0',permissions:[]}}},
+  './musicfree':{musicFreeSnapshots:{},adaptMusicFreeCode:async(_code,_known,sourceName)=>{if(!sourceName)return null;adapted++;return 'musicfree-adapted'}},
+  './lx':{inspectLxPlugin:()=>null}
+})
+const wrapped=await compat.normalizeKnownPluginCode(knownRaw)
 assert.match(wrapped,/^exports\.manifest = /)
-const unknown=raw+'\n// changed-code-not-approved'
+const declaredCeru='exports.manifest = {id:"ceru.fixture",version:"1.0.0"};\nexports.activate = function(){};'
+assert.equal(await compat.normalizeKnownPluginCode(declaredCeru,'https://raw.githubusercontent.com/hebijunge/musicfree-plugins/master/ceru-plugins/fixture.ceru.js'),declaredCeru)
+assert.equal(adapted,0)
+assert.equal(await compat.normalizeKnownPluginCode('module.exports={platform:"fixture",version:"1.0.0",name:"Fixture"}','https://example.test/fixture.plugin.v1.0.0.js'),'musicfree-adapted')
+assert.equal(adapted,1)
+const unknown=knownRaw+'\n// changed-code-not-approved'
 assert.equal(await compat.normalizeKnownPluginCode(unknown),unknown)
 assert.match(wrapped,/exports\.activate = function\(core\)/)
 console.log('PASS checksum-pinned computed-manifest compatibility; changed unknown code is not interpreted or granted invented metadata')
-const manager=fs.readFileSync(path.join(root,'src/core/plugin/manager.ts'),'utf8')
-const start=manager.indexOf('export function comparePluginVersions('),end=manager.indexOf('\n/** Re-downloads',start)
-const compare=loadFunction(manager.slice(start,end),'comparePluginVersions')
-function loadFunction(text,name){const code=ts.transpileModule(text,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const e={};new Function('exports',code)(e);return e[name]}
+const compare=load('src/core/version.ts',{}).compareVersions
 assert.equal(Math.sign(compare('2.0.0','2.0.0-beta.2')),1)
 assert.equal(Math.sign(compare('2.0.0-beta.10','2.0.0-beta.2')),1)
 assert.equal(compare('1.0.0+build','1.0.0'),0)

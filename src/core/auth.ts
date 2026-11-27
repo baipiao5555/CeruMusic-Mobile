@@ -4,17 +4,22 @@ import { errorMessage, httpRequest } from './net'
 import { External } from './native/plugins'
 
 /**
- * 澜音账号（Logto OAuth 2.0 + PKCE）。
- * 与桌面版共用同一个 Logto 应用和回调地址，token 的 audience 是
- * api.ceru.shiqianjiang.cn，所以手机端登录后可以读写桌面版上传的云歌单。
+ * 澜音账号（Logto OIDC + PKCE）。
+ * 使用 auth.shiqianjiang.cn/oidc 发行者、公开客户端和三段式自定义回调。
+ * token 的 audience 是 api.ceru.shiqianjiang.cn，用于读取桌面版上传的云歌单。
  */
-const AUTH_ENDPOINT = 'https://auth.shiqianjiang.cn/'
-const APP_ID = '2a22nn23flw9nyrwi6jw9'
-const REDIRECT_URI = 'cerumusic://oauth/callback'
+const OIDC_ISSUER = 'https://auth.shiqianjiang.cn/oidc'
+const OIDC_AUTHORIZE_ENDPOINT = OIDC_ISSUER + '/auth'
+const OIDC_TOKEN_ENDPOINT = OIDC_ISSUER + '/token'
+const OIDC_USERINFO_ENDPOINT = OIDC_ISSUER + '/me'
+const APP_ID = 'pwp79ko18ykz9ir6acry7'
+const REDIRECT_URI = 'cerumusic://login/callback'
+const POST_LOGOUT_REDIRECT_URI = 'cerumusic://logout/callback'
 const API_RESOURCE = 'https://api.ceru.shiqianjiang.cn/api'
-const SCOPES = 'openid profile offline_access'
-const STORAGE_KEY = 'ceru.auth.v1'
-const PENDING_KEY = 'ceru.auth.pending.v1'
+const SCOPES = 'openid profile offline_access ceru:read'
+const STORAGE_KEY = 'ceru.auth.oidc.v2'
+const PENDING_KEY = 'ceru.auth.pending.oidc.v2'
+const LEGACY_KEYS = ['ceru.auth.v1', 'ceru.auth.pending.v1']
 const PENDING_TTL = 15 * 60 * 1000
 const REFRESH_MARGIN = 60 * 1000
 
@@ -113,21 +118,52 @@ function decodeJwtPayload(token: string): any {
 function userFromIdToken(idToken?: string): AuthUser | null {
   if (!idToken) return null
   const claims = decodeJwtPayload(idToken)
-  if (!claims?.sub) return null
+  return userFromClaims(claims)
+}
+
+function userFromClaims(claims: any): AuthUser | null {
+  if (!claims || typeof claims !== 'object' || !claims.sub) return null
   return {
     sub: String(claims.sub),
-    name: claims.name ?? undefined,
-    username: claims.username ?? undefined,
-    nickname: claims.nickname ?? undefined,
-    picture: claims.picture ?? undefined,
-    email: claims.email ?? undefined
+    name: typeof claims.name === 'string' ? claims.name : undefined,
+    username: typeof (claims.username ?? claims.preferred_username) === 'string'
+      ? claims.username ?? claims.preferred_username : undefined,
+    nickname: typeof claims.nickname === 'string' ? claims.nickname : undefined,
+    picture: typeof claims.picture === 'string' ? claims.picture : undefined,
+    email: typeof claims.email === 'string' ? claims.email : undefined
+  }
+}
+
+function mergeUser(primary: AuthUser | null, fallback: AuthUser | null): AuthUser | null {
+  if (!primary) return fallback
+  if (!fallback) return primary
+  if (primary.sub !== fallback.sub) return fallback
+  const merged: AuthUser = { ...fallback }
+  for (const key of ['name', 'username', 'nickname', 'picture', 'email'] as const) {
+    if (primary[key]) merged[key] = primary[key]
+  }
+  return merged
+}
+
+async function fetchUserInfo(accessToken: string): Promise<AuthUser | null> {
+  try {
+    const response = await httpRequest({
+      url: OIDC_USERINFO_ENDPOINT,
+      headers: { Accept: 'application/json', Authorization: 'Bearer ' + accessToken },
+      responseType: 'json'
+    })
+    if (response.status < 200 || response.status >= 300) return null
+    return userFromClaims(response.data)
+  } catch {
+    // ID token claims remain a safe fallback when UserInfo is temporarily unavailable.
+    return null
   }
 }
 
 async function tokenRequest(params: Record<string, string>): Promise<TokenResponse> {
   const body = new URLSearchParams(params).toString()
   const response = await httpRequest({
-    url: AUTH_ENDPOINT + 'oidc/token',
+    url: OIDC_TOKEN_ENDPOINT,
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
@@ -142,9 +178,11 @@ async function tokenRequest(params: Record<string, string>): Promise<TokenRespon
   return response.data as TokenResponse
 }
 
-function applyTokens(tokens: TokenResponse): void {
+async function applyTokens(tokens: TokenResponse): Promise<void> {
   const expiresAt = Date.now() + Math.max(60, tokens.expires_in ?? 3600) * 1000 - REFRESH_MARGIN
-  const user = userFromIdToken(tokens.id_token) ?? session?.user ?? null
+  const idTokenUser = userFromIdToken(tokens.id_token)
+  const userInfo = await fetchUserInfo(tokens.access_token)
+  const user = mergeUser(userInfo, idTokenUser) ?? session?.user ?? null
   session = {
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token ?? session?.refreshToken,
@@ -171,7 +209,7 @@ async function refreshSession(): Promise<string> {
         resource: API_RESOURCE
       })
       assertSessionVersion(version)
-      applyTokens(tokens)
+      await applyTokens(tokens)
       return session!.accessToken
     } catch (error) {
       if (version === sessionVersion) clearSession()
@@ -202,6 +240,7 @@ function clearSession(): void {
 
 function restoreSession(): void {
   try {
+    for (const key of LEGACY_KEYS) localStorage.removeItem(key)
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
     const saved = JSON.parse(raw) as StoredSession
@@ -236,7 +275,7 @@ export async function initAuth(): Promise<void> {
 
 /** Exported for the browser test harness in scripts/. @public */
 export function buildAuthorizeUrl(challenge: string, state: string, nonce: string): string {
-  const url = new URL('oidc/auth', AUTH_ENDPOINT)
+  const url = new URL(OIDC_AUTHORIZE_ENDPOINT)
   url.searchParams.set('client_id', APP_ID)
   url.searchParams.set('redirect_uri', REDIRECT_URI)
   url.searchParams.set('response_type', 'code')
@@ -246,6 +285,15 @@ export function buildAuthorizeUrl(challenge: string, state: string, nonce: strin
   url.searchParams.set('state', state)
   url.searchParams.set('nonce', nonce)
   url.searchParams.set('resource', API_RESOURCE)
+  return url.toString()
+}
+
+/** Standard RP-initiated logout URL for the registered post-logout callback. */
+export function buildLogoutUrl(idTokenHint = ''): string {
+  const url = new URL(OIDC_ISSUER + '/session/end')
+  url.searchParams.set('client_id', APP_ID)
+  url.searchParams.set('post_logout_redirect_uri', POST_LOGOUT_REDIRECT_URI)
+  if (idTokenHint) url.searchParams.set('id_token_hint', idTokenHint)
   return url.toString()
 }
 
@@ -285,7 +333,7 @@ export async function login(): Promise<void> {
   }
 }
 
-/** Handles cerumusic://oauth/callback?code=... after the browser redirects back. */
+/** Handles cerumusic://login/callback?code=... after the authorization redirect. */
 export function handleAuthCallback(rawUrl: string): Promise<AuthUser | null> {
   if (callbackInFlight?.url === rawUrl) return callbackInFlight.promise
   if (completedCallback === rawUrl && authState.authenticated) return Promise.resolve(authState.user)
@@ -308,7 +356,7 @@ async function exchangeAuthCallback(rawUrl: string): Promise<AuthUser | null> {
   } catch {
     throw new Error('登录回调地址无效')
   }
-  if (parsed.protocol !== 'cerumusic:' || parsed.host !== 'oauth') return null
+  if (parsed.protocol !== 'cerumusic:' || parsed.host !== 'login' || parsed.pathname !== '/callback') return null
   const params = parsed.searchParams
   const hashParams = new URLSearchParams(parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash)
   const error = params.get('error') ?? hashParams.get('error')
@@ -346,12 +394,15 @@ async function exchangeAuthCallback(rawUrl: string): Promise<AuthUser | null> {
     })
     assertSessionVersion(version)
     const claims = tokens.id_token ? decodeJwtPayload(tokens.id_token) : null
+    if (claims?.iss && claims.iss !== OIDC_ISSUER) {
+      throw new Error('登录签发方不匹配，请重新登录')
+    }
     if (claims?.nonce && claims.nonce !== pending.nonce) {
       throw new Error('登录校验失败，请重新登录')
     }
     invalidateSession()
     session = null
-    applyTokens(tokens)
+    await applyTokens(tokens)
     try {
       localStorage.removeItem(PENDING_KEY)
     } catch {}
@@ -366,6 +417,7 @@ export function logout(): void {
   clearSession()
   try {
     localStorage.removeItem(PENDING_KEY)
+    for (const key of LEGACY_KEYS) localStorage.removeItem(key)
   } catch {}
 }
 

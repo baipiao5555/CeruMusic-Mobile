@@ -42,6 +42,33 @@ try {
     catalogState.cachedAt = saved.time; catalogState.builtin = false
   }
 } catch { /* Invalid local cache does not replace the packaged directory. */ }
+
+/**
+ * A cached directory can lag behind a file that was already replaced in the
+ * repository. Remember the version we actually verified so the UI and the
+ * persisted catalog do not keep asking the user to refresh forever.
+ */
+export function reconcileCatalogVersion(item: CatalogItem, version: string, description = ''): void {
+  if (item.format === 'lx' || !version) return
+  item.version = version
+  if (description) item.description = description
+  const current = catalogState.items.find((x) => x.key === item.key || x.manifestId === item.manifestId)
+  if (current) {
+    current.version = version
+    if (description) current.description = description
+  }
+  try {
+    const saved = JSON.parse(localStorage.getItem(CACHE) || 'null')
+    const entry = saved?.data?.plugins?.find((x: any) => x?.id === item.manifestId)
+    if (entry && typeof entry.version === 'string') {
+      entry.version = version
+      if (description) entry.description = description
+      saved.time = Date.now()
+      localStorage.setItem(CACHE, JSON.stringify(saved))
+    }
+  } catch { /* The in-memory correction still applies if storage is unavailable. */ }
+}
+
 export async function refreshCatalog(force = false, line = catalogState.line): Promise<void> {
   if (catalogState.loading) return
   if (!force && line === catalogState.line && catalogState.cachedAt && Date.now() - catalogState.cachedAt < 6 * 3600_000) return

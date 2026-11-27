@@ -14,7 +14,7 @@ const tokens = (sub, expires = 3600) => ({ access_token: 'synthetic-' + sub, ref
 const source = fs.readFileSync(path.join(root, 'src/core/auth.ts'), 'utf8')
 const code = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } }).outputText
 function environment(handler, digest) {
-  const storage = new Map([['ceru.auth.v1', JSON.stringify({ accessToken: 'synthetic-A', refreshToken: 'synthetic-refresh-A', expiresAt: 0, idToken: jwt('A'), user: { sub: 'A' } })]])
+  const storage = new Map([['ceru.auth.oidc.v2', JSON.stringify({ accessToken: 'synthetic-A', refreshToken: 'synthetic-refresh-A', expiresAt: 0, idToken: jwt('A'), user: { sub: 'A' } })]])
   const opened = [], requests = [], exports = {}
   const context = vm.createContext({ URL, URLSearchParams, TextEncoder, TextDecoder, Uint8Array, ArrayBuffer, Date,
     console: { warn() {} }, crypto: digest ? { getRandomValues: value => webcrypto.getRandomValues(value), subtle: { digest } } : webcrypto,
@@ -25,6 +25,11 @@ function environment(handler, digest) {
     if (id === '@capacitor/core') return { Capacitor: { isNativePlatform: () => true } }
     if (id === './native/plugins') return { External: { open: async value => { opened.push(value.url) } } }
     if (id === './net') return { errorMessage: (_, fallback) => fallback, httpRequest: request => {
+      if (request.method !== 'POST') {
+        const token = String(request.headers?.Authorization || '').replace(/^Bearer\s+/i, '')
+        const sub = token.replace(/^synthetic-/, '') || 'A'
+        return Promise.resolve({ status: 200, data: { sub, preferred_username: 'user-' + sub } })
+      }
       const params = Object.fromEntries(new URLSearchParams(request.body)); requests.push(params); return handler(params)
     } }
     throw new Error('Unexpected import: ' + id)
@@ -35,9 +40,9 @@ function environment(handler, digest) {
 const settled = promise => promise.then(value => ({ ok: true, value }), error => ({ ok: false, error: error.message }))
 const nextTurn = () => new Promise(resolve => setImmediate(resolve))
 function callback(env, sub) {
-  const pending = JSON.parse(env.storage.get('ceru.auth.pending.v1') || 'null') || { verifier: 'synthetic-verifier', state: 'synthetic-state', nonce: 'synthetic-nonce', createdAt: Date.now() }
-  env.storage.set('ceru.auth.pending.v1', JSON.stringify(pending))
-  return env.auth.handleAuthCallback(`cerumusic://oauth/callback?code=${sub}&state=${pending.state}`)
+  const pending = JSON.parse(env.storage.get('ceru.auth.pending.oidc.v2') || 'null') || { verifier: 'synthetic-verifier', state: 'synthetic-state', nonce: 'synthetic-nonce', createdAt: Date.now() }
+  env.storage.set('ceru.auth.pending.oidc.v2', JSON.stringify(pending))
+  return env.auth.handleAuthCallback(`cerumusic://login/callback?code=${sub}&state=${pending.state}`)
 }
 async function check(name, test) {
   try { const observed = await test(); checks.push({ name, pass: true, observed }) }
@@ -63,7 +68,7 @@ await check('Logout cancels a late refresh instead of restoring the signed-out a
   const result = await pending
   assert.equal(result.ok, false)
   assert.equal(env.auth.authState.authenticated, false)
-  assert.equal(env.storage.has('ceru.auth.v1'), false)
+  assert.equal(env.storage.has('ceru.auth.oidc.v2'), false)
   return { lateRefreshRejected: true, authenticated: false }
 })
 await check('Starting a new login invalidates old refresh results', async () => {
@@ -76,7 +81,13 @@ await check('Starting a new login invalidates old refresh results', async () => 
   assert.equal((await pending).ok, false)
   assert.equal(env.opened.length, 1)
   const url = new URL(env.opened[0])
-  assert.equal(url.searchParams.get('redirect_uri'), 'cerumusic://oauth/callback')
+  assert.equal(url.searchParams.get('redirect_uri'), 'cerumusic://login/callback')
+  assert.equal(url.searchParams.get('client_id'), 'pwp79ko18ykz9ir6acry7')
+  assert.equal(url.origin + url.pathname, 'https://auth.shiqianjiang.cn/oidc/auth')
+  assert.match(url.searchParams.get('scope') || '', /(?:^| )ceru:read(?: |$)/)
+  const logoutUrl = new URL(env.auth.buildLogoutUrl('synthetic-id-token'))
+  assert.equal(logoutUrl.origin + logoutUrl.pathname, 'https://auth.shiqianjiang.cn/oidc/session/end')
+  assert.equal(logoutUrl.searchParams.get('post_logout_redirect_uri'), 'cerumusic://logout/callback')
   assert.equal(url.searchParams.get('code_challenge_method'), 'S256')
   return { oldRefreshRejected: true, pkceRedirectUnchanged: true }
 })
@@ -130,23 +141,24 @@ await check('Logout during PKCE generation prevents delayed login from opening o
   digest.resolve(new Uint8Array(32).buffer)
   assert.equal((await pending).ok, false)
   assert.equal(env.opened.length, 0)
-  assert.equal(env.storage.has('ceru.auth.pending.v1'), false)
+  assert.equal(env.storage.has('ceru.auth.pending.oidc.v2'), false)
   return { canceled: true, browserOpenCount: 0 }
 })
-await check('A new authorization does not inherit the prior account refresh token or identity', async () => {
+await check('A new authorization does not inherit the prior account refresh token and resolves UserInfo identity', async () => {
   const env = environment(() => Promise.resolve({ status: 200, data: { access_token: 'synthetic-B', expires_in: 3600 } }))
   await callback(env, 'B')
-  const stored = JSON.parse(env.storage.get('ceru.auth.v1'))
+  const stored = JSON.parse(env.storage.get('ceru.auth.oidc.v2'))
   assert.equal(stored.refreshToken, undefined)
   assert.equal(stored.idToken, undefined)
-  assert.equal(stored.user, null)
-  return { previousAccountFieldsDiscarded: true }
+  assert.equal(stored.user?.sub, 'B')
+  assert.equal(stored.user?.username, 'user-B')
+  return { previousAccountFieldsDiscarded: true, userInfoIdentity: 'B' }
 })
 await check('OAuth callback also accepts fragment parameters used by some Android browsers', async () => {
   const env = environment(() => Promise.resolve({ status: 200, data: tokens('B') }))
-  const pending = JSON.parse(env.storage.get('ceru.auth.pending.v1') || 'null') || { verifier: 'synthetic-verifier', state: 'synthetic-state', nonce: 'synthetic-nonce', createdAt: Date.now() }
-  env.storage.set('ceru.auth.pending.v1', JSON.stringify(pending))
-  const user = await env.auth.handleAuthCallback(`cerumusic://oauth/callback#code=B&state=${pending.state}`)
+  const pending = JSON.parse(env.storage.get('ceru.auth.pending.oidc.v2') || 'null') || { verifier: 'synthetic-verifier', state: 'synthetic-state', nonce: 'synthetic-nonce', createdAt: Date.now() }
+  env.storage.set('ceru.auth.pending.oidc.v2', JSON.stringify(pending))
+  const user = await env.auth.handleAuthCallback(`cerumusic://login/callback#code=B&state=${pending.state}`)
   assert.equal(env.auth.authState.user?.sub, 'B')
   assert.equal(user?.sub, 'B')
   return { fragmentCallbackAccepted: true, user: 'B' }
@@ -154,8 +166,8 @@ await check('OAuth callback also accepts fragment parameters used by some Androi
 await check('Cold-launch plus appUrlOpen delivers one callback without spending the authorization code twice', async () => {
   const response = deferred(), env = environment(() => response.promise)
   const pending = { verifier: 'synthetic-verifier', state: 'synthetic-state', nonce: 'synthetic-nonce', createdAt: Date.now() }
-  env.storage.set('ceru.auth.pending.v1', JSON.stringify(pending))
-  const url = 'cerumusic://oauth/callback?code=duplicate&state=synthetic-state'
+  env.storage.set('ceru.auth.pending.oidc.v2', JSON.stringify(pending))
+  const url = 'cerumusic://login/callback?code=duplicate&state=synthetic-state'
   const first = settled(env.auth.handleAuthCallback(url)), second = settled(env.auth.handleAuthCallback(url))
   assert.equal(env.requests.length, 1)
   response.resolve({ status: 200, data: tokens('B') })
@@ -173,7 +185,7 @@ await check('Successful HTTP with missing credentials is rejected and exposes a 
 })
 await check('Recreated Activity can redeliver a consumed callback without replacing the restored session', async () => {
   const env = environment(() => { throw new Error('No exchange expected') })
-  const user = await env.auth.handleAuthCallback('cerumusic://oauth/callback?code=old-code&state=old-state')
+  const user = await env.auth.handleAuthCallback('cerumusic://login/callback?code=old-code&state=old-state')
   assert.equal(user?.sub, 'A')
   assert.equal(env.requests.length, 0)
   return { restoredAccountPreserved: true, noExchange: true }

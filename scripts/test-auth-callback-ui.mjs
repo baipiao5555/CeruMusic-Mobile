@@ -30,6 +30,7 @@ try {
       assert.match(route.request().postData() || '', /code_verifier=fixture-verifier/)
       return route.fulfill({status: denied ? 401 : 200, headers:{'access-control-allow-origin':'*'}, json: denied ? {error_description:'离线测试：凭据交换失败'} : {access_token:'synthetic-access',id_token:idToken,expires_in:3600}})
     }
+    if (url.endsWith('/oidc/me')) return route.fulfill({headers:{'access-control-allow-origin':'*'},json:{sub:'fixture-B',name:'离线回调测试账号'}})
     if (url.includes('/user-songlist')) return route.fulfill({headers:{'access-control-allow-origin':'*'},json:[]})
     return route.abort()
   })
@@ -37,8 +38,8 @@ try {
   await page.waitForFunction(() => window.__ceruDebug && !window.__ceruDebug.pluginState.loading)
   await page.evaluate(async () => {
     const auth = window.__ceruDebug.auth
-    localStorage.setItem('ceru.auth.pending.v1', JSON.stringify({verifier:'fixture-verifier',state:'fixture-state',nonce:'fixture-nonce',createdAt:Date.now()}))
-    const url = 'cerumusic://oauth/callback?code=fixture-code&state=fixture-state'
+    localStorage.setItem('ceru.auth.pending.oidc.v2', JSON.stringify({verifier:'fixture-verifier',state:'fixture-state',nonce:'fixture-nonce',createdAt:Date.now()}))
+    const url = 'cerumusic://login/callback?code=fixture-code&state=fixture-state'
     await Promise.all([auth.handleAuthCallback(url), auth.handleAuthCallback(url)])
   })
   await page.locator('.p-conn').waitFor()
@@ -48,8 +49,8 @@ try {
   await page.evaluate(() => window.__ceruDebug.auth.logout())
   denied = true
   await page.evaluate(async () => {
-    localStorage.setItem('ceru.auth.pending.v1', JSON.stringify({verifier:'fixture-verifier',state:'fixture-state',nonce:'fixture-nonce',createdAt:Date.now()}))
-    try { await window.__ceruDebug.auth.handleAuthCallback('cerumusic://oauth/callback?code=denied&state=fixture-state') } catch {}
+    localStorage.setItem('ceru.auth.pending.oidc.v2', JSON.stringify({verifier:'fixture-verifier',state:'fixture-state',nonce:'fixture-nonce',createdAt:Date.now()}))
+    try { await window.__ceruDebug.auth.handleAuthCallback('cerumusic://login/callback?code=denied&state=fixture-state') } catch {}
   })
   await page.getByRole('alert').getByText('离线测试：凭据交换失败', {exact:true}).waitFor()
   await page.screenshot({path:output + '/auth-error-visible.png'})

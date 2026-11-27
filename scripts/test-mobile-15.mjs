@@ -54,17 +54,17 @@ console.log('providers:', JSON.stringify(providers))
 
 // 1. Auth helpers
 const authUrl = await page.evaluate(() => window.__ceruDebug.auth.buildAuthorizeUrl('CHALLENGE', 'STATE', 'NONCE'))
-console.log('authorize-url-ok:', authUrl.includes('redirect_uri=cerumusic%3A%2F%2Foauth%2Fcallback') && authUrl.includes('code_challenge_method=S256') && authUrl.includes('resource=https%3A%2F%2Fapi.ceru.shiqianjiang.cn%2Fapi'))
+console.log('authorize-url-ok:', authUrl.includes('redirect_uri=cerumusic%3A%2F%2Flogin%2Fcallback') && authUrl.includes('code_challenge_method=S256') && authUrl.includes('resource=https%3A%2F%2Fapi.ceru.shiqianjiang.cn%2Fapi'))
 const authError = await page.evaluate(async () => {
   try {
-    await window.__ceruDebug.auth.handleAuthCallback('cerumusic://oauth/callback?error=access_denied&error_description=%E6%B5%8B%E8%AF%95%E6%8B%92%E7%BB%9D')
+    await window.__ceruDebug.auth.handleAuthCallback('cerumusic://login/callback?error=access_denied&error_description=%E6%B5%8B%E8%AF%95%E6%8B%92%E7%BB%9D')
     return 'no-error'
   } catch (error) { return error.message }
 })
 console.log('callback-error:', authError)
 const stateError = await page.evaluate(async () => {
   try {
-    await window.__ceruDebug.auth.handleAuthCallback('cerumusic://oauth/callback?code=abc&state=xyz')
+    await window.__ceruDebug.auth.handleAuthCallback('cerumusic://login/callback?code=abc&state=xyz')
     return 'no-error'
   } catch (error) { return error.message }
 })
